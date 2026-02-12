@@ -1426,28 +1426,10 @@ QABALISTIC POSITION:
 Deliver the Oracle's interpretation.`;
 
 try {
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1000,
-            system: systemPrompt,
-            messages: [{ role: "user", content: userMsg }],
-          }),
+        const text = await fetchOracleInterpretation({
+          prompt: userMsg,
+          systemPrompt: systemPrompt,
         });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error?.message || `API error: ${response.status}`)
-        }
-
-        const data = await response.json();
-        const text = data.content
-          ?.filter(b => b.type === "text")
-          .map(b => b.text)
-          .join("\n") || "The Abyss returns silence.";
 
       setOracleState({ loading: false, text, error: null });
     } catch (err) {
