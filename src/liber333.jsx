@@ -4,6 +4,8 @@
 //  Single-file React JSX Application
 // ═══════════════════════════════════════════════════════════════════
 
+import { fetchOracleInterpretation } from './api.js';
+
 import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "react";
 
 // ─────────────────────────────────────────────
