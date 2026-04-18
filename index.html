@@ -2,11 +2,63 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Liber 333 Oracle</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Digital grimoire and gematric oracle for Aleister Crowley's Liber 333" />
+    <title>Liber CCCXXXIII — The Book of Lies</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☉</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      /* Ritual Keyframes */
+      @keyframes whisperFade {
+        0% { opacity: 0; transform: translateY(10px) scale(0.95); }
+        15% { opacity: 0.25; }
+        85% { opacity: 0.25; }
+        100% { opacity: 0; transform: translateY(-20px) scale(0.98); }
+      }
+      @keyframes shockwaveExpand {
+        0% { width: 0; height: 0; opacity: 1; }
+        100% { width: 100vw; height: 100vw; opacity: 0; }
+      }
+      @keyframes milestoneAppear {
+        0% { opacity: 0; transform: scale(0.8) translateY(20px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      @keyframes ritualPulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.8; }
+      }
+      @keyframes breathe {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      @keyframes fadeInUp {
+        0% { opacity: 0; transform: translateY(16px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+      @keyframes slideDown {
+        0% { opacity: 0; transform: translateY(-8px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes numberSlam {
+        0% { transform: scale(3); opacity: 0; filter: blur(20px); }
+        60% { transform: scale(0.95); opacity: 1; filter: blur(0); }
+        80% { transform: scale(1.02); }
+        100% { transform: scale(1); opacity: 1; filter: blur(0); }
+      }
+      @keyframes borderGlow {
+        0%, 100% { border-color: rgba(220,38,38,0.15); }
+        50% { border-color: rgba(220,38,38,0.35); }
+      }
+    </style>
   </head>
-  <body>
+  <body class="bg-black">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
