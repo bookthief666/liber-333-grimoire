@@ -4,14 +4,8 @@
 //  Single-file React JSX Application
 // ═══════════════════════════════════════════════════════════════════
 
-import { fetchOracleInterpretation } from './api.js';
-
 import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "react";
-
-// ─────────────────────────────────────────────
-//  FONT LOADER
-// ─────────────────────────────────────────────
-const FONT_URL = "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap";
+import { fetchOracleInterpretation } from './api.js';
 
 // ─────────────────────────────────────────────
 //  COMPLETE CHAPTER DATA (94 entries)
@@ -1281,8 +1275,99 @@ const NOISE_TEXTURE_URL = `data:image/svg+xml,${encodeURIComponent(
   `<svg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(#n)'/></svg>`
 )}`;
 
+
 // ─────────────────────────────────────────────
-//  AUDIO ENGINE HOOK
+//  PLANETARY HOURS SYSTEM
+// ─────────────────────────────────────────────
+const PLANETS = {
+  Saturn:  { symbol: "♄", color: "#6b7280", colorLight: "#9ca3af", element: "Earth/Lead", frequency: 147.85 },
+  Jupiter: { symbol: "♃", color: "#6366f1", colorLight: "#818cf8", element: "Air/Tin",    frequency: 183.58 },
+  Mars:    { symbol: "♂", color: "#dc2626", colorLight: "#f87171", element: "Fire/Iron",   frequency: 144.72 },
+  Sol:     { symbol: "☉", color: "#eab308", colorLight: "#fbbf24", element: "Fire/Gold",   frequency: 126.22 },
+  Venus:   { symbol: "♀", color: "#10b981", colorLight: "#34d399", element: "Earth/Copper",frequency: 221.23 },
+  Mercury: { symbol: "☿", color: "#a855f7", colorLight: "#c084fc", element: "Air/Mercury", frequency: 141.27 },
+  Luna:    { symbol: "☽", color: "#94a3b8", colorLight: "#cbd5e1", element: "Water/Silver",frequency: 210.42 },
+};
+
+const CHALDEAN_ORDER = ["Saturn", "Jupiter", "Mars", "Sol", "Venus", "Mercury", "Luna"];
+const DAY_RULERS = { 0: "Sol", 1: "Luna", 2: "Mars", 3: "Mercury", 4: "Jupiter", 5: "Venus", 6: "Saturn" };
+
+const usePlanetaryTime = () => {
+  const [info, setInfo] = useState(null);
+  
+  useEffect(() => {
+    const calc = () => {
+      const now = new Date();
+      const dayRuler = DAY_RULERS[now.getDay()];
+      const dayStart = new Date(now); dayStart.setHours(6, 0, 0, 0);
+      const hoursSinceSunrise = (now - dayStart) / 3600000;
+      const planetaryHourIndex = Math.floor(((hoursSinceSunrise % 24) + 24) % 24);
+      const rulerIdx = CHALDEAN_ORDER.indexOf(dayRuler);
+      const currentPlanet = CHALDEAN_ORDER[(rulerIdx + planetaryHourIndex) % 7];
+      const planetData = PLANETS[currentPlanet];
+      const isNight = now.getHours() < 6 || now.getHours() >= 18;
+      
+      setInfo({
+        planet: currentPlanet,
+        ...planetData,
+        dayRuler,
+        hourIndex: planetaryHourIndex,
+        isNight,
+        timeOfDay: now.getHours() < 6 ? "deep night" : now.getHours() < 10 ? "morning" : 
+                   now.getHours() < 14 ? "midday" : now.getHours() < 18 ? "afternoon" :
+                   now.getHours() < 22 ? "evening" : "deep night",
+      });
+    };
+    calc();
+    const iv = setInterval(calc, 60000);
+    return () => clearInterval(iv);
+  }, []);
+  
+  return info;
+};
+
+// ─────────────────────────────────────────────
+//  LUNAR PHASE SYSTEM
+// ─────────────────────────────────────────────
+const MOON_PHASES = [
+  { name: "New Moon",        emoji: "🌑", waxing: true,  index: 0 },
+  { name: "Waxing Crescent", emoji: "🌒", waxing: true,  index: 1 },
+  { name: "First Quarter",   emoji: "🌓", waxing: true,  index: 2 },
+  { name: "Waxing Gibbous",  emoji: "🌔", waxing: true,  index: 3 },
+  { name: "Full Moon",       emoji: "🌕", waxing: false, index: 4 },
+  { name: "Waning Gibbous",  emoji: "🌖", waxing: false, index: 5 },
+  { name: "Last Quarter",    emoji: "🌗", waxing: false, index: 6 },
+  { name: "Waning Crescent", emoji: "🌘", waxing: false, index: 7 },
+];
+
+const useLunarPhase = () => {
+  return useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const day = now.getDate();
+    // Conway's lunar phase approximation
+    let r = year % 100;
+    r %= 19;
+    if (r > 9) r -= 19;
+    r = ((r * 11) % 30) + month + day;
+    if (month < 3) r += 2;
+    r -= (year < 2000) ? 4 : 8.3;
+    r = Math.floor(((r % 30) + 30) % 30);
+    const phaseIdx = Math.floor(r / 3.75) % 8;
+    return MOON_PHASES[phaseIdx];
+  }, []);
+};
+
+// ─────────────────────────────────────────────
+//  HAPTIC FEEDBACK
+// ─────────────────────────────────────────────
+const haptic = (pattern) => {
+  try { navigator?.vibrate?.(pattern); } catch(e) {}
+};
+
+// ─────────────────────────────────────────────
+//  AUDIO ENGINE (Enhanced)
 // ─────────────────────────────────────────────
 const useAudioEngine = (active, intensity = 0.5) => {
   const ctxRef = useRef(null);
@@ -1302,11 +1387,8 @@ const useAudioEngine = (active, intensity = 0.5) => {
     masterRef.current = master;
 
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -24;
-    comp.knee.value = 12;
-    comp.ratio.value = 4;
-    comp.attack.value = 0.003;
-    comp.release.value = 0.25;
+    comp.threshold.value = -24; comp.knee.value = 12;
+    comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.25;
     comp.connect(master);
 
     [55, 110, 165, 220].forEach((freq, i) => {
@@ -1315,18 +1397,14 @@ const useAudioEngine = (active, intensity = 0.5) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       const pan = ctx.createStereoPanner();
-      osc.type = types[i];
-      osc.frequency.value = freq;
+      osc.type = types[i]; osc.frequency.value = freq;
       osc.detune.value = (i - 1.5) * 3;
-      gain.gain.value = vols[i];
-      pan.pan.value = (i - 1.5) * 0.3;
+      gain.gain.value = vols[i]; pan.pan.value = (i - 1.5) * 0.3;
       osc.connect(gain); gain.connect(pan); pan.connect(comp);
-      osc.start();
-      nodesRef.current.push(osc);
+      osc.start(); nodesRef.current.push(osc);
     });
 
-    const binL = ctx.createOscillator();
-    const binR = ctx.createOscillator();
+    const binL = ctx.createOscillator(); const binR = ctx.createOscillator();
     const gL = ctx.createGain(); const gR = ctx.createGain();
     const merger = ctx.createChannelMerger(2);
     binL.frequency.value = 200; binR.frequency.value = 207.83;
@@ -1336,8 +1414,7 @@ const useAudioEngine = (active, intensity = 0.5) => {
     gL.connect(merger, 0, 0); gR.connect(merger, 0, 1);
     merger.connect(master); binL.start(); binR.start();
 
-    const lfo = ctx.createOscillator();
-    const lfoG = ctx.createGain();
+    const lfo = ctx.createOscillator(); const lfoG = ctx.createGain();
     lfo.type = 'sine'; lfo.frequency.value = 0.08; lfoG.gain.value = 0.04;
     lfo.connect(lfoG); lfoG.connect(master.gain); lfo.start();
   }, []);
@@ -1355,34 +1432,79 @@ const useAudioEngine = (active, intensity = 0.5) => {
     }
   }, [active, intensity, init]);
 
-  const playBell = useCallback(() => {
+  const playBell = useCallback((freq = 528) => {
     if (!ctxRef.current || !masterRef.current) return;
     const ctx = ctxRef.current; const now = ctx.currentTime;
-    const osc1 = ctx.createOscillator(); const g1 = ctx.createGain();
-    osc1.type = 'sine'; osc1.frequency.value = 528;
-    g1.gain.setValueAtTime(0.25, now);
-    g1.gain.exponentialRampToValueAtTime(0.001, now + 3);
-    osc1.connect(g1); g1.connect(masterRef.current);
-    osc1.start(now); osc1.stop(now + 3);
-    const osc2 = ctx.createOscillator(); const g2 = ctx.createGain();
-    osc2.type = 'sine'; osc2.frequency.value = 1057;
-    g2.gain.setValueAtTime(0.08, now);
-    g2.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
-    osc2.connect(g2); g2.connect(masterRef.current);
-    osc2.start(now); osc2.stop(now + 2.5);
+    [freq, freq * 2.003].forEach((f, i) => {
+      const osc = ctx.createOscillator(); const g = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = f;
+      g.gain.setValueAtTime(i === 0 ? 0.25 : 0.08, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + (i === 0 ? 3 : 2.5));
+      osc.connect(g); g.connect(masterRef.current);
+      osc.start(now); osc.stop(now + 3);
+    });
   }, []);
 
-  return { playBell };
+  const playImpact = useCallback(() => {
+    if (!ctxRef.current || !masterRef.current) return;
+    const ctx = ctxRef.current; const now = ctx.currentTime;
+    const osc = ctx.createOscillator(); const g = ctx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(20, now + 0.8);
+    g.gain.setValueAtTime(0.35, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+    osc.connect(g); g.connect(masterRef.current);
+    osc.start(now); osc.stop(now + 0.8);
+  }, []);
+
+  return { playBell, playImpact };
 };
 
 // ─────────────────────────────────────────────
-//  AI ORACLE HOOK
+//  VOICE ENGINE (Web Speech API)
+// ─────────────────────────────────────────────
+const useVoice = () => {
+  const synthRef = useRef(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      synthRef.current = window.speechSynthesis;
+      setAvailable(true);
+    }
+  }, []);
+
+  const speak = useCallback((text) => {
+    if (!synthRef.current) return;
+    synthRef.current.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.82; utt.pitch = 0.7; utt.volume = 0.9;
+    const voices = synthRef.current.getVoices();
+    const deep = voices.find(v => /daniel|james|male|english/i.test(v.name)) || voices[0];
+    if (deep) utt.voice = deep;
+    utt.onend = () => setSpeaking(false);
+    utt.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    synthRef.current.speak(utt);
+  }, []);
+
+  const stop = useCallback(() => {
+    synthRef.current?.cancel();
+    setSpeaking(false);
+  }, []);
+
+  return { speak, stop, speaking, available };
+};
+
+// ─────────────────────────────────────────────
+//  AI ORACLE (Enhanced with journal context)
 // ─────────────────────────────────────────────
 const useAIOracle = () => {
   const [oracleState, setOracleState] = useState({ loading: false, text: null, error: null });
   const abortRef = useRef(null);
 
-  const consultOracle = useCallback(async (question, chapter, gematria, correspondences) => {
+  const consultOracle = useCallback(async (question, chapter, gematria, correspondences, context = {}) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -1393,17 +1515,40 @@ const useAIOracle = () => {
       ? correspondences.map(c => c.text).join("; ")
       : "No direct correspondences found";
 
+    // Build journal context for the prompt
+    let journalContext = "";
+    if (context.recentReadings?.length > 0) {
+      journalContext = "\n\nTHE SEEKER'S RECENT READINGS (you may reference these to show continuity):\n" +
+        context.recentReadings.map(r => 
+          `- ${new Date(r.date).toLocaleDateString()}: Asked "${r.question}" → Drew Chapter ${formatChapterNumber(r.chapter)} (${r.title})`
+        ).join("\n");
+    }
+    if (context.recurrenceCount > 1) {
+      journalContext += `\n\nNOTE: The seeker has drawn this chapter ${context.recurrenceCount} times before. Repetition in divination is deeply significant — address this.`;
+    }
+
+    let cosmicContext = "";
+    if (context.planetary) {
+      cosmicContext = `\n\nCOSMIC TIMING:\n  Planetary Hour: ${context.planetary.planet} (${PLANETS[context.planetary.planet]?.element || ""})\n  Time: ${context.planetary.timeOfDay}`;
+    }
+    if (context.lunar) {
+      cosmicContext += `\n  Lunar Phase: ${context.lunar.name} (${context.lunar.waxing ? "waxing — growth, building" : "waning — release, dissolution"})`;
+    }
+    if (context.totalReadings) {
+      cosmicContext += `\n  This is the seeker's reading #${context.totalReadings}.`;
+    }
+
     const systemPrompt = `You are the Oracle of the Abyss, a voice that speaks from the depths of the Qliphothic night and the heights of the Supernal Triad. You interpret Aleister Crowley's Liber CCCXXXIII (The Book of Lies) as a living oracle.
 
 Your manner: cryptic yet penetrating. Speak in the second person ("you"). Your tone blends the severity of Geburah with the dark knowing of Binah. Use rich esoteric vocabulary naturally — sephiroth, paths, elements, qliphoth — but never lecture. Every word should feel like it was waiting for this specific seeker.
 
-You have been given:
-- The seeker's question or focus
-- The chapter drawn by gematric resonance
-- The numerical correspondences of their query
-- The qabalistic attributions of the chapter
+You have been given: the seeker's question, the chapter drawn by gematric resonance, numerical correspondences, qabalistic attributions, and possibly their past reading history and cosmic timing.
 
 Your task: weave a 3-4 paragraph interpretation that SPECIFICALLY connects the chapter's teaching to the seeker's question. Do not merely summarize the chapter. Reveal what the chapter says TO THIS SEEKER about THEIR situation. Find the hidden thread between what they asked and what was drawn.
+
+If past readings are provided, weave them into the narrative — show the arc, the pattern, the teaching that spans multiple consultations. If the same chapter appears again, treat it as the Book insisting on a lesson not yet learned.
+
+If cosmic timing is provided, let it inform your interpretation naturally — the planetary hour and lunar phase color the reading's significance.
 
 End with a single sentence — a blade of wisdom, a koan, a command — separated by a line break. Make it unforgettable.
 
@@ -1421,15 +1566,16 @@ QABALISTIC POSITION:
   Sephira: ${chapter.sephira} (${sephInfo.meaning})
   Path: ${chapter.path}
   Element: ${chapter.element}
-  Tarot: ${chapter.tarot}
+  Tarot: ${chapter.tarot}${journalContext}${cosmicContext}
 
 Deliver the Oracle's interpretation.`;
 
-try {
-        const text = await fetchOracleInterpretation({
-          prompt: userMsg,
-          systemPrompt: systemPrompt,
-        });
+    try {
+      const text = await fetchOracleInterpretation({
+        prompt: userMsg,
+        systemPrompt: systemPrompt,
+        signal: controller.signal,
+      });
 
       setOracleState({ loading: false, text, error: null });
     } catch (err) {
@@ -1447,43 +1593,49 @@ try {
 };
 
 // ─────────────────────────────────────────────
-//  JOURNAL HOOK (Persistent via window.storage)
+//  JOURNAL (Enhanced with recurrence + milestones)
 // ─────────────────────────────────────────────
 const MAX_JOURNAL = 50;
+const MILESTONES = [33, 66, 93, 333];
 
 const useJournal = () => {
   const [entries, setEntries] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [totalReadings, setTotalReadings] = useState(0);
+  const [milestone, setMilestone] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const result = await window.storage.get("liber333_journal");
-      if (result && result.value) {
-        const parsed = JSON.parse(result.value);
+      const raw = localStorage.getItem("liber333_journal");
+      if (raw) {
+        const parsed = JSON.parse(raw);
         setEntries(Array.isArray(parsed) ? parsed : []);
       }
-    } catch (e) {
-      console.log("Journal: no saved data or error", e);
-      setEntries([]);
-    }
+    } catch(e) { setEntries([]); }
+    try {
+      const countRaw = localStorage.getItem("liber333_total");
+      if (countRaw) setTotalReadings(parseInt(countRaw) || 0);
+    } catch(e) {}
     setLoaded(true);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const save = useCallback(async (newEntries) => {
-    try {
-      await window.storage.set("liber333_journal", JSON.stringify(newEntries));
-    } catch (e) {
-      console.error("Journal save error:", e);
-    }
+    try { localStorage.setItem("liber333_journal", JSON.stringify(newEntries)); } catch(e) {}
   }, []);
 
   const addEntry = useCallback(async (entry) => {
     const newEntries = [entry, ...entries].slice(0, MAX_JOURNAL);
     setEntries(newEntries);
     await save(newEntries);
-  }, [entries, save]);
+    const newTotal = totalReadings + 1;
+    setTotalReadings(newTotal);
+    try { localStorage.setItem("liber333_total", String(newTotal)); } catch(e) {}
+    if (MILESTONES.includes(newTotal)) {
+      setMilestone(newTotal);
+    }
+  }, [entries, save, totalReadings]);
 
   const removeEntry = useCallback(async (id) => {
     const newEntries = entries.filter(e => e.id !== id);
@@ -1493,16 +1645,46 @@ const useJournal = () => {
 
   const clearAll = useCallback(async () => {
     setEntries([]);
-    try { await window.storage.delete("liber333_journal"); } catch(e) {}
+    try { localStorage.removeItem("liber333_journal"); } catch(e) {}
   }, []);
 
-  return { entries, loaded, addEntry, removeEntry, clearAll };
+  const getRecurrenceCount = useCallback((chapterNum) => {
+    return entries.filter(e => e.chapter === chapterNum).length;
+  }, [entries]);
+
+  const getRecentReadings = useCallback((n = 5) => {
+    return entries.slice(0, n);
+  }, [entries]);
+
+  const dismissMilestone = useCallback(() => setMilestone(null), []);
+
+  return { entries, loaded, totalReadings, milestone, dismissMilestone,
+           addEntry, removeEntry, clearAll, getRecurrenceCount, getRecentReadings };
 };
 
 // ─────────────────────────────────────────────
-//  PARTICLE CANVAS
+//  GEMATRIA ECHOES (highlight notable words)
 // ─────────────────────────────────────────────
-const ParticleCanvas = ({ active, intensity = 1 }) => {
+const findGematriaEchoes = (text) => {
+  if (!text) return [];
+  const words = text.split(/\s+/);
+  const echoes = [];
+  words.forEach((word, idx) => {
+    const clean = word.replace(/[^a-zA-Z]/g, '');
+    if (clean.length < 3) return;
+    const val = calculateGematria(clean).simple;
+    if (NOTABLE_NUMBERS[val]) {
+      echoes.push({ word: clean, value: val, meaning: NOTABLE_NUMBERS[val].split(';')[0].split('—')[0].trim(), index: idx });
+    }
+  });
+  return echoes;
+};
+
+
+// ─────────────────────────────────────────────
+//  PARTICLE CANVAS (Enhanced — planetary colors)
+// ─────────────────────────────────────────────
+const ParticleCanvas = ({ active, intensity = 1, accentColor = "#dc2626" }) => {
   const canvasRef = useRef(null);
   const particlesRef = useRef([]);
   const animRef = useRef(null);
@@ -1515,6 +1697,15 @@ const ParticleCanvas = ({ active, intensity = 1 }) => {
     resize();
     window.addEventListener('resize', resize);
 
+    // Parse accent color to RGB
+    const parseColor = (hex) => {
+      const r = parseInt(hex.slice(1,3), 16);
+      const g = parseInt(hex.slice(3,5), 16);
+      const b = parseInt(hex.slice(5,7), 16);
+      return { r, g, b };
+    };
+    const c = parseColor(accentColor || "#dc2626");
+
     const createParticle = () => ({
       x: Math.random() * canvas.width,
       y: canvas.height + Math.random() * 20,
@@ -1524,6 +1715,7 @@ const ParticleCanvas = ({ active, intensity = 1 }) => {
       life: 1,
       decay: Math.random() * 0.008 + 0.003,
       phase: Math.random() * Math.PI * 2,
+      bright: Math.random() > 0.7, // 30% are brighter accent particles
     });
 
     const animate = () => {
@@ -1538,12 +1730,13 @@ const ParticleCanvas = ({ active, intensity = 1 }) => {
         p.life -= p.decay;
         if (p.life <= 0) return false;
         const a = p.life, r = p.size * p.life;
+        const pc = p.bright ? { r: 255, g: 180, b: 80 } : c;
         ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(220,38,38,${a * 0.7})`; ctx.fill();
+        ctx.fillStyle = `rgba(${pc.r},${pc.g},${pc.b},${a * 0.7})`; ctx.fill();
         ctx.beginPath(); ctx.arc(p.x, p.y, r * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,120,50,${a * 0.5})`; ctx.fill();
+        ctx.fillStyle = `rgba(255,${pc.g + 60},${pc.b + 30},${a * 0.5})`; ctx.fill();
         ctx.beginPath(); ctx.arc(p.x, p.y, r * 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(220,38,38,${a * 0.07})`; ctx.fill();
+        ctx.fillStyle = `rgba(${pc.r},${pc.g},${pc.b},${a * 0.06})`; ctx.fill();
         return true;
       });
       animRef.current = requestAnimationFrame(animate);
@@ -1553,7 +1746,7 @@ const ParticleCanvas = ({ active, intensity = 1 }) => {
       window.removeEventListener('resize', resize);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [active, intensity]);
+  }, [active, intensity, accentColor]);
 
   return (
     <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none"
@@ -1562,9 +1755,10 @@ const ParticleCanvas = ({ active, intensity = 1 }) => {
 };
 
 // ─────────────────────────────────────────────
-//  ANIMATED SIGIL (SVG)
+//  EVOLVING SIGIL (Enhanced — accumulates from readings)
 // ─────────────────────────────────────────────
-const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true }) => {
+const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
+                         evolutionRings = 0, accentColor = "#dc2626" }) => {
   const [time, setTime] = useState(0);
   useEffect(() => {
     if (!spinning) return;
@@ -1575,75 +1769,84 @@ const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true }) =
   const geometry = useMemo(() => {
     if (!input) return null;
     const hash = Math.abs(Array.from(input).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0));
-    const numPoints = 5 + (hash % 8);
-    const numRings = 2 + (hash % 3);
+    const basePoints = 5 + (hash % 8);
+    const baseRings = 2 + (hash % 3);
+    const numRings = baseRings + Math.min(evolutionRings, 4); // Up to 4 extra rings from readings
     const points = [], lines = [], rings = [];
 
     for (let r = 0; r < numRings; r++) {
-      const ringRadius = 28 + r * 22;
-      rings.push(ringRadius);
+      const ringRadius = 22 + r * (70 / numRings);
+      rings.push({ radius: ringRadius, evolved: r >= baseRings });
+      const numPts = basePoints + (r >= baseRings ? r - baseRings + 3 : 0);
       const ringPts = [];
-      for (let i = 0; i < numPoints; i++) {
-        const angle = (i / numPoints) * Math.PI * 2 + (r * 0.3);
+      for (let i = 0; i < numPts; i++) {
+        const angle = (i / numPts) * Math.PI * 2 + (r * 0.3);
         const charVal = input.charCodeAt((i + r * 3) % input.length) || 65;
         const wobble = (charVal % 20) - 10;
         const x = 100 + Math.cos(angle) * (ringRadius + wobble);
         const y = 100 + Math.sin(angle) * (ringRadius + wobble);
-        points.push({ x, y, ring: r });
+        points.push({ x, y, ring: r, evolved: r >= baseRings });
         ringPts.push({ x, y });
       }
       for (let i = 0; i < ringPts.length; i++) {
         const next = ringPts[(i + 1) % ringPts.length];
-        lines.push({ x1: ringPts[i].x, y1: ringPts[i].y, x2: next.x, y2: next.y, ring: r });
+        lines.push({ x1: ringPts[i].x, y1: ringPts[i].y, x2: next.x, y2: next.y, ring: r, evolved: r >= baseRings });
       }
     }
-    for (let i = 0; i < numPoints; i++) {
+    // Cross-ring connections
+    for (let i = 0; i < basePoints; i++) {
       for (let r = 0; r < numRings - 1; r++) {
-        const idx1 = r * numPoints + i;
-        const idx2 = (r + 1) * numPoints + ((i + 1) % numPoints);
+        const idx1 = r * basePoints + (i % points.filter(p => p.ring === r).length);
+        const idx2 = (r + 1) * basePoints + ((i + 1) % points.filter(p => p.ring === r + 1).length);
         if (points[idx1] && points[idx2])
           lines.push({ x1: points[idx1].x, y1: points[idx1].y, x2: points[idx2].x, y2: points[idx2].y, ring: -1 });
       }
     }
     return { points, lines, rings };
-  }, [input]);
+  }, [input, evolutionRings]);
 
   if (!geometry) return null;
+  const ac = accentColor || "#dc2626";
 
   return (
     <div className="relative mx-auto" style={{ width: size, height: size }}>
       <svg viewBox="0 0 200 200" className="w-full h-full" style={{
-        filter: glowing ? 'drop-shadow(0 0 20px rgba(220,38,38,0.6)) drop-shadow(0 0 40px rgba(220,38,38,0.25))' : 'none'
+        filter: glowing ? `drop-shadow(0 0 20px ${ac}99) drop-shadow(0 0 40px ${ac}40)` : 'none'
       }}>
         <defs>
           <radialGradient id="sigilGlow">
-            <stop offset="0%" stopColor="#dc2626" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#dc2626" stopOpacity="0" />
+            <stop offset="0%" stopColor={ac} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={ac} stopOpacity="0" />
           </radialGradient>
         </defs>
         <circle cx="100" cy="100" r="95" fill="url(#sigilGlow)" />
         {geometry.rings.map((r, i) => (
-          <circle key={`ring-${i}`} cx="100" cy="100" r={r} fill="none" stroke="#dc2626"
-            strokeWidth={i === 0 ? 2 : 1} strokeDasharray={i > 0 ? "4 3" : "none"}
-            opacity={0.6 - i * 0.12}
+          <circle key={`ring-${i}`} cx="100" cy="100" r={r.radius} fill="none"
+            stroke={r.evolved ? "#fbbf24" : ac}
+            strokeWidth={i === 0 ? 2 : r.evolved ? 0.6 : 1}
+            strokeDasharray={i > 0 ? "4 3" : "none"}
+            opacity={r.evolved ? 0.3 + Math.sin(time * 1.5 + i) * 0.1 : 0.6 - i * 0.08}
             transform={`rotate(${time * (18 + i * 8) * (i % 2 === 0 ? 1 : -1)} 100 100)`} />
         ))}
         {geometry.lines.map((line, i) => (
           <line key={`ln-${i}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
-            stroke={line.ring === -1 ? "#ffffff" : "#dc2626"}
+            stroke={line.ring === -1 ? "#ffffff" : line.evolved ? "#fbbf24" : ac}
             strokeWidth={line.ring === -1 ? 1.2 : 0.8}
-            opacity={line.ring === -1 ? 0.35 : 0.25 + Math.sin(time * 2 + i * 0.5) * 0.15} />
+            opacity={line.ring === -1 ? 0.3 : line.evolved ? 0.2 : 0.25 + Math.sin(time * 2 + i * 0.5) * 0.15} />
         ))}
         {geometry.points.map((pt, i) => {
           const pulse = Math.sin(time * 3 + i * 0.7);
           return (
             <g key={`pt-${i}`}>
-              <circle cx={pt.x} cy={pt.y} r={2.5 + pulse * 0.8} fill="#dc2626" opacity="0.8" />
-              <circle cx={pt.x} cy={pt.y} r={5 + pulse * 1.5} fill="none" stroke="#dc2626" strokeWidth="0.5" opacity="0.25" />
+              <circle cx={pt.x} cy={pt.y} r={2.5 + pulse * 0.8}
+                fill={pt.evolved ? "#fbbf24" : ac} opacity={pt.evolved ? 0.5 : 0.8} />
+              <circle cx={pt.x} cy={pt.y} r={5 + pulse * 1.5} fill="none"
+                stroke={pt.evolved ? "#fbbf24" : ac} strokeWidth="0.5" opacity="0.2" />
             </g>
           );
         })}
-        <circle cx="100" cy="100" r={7 + Math.sin(time * 1.8) * 2} fill="none" stroke="white" strokeWidth="1.5" opacity="0.75" />
+        <circle cx="100" cy="100" r={7 + Math.sin(time * 1.8) * 2}
+          fill="none" stroke="white" strokeWidth="1.5" opacity="0.75" />
         <circle cx="100" cy="100" r="2.5" fill="white" opacity={0.5 + Math.sin(time * 4) * 0.3} />
       </svg>
     </div>
@@ -1708,29 +1911,8 @@ const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
   return (
     <span className={className}>
       {displayed}
-      {!done && <span className="animate-pulse" style={{ opacity: 0.7 }}>{"▌"}</span>}
+      {!done && <span className="animate-pulse" style={{ opacity: 0.7 }}>▌</span>}
     </span>
-  );
-};
-
-// ─────────────────────────────────────────────
-//  RITUAL PROGRESS BAR
-// ─────────────────────────────────────────────
-const RitualProgress = ({ progress, phase }) => {
-  const labels = { invoking: "INVOKING", communing: "COMMUNING", receiving: "RECEIVING", complete: "COMPLETE" };
-  return (
-    <div className="w-full max-w-sm mx-auto mt-6">
-      <div className="h-0.5 w-full bg-neutral-800 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-300 ease-out"
-          style={{
-            width: `${progress}%`,
-            background: 'linear-gradient(90deg, #7f1d1d, #dc2626, #fbbf24)'
-          }} />
-      </div>
-      <div className="text-center mt-2 text-xs tracking-[0.3em] text-red-700" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-        {labels[phase] || phase?.toUpperCase() || ""}
-      </div>
-    </div>
   );
 };
 
@@ -1742,90 +1924,197 @@ const NoiseBackground = () => (
 );
 
 // ─────────────────────────────────────────────
-//  EXPANDABLE SECTION (Accordion)
+//  AMBIENT WHISPERS (Idle floating text)
 // ─────────────────────────────────────────────
-const ExpandableSection = ({ title, icon, children, defaultOpen = false }) => {
-  const [open, setOpen] = useState(defaultOpen);
+const AmbientWhispers = ({ active }) => {
+  const [fragments, setFragments] = useState([]);
+  const idRef = useRef(0);
+
+  useEffect(() => {
+    if (!active) { setFragments([]); return; }
+    const spawn = () => {
+      const ch = LIBER_333[Math.floor(Math.random() * LIBER_333.length)];
+      const words = ch.text.split(/\s+/);
+      const start = Math.floor(Math.random() * Math.max(1, words.length - 6));
+      const frag = words.slice(start, start + 3 + Math.floor(Math.random() * 5)).join(" ");
+      const id = idRef.current++;
+      setFragments(prev => [...prev.slice(-6), {
+        id, text: frag,
+        x: 10 + Math.random() * 80,
+        y: 20 + Math.random() * 60,
+        delay: Math.random() * 2,
+      }]);
+    };
+    spawn();
+    const iv = setInterval(spawn, 4000 + Math.random() * 3000);
+    return () => clearInterval(iv);
+  }, [active]);
+
   return (
-    <div className="border border-neutral-800 rounded-lg overflow-hidden mb-3" style={{ background: 'rgba(10,10,10,0.8)' }}>
-      <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-neutral-900/50 transition-colors">
-        <span className="flex items-center gap-2 text-sm tracking-wide" style={{ fontFamily: 'Cinzel, serif', color: '#dc2626' }}>
-          <span className="text-base">{icon}</span>
-          {title}
-        </span>
-        <span className="text-neutral-600 text-xs transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-          {"▼"}
-        </span>
-      </button>
-      {open && (
-        <div className="px-4 pb-4 text-neutral-400 text-sm leading-relaxed border-t border-neutral-800/50"
-          style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-          {children}
+    <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 2 }}>
+      {fragments.map(f => (
+        <div key={f.id} className="absolute text-neutral-800 text-xs italic"
+          style={{
+            fontFamily: 'Cinzel, serif',
+            left: `${f.x}%`, top: `${f.y}%`,
+            animation: `whisperFade 8s ease-in-out ${f.delay}s both`,
+            maxWidth: '200px', textAlign: 'center', lineHeight: 1.4,
+          }}>
+          {f.text}
         </div>
-      )}
+      ))}
     </div>
   );
 };
 
 // ─────────────────────────────────────────────
-//  JOURNAL OVERLAY
+//  SHOCKWAVE EFFECT (Radial pulse on chapter reveal)
 // ─────────────────────────────────────────────
-const JournalOverlay = ({ entries, onClose, onDelete, onClear, onSelect }) => {
+const Shockwave = ({ active, color = "#dc2626" }) => {
+  if (!active) return null;
+  return (
+    <div className="fixed inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 3 }}>
+      <div style={{
+        width: 0, height: 0,
+        borderRadius: '50%',
+        boxShadow: `0 0 60px 30px ${color}33, 0 0 120px 60px ${color}11`,
+        animation: 'shockwaveExpand 1.2s ease-out forwards',
+      }} />
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+//  EXPANDABLE SECTION
+// ─────────────────────────────────────────────
+const ExpandableSection = ({ title, icon, children, defaultOpen = false, accentColor = "#dc2626" }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-neutral-800/60 rounded-lg overflow-hidden mb-3"
+      style={{ background: 'rgba(8,8,8,0.7)', backdropFilter: 'blur(4px)' }}>
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.02] transition-colors">
+        <span className="flex items-center gap-2.5 text-sm tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+          <span className="text-base opacity-70">{icon}</span>
+          {title}
+        </span>
+        <span className="text-neutral-700 text-[10px] transition-transform duration-300"
+          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+      </button>
+      <div className="overflow-hidden transition-all duration-500" style={{ maxHeight: open ? '2000px' : '0', opacity: open ? 1 : 0 }}>
+        <div className="px-5 pb-4 text-neutral-400 text-[13px] leading-relaxed border-t border-neutral-800/30"
+          style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+//  MILESTONE / ABYSS EVENT OVERLAY
+// ─────────────────────────────────────────────
+const MilestoneOverlay = ({ number, onDismiss }) => {
+  const messages = {
+    33: { title: "THE LOVER", text: "33 readings. The number of the highest degree. You have traced the paths of Lamed — Ox Goad of Equilibrium. The Book recognizes you.", icon: "♎" },
+    66: { title: "THE QLIPHOTHIC GATE", text: "66 readings. The mystic sum of the shells. You have walked the nightside. The shadows know your name now.", icon: "☾" },
+    93: { title: "ΘΕΛΗΜΑ", text: "93 readings. Thelema. Agape. Will equals Love. You have completed the full circuit of the Book. Do what thou wilt.", icon: "⊙" },
+    333: { title: "CHORONZON", text: "333 readings. The Dweller in the Abyss speaks: 'I am I.' But you know better. You are none and two. Cross.", icon: "∅" },
+  };
+  const m = messages[number] || { title: `READING ${number}`, text: "A threshold is crossed.", icon: "☉" };
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-6" style={{ zIndex: 70 }}>
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(12px)' }} />
+      <div className="relative text-center max-w-md" style={{ animation: 'milestoneAppear 1.5s ease-out' }}>
+        <div className="text-6xl mb-6 opacity-60">{m.icon}</div>
+        <div className="text-xs tracking-[0.4em] text-amber-600/70 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          READING #{number}
+        </div>
+        <div className="text-3xl tracking-wider text-amber-500 mb-4" style={{ fontFamily: 'Cinzel, serif', textShadow: '0 0 40px rgba(245,158,11,0.3)' }}>
+          {m.title}
+        </div>
+        <div className="text-neutral-500 text-sm leading-relaxed mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          {m.text}
+        </div>
+        <button onClick={onDismiss}
+          className="border border-amber-800/40 text-amber-600 px-8 py-2.5 rounded-lg text-xs tracking-[0.2em] hover:bg-amber-900/10 transition-all"
+          style={{ fontFamily: 'Cinzel, serif' }}>
+          CONTINUE
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+//  JOURNAL OVERLAY (Enhanced)
+// ─────────────────────────────────────────────
+const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, onSelect, accentColor = "#dc2626" }) => {
+  // Count recurrences
+  const recurrenceMap = useMemo(() => {
+    const map = {};
+    entries.forEach(e => { map[e.chapter] = (map[e.chapter] || 0) + 1; });
+    return map;
+  }, [entries]);
+
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 60 }}>
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-xl border border-neutral-800 overflow-hidden"
-        style={{ background: 'linear-gradient(180deg, #0a0a0a 0%, #111 100%)' }}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800">
-          <h2 className="text-lg tracking-wider text-red-600" style={{ fontFamily: 'Cinzel, serif' }}>
-            {"☥"} GRIMOIRE JOURNAL
-          </h2>
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl border border-neutral-800/60 overflow-hidden"
+        style={{ background: 'linear-gradient(180deg, #080808 0%, #0a0a0a 100%)' }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800/50">
+          <div>
+            <h2 className="text-lg tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+              ☥ GRIMOIRE JOURNAL
+            </h2>
+            <div className="text-[10px] text-neutral-600 mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              {totalReadings} total readings · {entries.length} saved
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             {entries.length > 0 && (
-              <button onClick={onClear} className="text-xs text-neutral-600 hover:text-red-700 transition-colors"
-                style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                CLEAR ALL
-              </button>
+              <button onClick={onClear} className="text-[10px] text-neutral-700 hover:text-red-800 transition-colors"
+                style={{ fontFamily: 'JetBrains Mono, monospace' }}>CLEAR ALL</button>
             )}
-            <button onClick={onClose} className="text-neutral-500 hover:text-white transition-colors text-xl leading-none">
-              {"×"}
-            </button>
+            <button onClick={onClose} className="text-neutral-600 hover:text-white transition-colors text-xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/5">×</button>
           </div>
         </div>
 
-        {/* Entries */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           {entries.length === 0 ? (
-            <div className="text-center py-12 text-neutral-600 text-sm">
-              <div className="text-3xl mb-3 opacity-30">{"☉"}</div>
+            <div className="text-center py-16 text-neutral-700 text-sm">
+              <div className="text-4xl mb-4 opacity-20">☉</div>
               No readings recorded yet.
-              <br />Consult the Oracle to begin your journal.
             </div>
           ) : entries.map((entry) => (
             <div key={entry.id}
-              className="group border border-neutral-800/70 rounded-lg p-4 hover:border-neutral-700 transition-colors cursor-pointer"
-              style={{ background: 'rgba(20,20,20,0.6)' }}
+              className="group border border-neutral-800/40 rounded-lg p-4 hover:border-neutral-700/50 transition-all cursor-pointer hover:bg-white/[0.01]"
               onClick={() => { onSelect?.(entry); onClose(); }}>
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-red-700 text-xs">{formatChapterNumber(entry.chapter)}</span>
-                    <span className="text-neutral-300 text-xs truncate" style={{ fontFamily: 'Cinzel, serif' }}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-bold" style={{ color: accentColor, fontFamily: 'Cinzel, serif' }}>
+                      {formatChapterNumber(entry.chapter)}
+                    </span>
+                    <span className="text-neutral-400 text-xs truncate" style={{ fontFamily: 'Cinzel, serif' }}>
                       {entry.title}
                     </span>
+                    {recurrenceMap[entry.chapter] > 1 && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-900/30 text-amber-600">
+                        ×{recurrenceMap[entry.chapter]}
+                      </span>
+                    )}
                   </div>
-                  <div className="text-neutral-500 text-xs truncate">{entry.question}</div>
-                  <div className="text-neutral-700 text-xs mt-1">
+                  <div className="text-neutral-500 text-[11px] truncate">{entry.question}</div>
+                  <div className="text-neutral-700 text-[10px] mt-1">
                     {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    {" · "} Gematria: {entry.gematria}
+                    {" · "}{entry.gematria}
+                    {entry.spreadType && ` · ${entry.spreadType}`}
                   </div>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-                  className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-700 transition-all text-sm ml-2">
-                  {"✕"}
-                </button>
+                  className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-700 transition-all text-sm ml-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/5">✕</button>
               </div>
             </div>
           ))}
@@ -1836,9 +2125,9 @@ const JournalOverlay = ({ entries, onClose, onDelete, onClear, onSelect }) => {
 };
 
 // ─────────────────────────────────────────────
-//  GEMATRIA CALCULATOR UI
+//  GEMATRIA CALCULATOR MODE
 // ─────────────────────────────────────────────
-const GematriaMode = ({ onBack }) => {
+const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
   const [input, setInput] = useState("");
   const result = useMemo(() => input.trim() ? calculateGematria(input) : null, [input]);
   const corr = useMemo(() => result ? findCorrespondences(result.simple) : [], [result]);
@@ -1846,49 +2135,44 @@ const GematriaMode = ({ onBack }) => {
   return (
     <div className="w-full max-w-xl mx-auto px-4">
       <button onClick={onBack}
-        className="text-neutral-600 hover:text-red-600 text-xs tracking-widest mb-6 transition-colors"
+        className="text-neutral-600 hover:text-neutral-400 text-xs tracking-widest mb-8 transition-colors flex items-center gap-2"
         style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-        {"←"} RETURN TO ORACLE
+        <span>←</span> RETURN TO ORACLE
       </button>
 
-      <h2 className="text-2xl text-center text-red-600 mb-2 tracking-wider" style={{ fontFamily: 'Cinzel, serif' }}>
+      <h2 className="text-2xl text-center tracking-wider mb-2" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
         Gematria Calculator
       </h2>
-      <p className="text-center text-neutral-600 text-xs mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-        English Qabalah: A=1 B=2 ... Z=26
+      <p className="text-center text-neutral-600 text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        English Qabalah · A=1 B=2 ... Z=26
       </p>
 
-      <input
-        type="text"
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        placeholder="Enter a word or phrase..."
-        className="w-full bg-transparent border border-neutral-700 rounded-lg px-4 py-3 text-neutral-200 text-sm
-          placeholder-neutral-700 focus:outline-none focus:border-red-800 transition-colors"
-        style={{ fontFamily: 'JetBrains Mono, monospace' }}
-      />
+      <div className="relative">
+        <input type="text" value={input} onChange={e => setInput(e.target.value)}
+          placeholder="Enter a word or phrase..."
+          className="w-full bg-transparent border border-neutral-800 rounded-lg px-4 py-3.5 text-neutral-200 text-sm
+            placeholder-neutral-700 focus:outline-none transition-colors"
+          style={{ fontFamily: 'JetBrains Mono, monospace', borderColor: input ? accentColor + '40' : undefined }}
+        />
+      </div>
 
       {result && (
         <div className="mt-8 space-y-6">
-          {/* Value display */}
           <div className="text-center">
-            <div className="text-6xl font-bold text-red-600 mb-1" style={{ fontFamily: 'Cinzel, serif', textShadow: '0 0 30px rgba(220,38,38,0.3)' }}>
+            <div className="text-7xl font-bold mb-1" style={{ fontFamily: 'Cinzel, serif', color: accentColor, textShadow: `0 0 40px ${accentColor}33` }}>
               {result.simple}
             </div>
-            <div className="text-neutral-600 text-xs" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {result.reductionSteps.join(" {\u2192} ")} ({result.raw} letter{result.raw !== 1 ? 's' : ''})
+            <div className="text-neutral-600 text-[11px]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              {result.reductionSteps.join(" → ")} · {result.raw} letter{result.raw !== 1 ? 's' : ''}
             </div>
           </div>
 
-          {/* Correspondences */}
           {corr.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs text-neutral-600 tracking-widest mb-2" style={{ fontFamily: 'Cinzel, serif' }}>
-                CORRESPONDENCES
-              </div>
+              <div className="text-[10px] text-neutral-600 tracking-[0.3em] mb-2" style={{ fontFamily: 'Cinzel, serif' }}>CORRESPONDENCES</div>
               {corr.map((c, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                <div key={i} className="flex items-start gap-2 text-[12px]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${
                     c.type === 'direct' ? 'bg-red-900/40 text-red-500' :
                     c.type === 'square' ? 'bg-amber-900/40 text-amber-500' :
                     c.type === 'factor' ? 'bg-neutral-800 text-neutral-400' :
@@ -1900,17 +2184,14 @@ const GematriaMode = ({ onBack }) => {
             </div>
           )}
 
-          {/* Hebrew Letters reference */}
-          <div className="border-t border-neutral-800 pt-4">
-            <div className="text-xs text-neutral-600 tracking-widest mb-3" style={{ fontFamily: 'Cinzel, serif' }}>
-              HEBREW LETTER TABLE
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-neutral-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          <div className="border-t border-neutral-800/50 pt-4">
+            <div className="text-[10px] text-neutral-600 tracking-[0.3em] mb-3" style={{ fontFamily: 'Cinzel, serif' }}>HEBREW LETTERS</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-neutral-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {Object.entries(HEBREW_LETTERS).map(([name, data]) => (
                 <div key={name} className="flex items-center gap-2">
-                  <span className="text-red-800 w-4 text-center">{data.letter}</span>
+                  <span className="w-4 text-center" style={{ color: accentColor + '99' }}>{data.letter}</span>
                   <span className="text-neutral-600 w-8 text-right">{data.value}</span>
-                  <span className="text-neutral-500">{name}</span>
+                  <span>{name}</span>
                 </div>
               ))}
             </div>
@@ -1922,174 +2203,317 @@ const GematriaMode = ({ onBack }) => {
 };
 
 // ─────────────────────────────────────────────
-//  MAIN APPLICATION
+//  GEMATRIA ECHO RENDERER (highlighted text)
+// ─────────────────────────────────────────────
+const EchoText = ({ text, echoes = [], accentColor = "#dc2626" }) => {
+  if (!echoes.length) return <span>{text}</span>;
+  
+  const words = text.split(/(\s+)/);
+  const echoWords = new Set(echoes.map(e => e.word.toLowerCase()));
+  const echoMap = {};
+  echoes.forEach(e => { echoMap[e.word.toLowerCase()] = e; });
+
+  return (
+    <span>
+      {words.map((w, i) => {
+        const clean = w.replace(/[^a-zA-Z]/g, '').toLowerCase();
+        if (echoWords.has(clean)) {
+          const echo = echoMap[clean];
+          return (
+            <span key={i} className="relative group cursor-help">
+              <span style={{ borderBottom: `1px dotted ${accentColor}60`, color: '#e5e5e5' }}>{w}</span>
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded text-[9px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                style={{ background: '#1a1a1a', border: `1px solid ${accentColor}30`, color: accentColor, fontFamily: 'JetBrains Mono, monospace' }}>
+                {echo.value} · {echo.meaning}
+              </span>
+            </span>
+          );
+        }
+        return <span key={i}>{w}</span>;
+      })}
+    </span>
+  );
+};
+
+
+// ─────────────────────────────────────────────
+//  MAIN APP
 // ─────────────────────────────────────────────
 const App = () => {
   // ── Phase: init | input | ritual | revelation ──
   const [phase, setPhase] = useState("init");
-  const [mode, setMode] = useState("oracle"); // oracle | gematria
+  const [mode, setMode] = useState("oracle");
+  const [spreadType, setSpreadType] = useState("single"); // single | spread
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [idleTime, setIdleTime] = useState(0);
 
   // ── Oracle state ──
   const [question, setQuestion] = useState("");
-  const [drawnChapter, setDrawnChapter] = useState(null);
+  const [drawnChapters, setDrawnChapters] = useState([]); // Array for spread support
   const [gematriaResult, setGematriaResult] = useState(null);
   const [correspondences, setCorrespondences] = useState([]);
   const [ritualProgress, setRitualProgress] = useState(0);
-  const [ritualPhase, setRitualPhase] = useState("invoking");
+  const [ritualAct, setRitualAct] = useState(0); // 0=invoking, 1=communing, 2=receiving, 3=silence, 4=done
+  const [showShockwave, setShowShockwave] = useState(false);
   const [glitchActive, setGlitchActive] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [revealIndex, setRevealIndex] = useState(0); // For spread: which chapter is shown
+  const [textEchoes, setTextEchoes] = useState([]);
 
   // ── Hooks ──
+  const planetary = usePlanetaryTime();
+  const lunar = useLunarPhase();
   const audioIntensity = phase === "ritual" ? 1.0 : phase === "revelation" ? 0.6 : 0.3;
-  const { playBell } = useAudioEngine(audioEnabled, audioIntensity);
+  const { playBell, playImpact } = useAudioEngine(audioEnabled, audioIntensity);
   const oracle = useAIOracle();
   const journal = useJournal();
+  const voice = useVoice();
 
-  // ── Font injection ──
+  // ── Derived values ──
+  const accentColor = planetary?.color || "#dc2626";
+  const accentLight = planetary?.colorLight || "#f87171";
+  const drawnChapter = drawnChapters[revealIndex] || drawnChapters[0] || null;
+  const isSpread = spreadType === "spread" && drawnChapters.length === 3;
+  const evolutionRings = Math.min(Math.floor(journal.totalReadings / 5), 4);
+
+
+  // ── Idle detection for ambient mode ──
   useEffect(() => {
-    if (!document.querySelector('link[href*="Cinzel"]')) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = FONT_URL;
-      document.head.appendChild(link);
-    }
-  }, []);
+    if (phase !== "init") { setIdleTime(0); return; }
+    const iv = setInterval(() => setIdleTime(t => t + 1), 1000);
+    const reset = () => setIdleTime(0);
+    window.addEventListener('mousemove', reset);
+    window.addEventListener('keydown', reset);
+    window.addEventListener('touchstart', reset);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener('mousemove', reset);
+      window.removeEventListener('keydown', reset);
+      window.removeEventListener('touchstart', reset);
+    };
+  }, [phase]);
+
+  const isAmbient = phase === "init" && idleTime > 20;
 
   // ── Perform divination ──
   const performDivination = useCallback(() => {
     if (!question.trim()) return;
+    haptic([30, 50, 30]);
+
     const gem = calculateGematria(question);
     const corr = findCorrespondences(gem.simple);
-    const idx = gem.simple % LIBER_333.length;
-    const chapter = LIBER_333[idx];
-
     setGematriaResult(gem);
     setCorrespondences(corr);
-    setDrawnChapter(chapter);
+
+    // Select chapters
+    let chapters;
+    if (spreadType === "spread") {
+      // Past: simple value, Present: reduced, Future: hash
+      const idx1 = gem.simple % LIBER_333.length;
+      const idx2 = gem.reduced % LIBER_333.length;
+      const idx3 = stringToHash(question) % LIBER_333.length;
+      // Ensure no duplicates
+      const set = new Set([idx1]);
+      let i2 = idx2; while (set.has(i2)) i2 = (i2 + 1) % LIBER_333.length; set.add(i2);
+      let i3 = idx3; while (set.has(i3)) i3 = (i3 + 1) % LIBER_333.length;
+      chapters = [LIBER_333[idx1], LIBER_333[i2], LIBER_333[i3]];
+    } else {
+      const idx = gem.simple % LIBER_333.length;
+      chapters = [LIBER_333[idx]];
+    }
+
+    setDrawnChapters(chapters);
+    setRevealIndex(0);
     setPhase("ritual");
     setRitualProgress(0);
-    setRitualPhase("invoking");
+    setRitualAct(0);
     setGlitchActive(false);
+    setShowShockwave(false);
     setSaved(false);
+    setTextEchoes([]);
     oracle.resetOracle();
 
     if (audioEnabled) playBell();
 
-    // Ritual animation: 5 seconds
-    const duration = 5000;
+    // Enhanced 3-act ritual: 7 seconds total
+    // Act 1: Invoking (0-2.5s) — dim, sparse, tension
+    // Act 2: Communing (2.5-4.5s) — expansion, surge
+    // Act 3: Receiving (4.5-6s) — contraction
+    // Act 4: Silence (6-6.5s) — brief darkness
+    // Act 5: Reveal (6.5s) — SLAM
+    const duration = 7000;
     const start = Date.now();
     const tick = () => {
       const elapsed = Date.now() - start;
       const pct = Math.min((elapsed / duration) * 100, 100);
       setRitualProgress(pct);
 
-      if (pct < 33) setRitualPhase("invoking");
-      else if (pct < 66) setRitualPhase("communing");
-      else if (pct < 100) setRitualPhase("receiving");
+      if (elapsed < 2500) setRitualAct(0);
+      else if (elapsed < 4500) {
+        if (ritualAct !== 1 && audioEnabled) playBell(396);
+        setRitualAct(1);
+      }
+      else if (elapsed < 6000) setRitualAct(2);
+      else if (elapsed < 6500) setRitualAct(3);
       else {
-        setRitualPhase("complete");
+        setRitualAct(4);
         setPhase("revelation");
         setGlitchActive(true);
-        if (audioEnabled) playBell();
-        // Auto-consult the AI oracle
-        oracle.consultOracle(question, chapter, gem, corr);
+        setShowShockwave(true);
+        haptic([50, 30, 80]);
+        if (audioEnabled) { playImpact(); setTimeout(() => playBell(), 300); }
+        setTimeout(() => setShowShockwave(false), 1200);
+
+        // Compute text echoes
+        const ch = chapters[0];
+        setTextEchoes(findGematriaEchoes(ch.text));
+
+        // Consult oracle with full context
+        const recurrence = journal.getRecurrenceCount(chapters[0].chapter);
+        oracle.consultOracle(question, chapters[0], gem, corr, {
+          recentReadings: journal.getRecentReadings(5),
+          recurrenceCount: recurrence,
+          planetary,
+          lunar,
+          totalReadings: journal.totalReadings + 1,
+        });
         return;
       }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }, [question, audioEnabled, playBell, oracle]);
+  }, [question, spreadType, audioEnabled, playBell, playImpact, oracle, journal, planetary, lunar]);
 
-  // ── Save reading to journal ──
+  // ── Save reading ──
   const saveReading = useCallback(async () => {
     if (!drawnChapter || saved) return;
-    await journal.addEntry({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      date: new Date().toISOString(),
-      question,
-      chapter: drawnChapter.chapter,
-      title: drawnChapter.title,
-      gematria: gematriaResult?.simple || 0,
-      interpretation: oracle.text || null,
-    });
+    for (const ch of drawnChapters) {
+      await journal.addEntry({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        date: new Date().toISOString(),
+        question,
+        chapter: ch.chapter,
+        title: ch.title,
+        gematria: gematriaResult?.simple || 0,
+        interpretation: oracle.text || null,
+        spreadType: isSpread ? "Past/Present/Future" : "single",
+        planetary: planetary?.planet,
+        lunar: lunar?.name,
+      });
+    }
     setSaved(true);
-  }, [drawnChapter, question, gematriaResult, oracle.text, saved, journal]);
+    haptic(30);
+  }, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);
 
   // ── Reset ──
   const resetToInput = useCallback(() => {
     setPhase("input");
     setQuestion("");
-    setDrawnChapter(null);
+    setDrawnChapters([]);
     setGematriaResult(null);
     setCorrespondences([]);
     setGlitchActive(false);
+    setShowShockwave(false);
     setSaved(false);
+    setTextEchoes([]);
+    setRevealIndex(0);
     oracle.resetOracle();
-  }, [oracle]);
+    voice.stop();
+  }, [oracle, voice]);
 
-  // ── Handle enter key ──
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && question.trim()) performDivination();
   };
 
-  // ── Select journal entry to re-view ──
+  // ── View journal entry ──
   const viewJournalEntry = useCallback((entry) => {
     const ch = LIBER_333.find(c => c.chapter === entry.chapter);
     if (!ch) return;
     setQuestion(entry.question);
-    setDrawnChapter(ch);
+    setDrawnChapters([ch]);
     setGematriaResult(calculateGematria(entry.question));
     setCorrespondences(findCorrespondences(entry.gematria));
+    setTextEchoes(findGematriaEchoes(ch.text));
     setPhase("revelation");
     setGlitchActive(false);
+    setSpreadType("single");
   }, []);
 
-  // ── Render ──
-  const particleActive = phase === "ritual" || phase === "revelation";
-  const particleIntensity = phase === "ritual" ? 1.5 : 0.4;
+  // ── Render helpers ──
+  const particleActive = phase === "ritual" || phase === "revelation" || isAmbient;
+  const particleIntensity = phase === "ritual" ? (ritualAct === 1 ? 2.5 : ritualAct >= 3 ? 0.1 : 1.2) :
+                            phase === "revelation" ? 0.4 : isAmbient ? 0.15 : 0;
+
+  const ritualLabels = ["INVOKING", "COMMUNING", "RECEIVING", "　", "COMPLETE"];
+
+  // ── Spread labels ──
+  const spreadLabels = ["THESIS", "ANTITHESIS", "SYNTHESIS"];
 
   return (
     <div className="min-h-screen bg-black text-neutral-300 relative overflow-x-hidden"
       style={{ fontFamily: 'JetBrains Mono, monospace' }}>
 
-      {/* Layers */}
+      {/* Background Layers */}
       <NoiseBackground />
-      <ParticleCanvas active={particleActive} intensity={particleIntensity} />
+      <ParticleCanvas active={particleActive} intensity={particleIntensity} accentColor={accentColor} />
+      {isAmbient && <AmbientWhispers active={true} />}
+      <Shockwave active={showShockwave} color={accentColor} />
       <CRTOverlay />
 
-      {/* Top Navigation Bar */}
-      <nav className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-3 border-b border-neutral-900/80"
-        style={{ zIndex: 40, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
-        <div className="flex items-center gap-4">
-          <span className="text-red-700 text-sm tracking-[0.2em]" style={{ fontFamily: 'Cinzel, serif' }}>
+      {/* ═══ TOP NAVIGATION ═══ */}
+      <nav className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-2.5"
+        style={{ zIndex: 40, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="flex items-center gap-3">
+          <span className="text-xs tracking-[0.15em] opacity-80" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
             LIBER CCCXXXIII
           </span>
+          {planetary && (
+            <span className="text-[10px] text-neutral-600 hidden sm:inline-flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              <span style={{ color: accentColor }}>{planetary.symbol}</span>
+              {planetary.planet} Hour
+            </span>
+          )}
+          {lunar && (
+            <span className="text-[10px] text-neutral-600 hidden sm:inline" title={lunar.name}>
+              {lunar.emoji}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {mode === "oracle" ? (
             <button onClick={() => setMode("gematria")}
-              className="text-neutral-600 hover:text-red-600 text-xs px-2 py-1 transition-colors tracking-wider">
+              className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03]">
               GEMATRIA
             </button>
           ) : (
-            <button onClick={() => { setMode("oracle"); if (phase === "init") setPhase("init"); }}
-              className="text-neutral-600 hover:text-red-600 text-xs px-2 py-1 transition-colors tracking-wider">
+            <button onClick={() => { setMode("oracle"); }}
+              className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03]">
               ORACLE
             </button>
           )}
           <button onClick={() => setShowJournal(true)}
-            className="text-neutral-600 hover:text-red-600 text-xs px-2 py-1 transition-colors tracking-wider relative">
+            className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] relative">
             GRIMOIRE
             {journal.entries.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-900 rounded-full text-[8px] flex items-center justify-center text-red-300">
+              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center"
+                style={{ background: accentColor + '30', color: accentColor }}>
                 {journal.entries.length}
               </span>
             )}
           </button>
+          {voice.available && (
+            <button onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) voice.stop(); }}
+              className={`text-[10px] px-2 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${voiceEnabled ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
+              style={{ color: voiceEnabled ? accentColor : '#666' }}
+              title="Voice narration">
+              ◉
+            </button>
+          )}
           <button onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`text-xs px-2 py-1 transition-colors tracking-wider ${audioEnabled ? 'text-red-600' : 'text-neutral-700 hover:text-neutral-500'}`}>
+            className={`text-[11px] px-2 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${audioEnabled ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
+            style={{ color: audioEnabled ? accentColor : '#666' }}>
             {audioEnabled ? "♫" : "♪"}
           </button>
         </div>
@@ -2097,182 +2521,324 @@ const App = () => {
 
       {/* Journal Overlay */}
       {showJournal && (
-        <JournalOverlay
-          entries={journal.entries}
-          onClose={() => setShowJournal(false)}
-          onDelete={journal.removeEntry}
-          onClear={journal.clearAll}
-          onSelect={viewJournalEntry}
-        />
+        <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
+          onClose={() => setShowJournal(false)} onDelete={journal.removeEntry}
+          onClear={journal.clearAll} onSelect={viewJournalEntry} accentColor={accentColor} />
       )}
 
-      {/* Main Content */}
-      <main className="relative pt-16 min-h-screen flex flex-col items-center justify-center px-4 pb-8" style={{ zIndex: 2 }}>
+      {/* Milestone Overlay */}
+      {journal.milestone && (
+        <MilestoneOverlay number={journal.milestone} onDismiss={journal.dismissMilestone} />
+      )}
 
-        {/* ══ GEMATRIA MODE ══ */}
+      {/* ═══ MAIN CONTENT ═══ */}
+      <main className="relative pt-14 min-h-screen flex flex-col items-center justify-center px-4 pb-8" style={{ zIndex: 2 }}>
+
+        {/* ── GEMATRIA MODE ── */}
         {mode === "gematria" && (
-          <GematriaMode onBack={() => setMode("oracle")} />
+          <GematriaMode onBack={() => setMode("oracle")} accentColor={accentColor} />
         )}
 
-        {/* ══ ORACLE MODE ══ */}
+        {/* ── ORACLE MODE ── */}
         {mode === "oracle" && (
           <>
-            {/* ── INIT PHASE ── */}
+            {/* ═══ INIT PHASE ═══ */}
             {phase === "init" && (
-              <div className="text-center max-w-lg mx-auto">
-                <div className="mb-8">
-                  <AnimatedSigil input="LIBER CCCXXXIII" size={160} spinning={true} glowing={true} />
+              <div className="text-center max-w-lg mx-auto" style={{ animation: 'fadeIn 2s ease-out' }}>
+                <div className="mb-6" style={{ animation: isAmbient ? 'breathe 8s ease-in-out infinite' : 'none' }}>
+                  <AnimatedSigil input="LIBER CCCXXXIII" size={180} spinning={true} glowing={true}
+                    evolutionRings={evolutionRings} accentColor={accentColor} />
                 </div>
-                <h1 className="text-3xl md:text-4xl tracking-wider text-red-600 mb-3"
-                  style={{ fontFamily: 'Cinzel, serif', textShadow: '0 0 40px rgba(220,38,38,0.2)' }}>
+                {evolutionRings > 0 && (
+                  <div className="text-[9px] text-amber-700/60 tracking-widest mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    YOUR SIGIL · {journal.totalReadings} READING{journal.totalReadings !== 1 ? 'S' : ''} · {evolutionRings} RING{evolutionRings !== 1 ? 'S' : ''} EVOLVED
+                  </div>
+                )}
+                <h1 className="text-4xl md:text-5xl tracking-wider mb-3"
+                  style={{ fontFamily: 'Cinzel Decorative, Cinzel, serif', color: accentColor, textShadow: `0 0 60px ${accentColor}22` }}>
                   THE BOOK OF LIES
                 </h1>
-                <p className="text-neutral-600 text-xs tracking-[0.25em] mb-1" style={{ fontFamily: 'Cinzel, serif' }}>
+                <p className="text-neutral-600 text-[10px] tracking-[0.35em] mb-1" style={{ fontFamily: 'Cinzel, serif' }}>
                   LIBER CCCXXXIII
                 </p>
-                <p className="text-neutral-700 text-xs mb-10" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  93 chapters {"·"} gematric divination {"·"} AI oracle
+                <p className="text-neutral-700 text-[11px] mb-12" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  93 chapters · gematric divination · AI oracle
                 </p>
-                <button
-                  onClick={() => setPhase("input")}
-                  className="border border-red-900/50 text-red-600 px-8 py-3 rounded-lg text-sm tracking-[0.2em]
-                    hover:bg-red-900/10 hover:border-red-700/50 transition-all duration-500"
-                  style={{ fontFamily: 'Cinzel, serif' }}>
+                <button onClick={() => setPhase("input")}
+                  className="border px-10 py-3.5 rounded-lg text-sm tracking-[0.25em] transition-all duration-700 hover:tracking-[0.35em]"
+                  style={{
+                    fontFamily: 'Cinzel, serif', color: accentColor,
+                    borderColor: accentColor + '30',
+                    background: `linear-gradient(135deg, transparent, ${accentColor}08)`,
+                  }}>
                   BEGIN CONSULTATION
                 </button>
+
+                {/* Cosmic info */}
+                {planetary && (
+                  <div className="mt-10 text-[10px] text-neutral-700 space-y-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    <div>
+                      <span style={{ color: accentColor + '80' }}>{planetary.symbol}</span> {planetary.planet} hour
+                      {lunar && <> · {lunar.emoji} {lunar.name}</>}
+                    </div>
+                    <div className="text-neutral-800">{planetary.timeOfDay}</div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* ── INPUT PHASE ── */}
+            {/* ═══ INPUT PHASE ═══ */}
             {phase === "input" && (
-              <div className="w-full max-w-lg mx-auto text-center">
-                <div className="mb-8 opacity-50">
-                  <AnimatedSigil input="query" size={80} spinning={true} glowing={false} />
+              <div className="w-full max-w-lg mx-auto text-center" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+                <div className="mb-6 opacity-40">
+                  <AnimatedSigil input="query" size={80} spinning={true} glowing={false} accentColor={accentColor} />
                 </div>
-                <h2 className="text-xl text-red-600 tracking-wider mb-2" style={{ fontFamily: 'Cinzel, serif' }}>
+                <h2 className="text-xl tracking-wider mb-2" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
                   Speak Your Question
                 </h2>
-                <p className="text-neutral-600 text-xs mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <p className="text-neutral-600 text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                   The gematria of your words will draw the chapter.
                 </p>
-                <input
-                  type="text"
-                  value={question}
-                  onChange={e => setQuestion(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  autoFocus
+
+                <input type="text" value={question} onChange={e => setQuestion(e.target.value)}
+                  onKeyDown={handleKeyDown} autoFocus
                   placeholder="What do you seek to know?"
-                  className="w-full bg-transparent border-b-2 border-neutral-800 px-2 py-3 text-neutral-200 text-center text-lg
-                    placeholder-neutral-700 focus:outline-none focus:border-red-800 transition-colors"
-                  style={{ fontFamily: 'JetBrains Mono, monospace' }}
+                  className="w-full bg-transparent border-b-2 px-2 py-3 text-neutral-200 text-center text-lg
+                    placeholder-neutral-700 focus:outline-none transition-all duration-500"
+                  style={{ fontFamily: 'JetBrains Mono, monospace', borderColor: question ? accentColor + '60' : '#262626' }}
                 />
-                <button
-                  onClick={performDivination}
-                  disabled={!question.trim()}
-                  className={`mt-8 border px-8 py-3 rounded-lg text-sm tracking-[0.2em] transition-all duration-500
-                    ${question.trim()
-                      ? 'border-red-900/50 text-red-600 hover:bg-red-900/10 hover:border-red-700/50 cursor-pointer'
-                      : 'border-neutral-800 text-neutral-700 cursor-not-allowed'}`}
-                  style={{ fontFamily: 'Cinzel, serif' }}>
+
+                {/* Spread selector */}
+                <div className="flex items-center justify-center gap-4 mt-6">
+                  <button onClick={() => setSpreadType("single")}
+                    className={`text-[10px] tracking-widest px-3 py-1.5 rounded transition-all ${
+                      spreadType === "single" ? 'bg-white/[0.05]' : 'opacity-40 hover:opacity-70'
+                    }`} style={{ color: spreadType === "single" ? accentColor : '#666', fontFamily: 'JetBrains Mono, monospace' }}>
+                    SINGLE
+                  </button>
+                  <button onClick={() => setSpreadType("spread")}
+                    className={`text-[10px] tracking-widest px-3 py-1.5 rounded transition-all ${
+                      spreadType === "spread" ? 'bg-white/[0.05]' : 'opacity-40 hover:opacity-70'
+                    }`} style={{ color: spreadType === "spread" ? accentColor : '#666', fontFamily: 'JetBrains Mono, monospace' }}>
+                    TRIAD SPREAD
+                  </button>
+                </div>
+
+                <button onClick={performDivination} disabled={!question.trim()}
+                  className={`mt-8 border px-10 py-3 rounded-lg text-sm tracking-[0.25em] transition-all duration-500 ${
+                    question.trim() ? 'cursor-pointer hover:tracking-[0.35em]' : 'cursor-not-allowed'
+                  }`}
+                  style={{
+                    fontFamily: 'Cinzel, serif',
+                    color: question.trim() ? accentColor : '#404040',
+                    borderColor: question.trim() ? accentColor + '30' : '#1a1a1a',
+                  }}>
                   DIVINE
                 </button>
               </div>
             )}
 
-            {/* ── RITUAL PHASE ── */}
-            {phase === "ritual" && drawnChapter && (
-              <div className="text-center max-w-md mx-auto">
-                <div className="mb-6">
-                  <AnimatedSigil input={question} size={200} spinning={true} glowing={true} />
+            {/* ═══ RITUAL PHASE ═══ */}
+            {phase === "ritual" && drawnChapters.length > 0 && (
+              <div className="text-center max-w-md mx-auto" style={{
+                animation: ritualAct === 3 ? 'none' : undefined,
+                opacity: ritualAct === 3 ? 0.05 : 1,
+                transition: 'opacity 0.4s ease-in-out',
+              }}>
+                <div className="mb-6" style={{
+                  transform: ritualAct === 1 ? 'scale(1.15)' : ritualAct >= 2 ? 'scale(0.7)' : 'scale(1)',
+                  transition: 'transform 1.5s ease-in-out',
+                }}>
+                  <AnimatedSigil input={question} size={ritualAct === 1 ? 260 : 200} spinning={true} glowing={true}
+                    accentColor={accentColor} />
                 </div>
-                <div className="text-neutral-600 text-xs tracking-widest mb-2">
-                  GEMATRIA: {gematriaResult?.simple}
+
+                {ritualAct <= 1 && (
+                  <div className="text-neutral-600 text-[11px] tracking-widest mb-2" style={{ animation: 'ritualPulse 2s ease-in-out infinite' }}>
+                    GEMATRIA: {gematriaResult?.simple}
+                  </div>
+                )}
+
+                {ritualAct === 1 && (
+                  <div className="text-lg mt-4 tracking-wider" style={{
+                    fontFamily: 'JetBrains Mono, monospace',
+                    color: accentColor + '60',
+                    animation: 'ritualPulse 1s ease-in-out infinite',
+                  }}>
+                    <GlitchText text={question} active={true} speed={50} />
+                  </div>
+                )}
+
+                {/* Progress bar */}
+                <div className="w-full max-w-xs mx-auto mt-8">
+                  <div className="h-px w-full bg-neutral-800 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-200"
+                      style={{
+                        width: `${ritualProgress}%`,
+                        background: `linear-gradient(90deg, ${accentColor}40, ${accentColor}, ${accentLight})`,
+                      }} />
+                  </div>
+                  <div className="text-center mt-2 text-[10px] tracking-[0.3em]"
+                    style={{ fontFamily: 'JetBrains Mono, monospace', color: accentColor + '80' }}>
+                    {ritualLabels[ritualAct] || ""}
+                  </div>
                 </div>
-                <div className="text-red-700/50 text-sm" style={{ fontFamily: 'Cinzel, serif' }}>
-                  Drawing Chapter {formatChapterNumber(drawnChapter.chapter)}...
-                </div>
-                <RitualProgress progress={ritualProgress} phase={ritualPhase} />
               </div>
             )}
 
-            {/* ── REVELATION PHASE ── */}
+            {/* ═══ REVELATION PHASE ═══ */}
             {phase === "revelation" && drawnChapter && (
               <div className="w-full max-w-2xl mx-auto">
-                {/* Chapter Header */}
-                <div className="text-center mb-8">
-                  <div className="mb-4">
-                    <AnimatedSigil input={question || drawnChapter.title} size={120} spinning={true} glowing={true} />
+
+                {/* Spread navigation */}
+                {isSpread && (
+                  <div className="flex items-center justify-center gap-2 mb-6" style={{ animation: 'fadeIn 1s ease-out' }}>
+                    {drawnChapters.map((ch, i) => (
+                      <button key={i} onClick={() => { setRevealIndex(i); setTextEchoes(findGematriaEchoes(ch.text)); }}
+                        className={`px-4 py-2 rounded-lg text-[10px] tracking-wider transition-all border ${
+                          i === revealIndex ? 'bg-white/[0.04]' : 'opacity-40 hover:opacity-70'
+                        }`}
+                        style={{
+                          fontFamily: 'Cinzel, serif',
+                          color: i === revealIndex ? accentColor : '#666',
+                          borderColor: i === revealIndex ? accentColor + '30' : 'transparent',
+                        }}>
+                        <div className="text-[9px] text-neutral-600 mb-0.5">{spreadLabels[i]}</div>
+                        <div>{formatChapterNumber(ch.chapter)}</div>
+                      </button>
+                    ))}
                   </div>
-                  <div className="text-neutral-600 text-xs tracking-widest mb-2">
+                )}
+
+                {/* Chapter Header */}
+                <div className="text-center mb-8" style={{ animation: 'fadeInUp 0.8s ease-out' }}>
+                  <div className="mb-4">
+                    <AnimatedSigil input={question || drawnChapter.title} size={120} spinning={true} glowing={true}
+                      evolutionRings={evolutionRings} accentColor={accentColor} />
+                  </div>
+
+                  {isSpread && (
+                    <div className="text-[10px] tracking-[0.35em] text-neutral-600 mb-2" style={{ fontFamily: 'Cinzel, serif' }}>
+                      {spreadLabels[revealIndex]}
+                    </div>
+                  )}
+
+                  <div className="text-[10px] tracking-[0.3em] text-neutral-600 mb-2"
+                    style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     CHAPTER
                   </div>
-                  <div className="text-5xl md:text-6xl font-bold text-red-600 mb-2"
-                    style={{ fontFamily: 'Cinzel, serif', textShadow: '0 0 40px rgba(220,38,38,0.3)' }}>
-                    <GlitchText text={formatChapterNumber(drawnChapter.chapter)} active={glitchActive} speed={40} />
+
+                  <div className="text-6xl md:text-7xl font-bold mb-3"
+                    style={{
+                      fontFamily: 'Cinzel Decorative, Cinzel, serif',
+                      color: accentColor,
+                      textShadow: `0 0 60px ${accentColor}33`,
+                      animation: glitchActive ? 'numberSlam 0.6s ease-out' : 'none',
+                    }}>
+                    {glitchActive
+                      ? <GlitchText text={formatChapterNumber(drawnChapter.chapter)} active={true} speed={35} />
+                      : formatChapterNumber(drawnChapter.chapter)
+                    }
                   </div>
+
                   <div className="text-lg text-neutral-300 tracking-wider mb-1" style={{ fontFamily: 'Cinzel, serif' }}>
-                    <GlitchText text={drawnChapter.title} active={glitchActive} speed={25} />
+                    {glitchActive
+                      ? <GlitchText text={drawnChapter.title} active={true} speed={20} />
+                      : drawnChapter.title
+                    }
                   </div>
+
+                  {/* Recurrence badge */}
+                  {journal.getRecurrenceCount(drawnChapter.chapter) > 0 && (
+                    <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-[9px]"
+                      style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706', fontFamily: 'JetBrains Mono, monospace' }}>
+                      ↻ Drawn {journal.getRecurrenceCount(drawnChapter.chapter) + 1}× — the Book insists
+                    </div>
+                  )}
+
                   {gematriaResult && (
-                    <div className="text-xs text-neutral-600 mt-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                      Gematria: {gematriaResult.simple} {"→"} {gematriaResult.reductionSteps.join(" {\u2192} ")}
+                    <div className="text-[11px] text-neutral-600 mt-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {gematriaResult.simple} → {gematriaResult.reductionSteps.join(" → ")}
                       {drawnChapter.element && ELEMENT_SYMBOLS[drawnChapter.element] &&
                         ` ${ELEMENT_SYMBOLS[drawnChapter.element]}`}
+                      {planetary && <> · <span style={{ color: accentColor + '80' }}>{planetary.symbol}</span> {planetary.planet}</>}
+                      {lunar && <> · {lunar.emoji}</>}
                     </div>
                   )}
                 </div>
 
                 {/* Key Text */}
-                <div className="mb-8 border-l-2 border-red-900/40 pl-4 py-2">
-                  <TypewriterText
-                    text={drawnChapter.text}
-                    speed={15}
-                    className="text-neutral-400 text-sm leading-relaxed italic"
-                    style={{ fontFamily: 'JetBrains Mono, monospace' }}
-                  />
+                <div className="mb-8 border-l-2 pl-5 py-2" style={{ borderColor: accentColor + '30', animation: 'fadeInUp 1s ease-out 0.3s both' }}>
+                  <div className="relative">
+                    <TypewriterText text={drawnChapter.text} speed={12}
+                      onComplete={() => { if (voiceEnabled) voice.speak(drawnChapter.text); }}
+                      className="text-neutral-400 text-[13px] leading-relaxed italic" />
+                  </div>
+                  {textEchoes.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {textEchoes.map((e, i) => (
+                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded"
+                          style={{ background: accentColor + '15', color: accentColor + 'aa', fontFamily: 'JetBrains Mono, monospace' }}>
+                          {e.word}={e.value}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Expandable Sections */}
-                <div className="space-y-0">
-                  <ExpandableSection title="COMMENTARY" icon={"☥"} defaultOpen={true}>
-                    <div className="pt-3 whitespace-pre-wrap">
-                      {drawnChapter.commentary}
-                    </div>
+                <div className="space-y-0" style={{ animation: 'fadeInUp 1s ease-out 0.6s both' }}>
+                  <ExpandableSection title="COMMENTARY" icon="☥" defaultOpen={true} accentColor={accentColor}>
+                    <div className="pt-3 whitespace-pre-wrap">{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
-                  <ExpandableSection title="ORACLE OF THE ABYSS" icon={"☉"} defaultOpen={false}>
+                  <ExpandableSection title="ORACLE OF THE ABYSS" icon="☉" defaultOpen={false} accentColor={accentColor}>
                     <div className="pt-3">
                       {oracle.loading ? (
-                        <div className="flex items-center gap-2 text-red-800">
-                          <span className="animate-pulse">{"☉"}</span>
-                          <span className="text-xs">The Oracle speaks from the depths...</span>
+                        <div className="flex items-center gap-2" style={{ color: accentColor + '80' }}>
+                          <span style={{ animation: 'ritualPulse 1.5s ease-in-out infinite' }}>☉</span>
+                          <span className="text-[11px]">The Oracle speaks from the depths...</span>
                         </div>
                       ) : oracle.error ? (
-                        <div className="text-red-800 text-xs">
-                          The Abyss refuses to answer: {oracle.error}
-                          <button onClick={() => oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences)}
-                            className="ml-2 underline hover:text-red-600">Retry</button>
+                        <div className="text-xs" style={{ color: accentColor + '80' }}>
+                          The Abyss refuses: {oracle.error}
+                          <button onClick={() => oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences, {
+                            recentReadings: journal.getRecentReadings(5),
+                            recurrenceCount: journal.getRecurrenceCount(drawnChapter.chapter),
+                            planetary, lunar, totalReadings: journal.totalReadings,
+                          })} className="ml-2 underline hover:opacity-70">Retry</button>
                         </div>
                       ) : oracle.text ? (
-                        <div className="whitespace-pre-wrap text-neutral-400 leading-relaxed">
-                          {oracle.text}
+                        <div className="space-y-3">
+                          <div className="whitespace-pre-wrap text-neutral-400 leading-relaxed">{oracle.text}</div>
+                          {voiceEnabled && voice.available && (
+                            <button onClick={() => voice.speaking ? voice.stop() : voice.speak(oracle.text)}
+                              className="text-[10px] tracking-wider transition-colors hover:opacity-70 flex items-center gap-1.5"
+                              style={{ color: accentColor + '80', fontFamily: 'JetBrains Mono, monospace' }}>
+                              {voice.speaking ? "◼ STOP" : "▶ SPEAK"}
+                            </button>
+                          )}
                         </div>
                       ) : (
-                        <button onClick={() => oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences)}
-                          className="text-red-800 hover:text-red-600 text-xs transition-colors">
+                        <button onClick={() => oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences, {
+                          recentReadings: journal.getRecentReadings(5),
+                          recurrenceCount: journal.getRecurrenceCount(drawnChapter.chapter),
+                          planetary, lunar, totalReadings: journal.totalReadings,
+                        })} className="text-[11px] hover:opacity-70 transition-colors"
+                          style={{ color: accentColor + '80' }}>
                           Invoke the Oracle...
                         </button>
                       )}
                     </div>
                   </ExpandableSection>
 
-                  <ExpandableSection title="QABALISTIC ANALYSIS" icon={"♁"} defaultOpen={false}>
+                  <ExpandableSection title="QABALISTIC ANALYSIS" icon="♁" defaultOpen={false} accentColor={accentColor}>
                     <div className="pt-3 space-y-3">
                       {(() => {
                         const info = getSephiraInfo(drawnChapter.sephira);
                         return (
                           <>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="grid grid-cols-2 gap-2 text-[11px]">
                               <div>
                                 <span className="text-neutral-600">Sephira:</span>{" "}
                                 <span className="text-neutral-300">{drawnChapter.sephira}</span>
@@ -2282,47 +2848,31 @@ const App = () => {
                                 <span className="text-neutral-600">Path:</span>{" "}
                                 <span className="text-neutral-300">{drawnChapter.path}</span>
                                 {drawnChapter.path !== "—" && drawnChapter.path !== "∅" && HEBREW_LETTERS[drawnChapter.path] && (
-                                  <span className="text-red-800 ml-1">{HEBREW_LETTERS[drawnChapter.path].letter}</span>
+                                  <span className="ml-1" style={{ color: accentColor + '99' }}>{HEBREW_LETTERS[drawnChapter.path].letter}</span>
                                 )}
                               </div>
                               <div>
                                 <span className="text-neutral-600">Element:</span>{" "}
                                 <span className="text-neutral-300">{drawnChapter.element}</span>
-                                {ELEMENT_SYMBOLS[drawnChapter.element] && (
-                                  <span className="ml-1">{ELEMENT_SYMBOLS[drawnChapter.element]}</span>
-                                )}
+                                {ELEMENT_SYMBOLS[drawnChapter.element] && <span className="ml-1">{ELEMENT_SYMBOLS[drawnChapter.element]}</span>}
                               </div>
                               <div>
                                 <span className="text-neutral-600">Tarot:</span>{" "}
                                 <span className="text-neutral-300">{drawnChapter.tarot}</span>
                               </div>
-                              {info.planet !== "—" && (
-                                <div>
-                                  <span className="text-neutral-600">Planet:</span>{" "}
-                                  <span className="text-neutral-300">{info.planet}</span>
-                                </div>
-                              )}
-                              {info.godName !== "—" && (
-                                <div>
-                                  <span className="text-neutral-600">God Name:</span>{" "}
-                                  <span className="text-neutral-300">{info.godName}</span>
-                                </div>
-                              )}
-                              {info.archangel !== "—" && (
-                                <div>
-                                  <span className="text-neutral-600">Archangel:</span>{" "}
-                                  <span className="text-neutral-300">{info.archangel}</span>
-                                </div>
-                              )}
+                              {info.planet !== "—" && <div><span className="text-neutral-600">Planet:</span> <span className="text-neutral-300">{info.planet}</span></div>}
+                              {info.godName !== "—" && <div><span className="text-neutral-600">God Name:</span> <span className="text-neutral-300">{info.godName}</span></div>}
+                              {info.archangel !== "—" && <div><span className="text-neutral-600">Archangel:</span> <span className="text-neutral-300">{info.archangel}</span></div>}
                             </div>
 
-                            {/* Correspondences */}
                             {correspondences.length > 0 && (
-                              <div className="border-t border-neutral-800/50 pt-3 mt-3">
-                                <div className="text-xs text-neutral-600 mb-2">GEMATRIC CORRESPONDENCES ({gematriaResult?.simple})</div>
+                              <div className="border-t border-neutral-800/30 pt-3">
+                                <div className="text-[10px] text-neutral-600 mb-2 tracking-wider">
+                                  GEMATRIC CORRESPONDENCES ({gematriaResult?.simple})
+                                </div>
                                 {correspondences.map((c, i) => (
-                                  <div key={i} className="flex items-start gap-2 text-xs mb-1">
-                                    <span className={`px-1 py-0.5 rounded ${
+                                  <div key={i} className="flex items-start gap-2 text-[11px] mb-1">
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded ${
                                       c.type === 'direct' ? 'bg-red-900/30 text-red-600' :
                                       c.type === 'square' ? 'bg-amber-900/30 text-amber-600' :
                                       'bg-neutral-800/50 text-neutral-500'
@@ -2333,13 +2883,10 @@ const App = () => {
                               </div>
                             )}
 
-                            {/* Sephira color indicator */}
                             <div className="flex items-center gap-2 mt-2">
                               <div className="w-3 h-3 rounded-full border border-neutral-700"
                                 style={{ backgroundColor: info.color, boxShadow: `0 0 8px ${info.color}40` }} />
-                              <span className="text-xs text-neutral-600">
-                                Color of {drawnChapter.sephira}
-                              </span>
+                              <span className="text-[10px] text-neutral-600">{drawnChapter.sephira}</span>
                             </div>
                           </>
                         );
@@ -2349,19 +2896,21 @@ const App = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex items-center justify-center gap-4 mt-8 pb-8">
-                  <button onClick={saveReading}
-                    disabled={saved}
-                    className={`border px-6 py-2.5 rounded-lg text-xs tracking-[0.15em] transition-all duration-300
-                      ${saved
-                        ? 'border-neutral-800 text-neutral-700 cursor-default'
-                        : 'border-red-900/50 text-red-600 hover:bg-red-900/10 hover:border-red-700/50'}`}
-                    style={{ fontFamily: 'Cinzel, serif' }}>
-                    {saved ? "RECORDED" : "SAVE TO GRIMOIRE"}
+                <div className="flex items-center justify-center gap-3 mt-8 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
+                  <button onClick={saveReading} disabled={saved}
+                    className={`border px-6 py-2.5 rounded-lg text-[11px] tracking-[0.15em] transition-all duration-300 ${
+                      saved ? 'cursor-default opacity-40' : 'hover:bg-white/[0.03]'
+                    }`}
+                    style={{
+                      fontFamily: 'Cinzel, serif',
+                      color: saved ? '#555' : accentColor,
+                      borderColor: saved ? '#222' : accentColor + '30',
+                    }}>
+                    {saved ? "✓ RECORDED" : "SAVE TO GRIMOIRE"}
                   </button>
                   <button onClick={resetToInput}
-                    className="border border-neutral-800 text-neutral-500 px-6 py-2.5 rounded-lg text-xs tracking-[0.15em]
-                      hover:border-neutral-700 hover:text-neutral-400 transition-all duration-300"
+                    className="border border-neutral-800/50 text-neutral-500 px-6 py-2.5 rounded-lg text-[11px] tracking-[0.15em]
+                      hover:border-neutral-700 hover:text-neutral-400 hover:bg-white/[0.02] transition-all duration-300"
                     style={{ fontFamily: 'Cinzel, serif' }}>
                     NEW READING
                   </button>
@@ -2373,7 +2922,7 @@ const App = () => {
       </main>
 
       {/* Footer */}
-      <footer className="relative text-center py-4 text-neutral-800 text-xs" style={{ zIndex: 2, fontFamily: 'JetBrains Mono, monospace' }}>
+      <footer className="relative text-center py-4 text-neutral-800 text-[10px]" style={{ zIndex: 2, fontFamily: 'JetBrains Mono, monospace' }}>
         Do what thou wilt shall be the whole of the Law.
       </footer>
     </div>
