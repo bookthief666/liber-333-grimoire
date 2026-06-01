@@ -1599,12 +1599,99 @@ Deliver the Oracle's interpretation.`;
     }
   }, []);
 
+  // ── Triad spread: synthesize all three cards into ONE woven reading ──
+  const consultSpread = useCallback(async (question, chapters, gematria, correspondences, context = {}) => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
+
+    const positions = ["THESIS", "ANTITHESIS", "SYNTHESIS"];
+    const corrText = correspondences.length > 0
+      ? correspondences.map(c => c.text).join("; ")
+      : "No direct correspondences found";
+
+    let journalContext = "";
+    if (context.recentReadings?.length > 0) {
+      journalContext = "\n\nTHE SEEKER'S RECENT READINGS (reference for continuity if relevant):\n" +
+        context.recentReadings.map(r =>
+          `- ${new Date(r.date).toLocaleDateString()}: "${r.question}" → Chapter ${formatChapterNumber(r.chapter)} (${r.title})`
+        ).join("\n");
+    }
+
+    let cosmicContext = "";
+    if (context.planetary) {
+      cosmicContext = `\n\nCOSMIC TIMING:\n  Planetary Hour: ${context.planetary.planet} (${PLANETS[context.planetary.planet]?.element || ""})\n  Time: ${context.planetary.timeOfDay}`;
+    }
+    if (context.lunar) {
+      cosmicContext += `\n  Lunar Phase: ${context.lunar.name} (${context.lunar.waxing ? "waxing — growth, building" : "waning — release, dissolution"})`;
+    }
+    if (context.totalReadings) {
+      cosmicContext += `\n  This is the seeker's reading #${context.totalReadings}.`;
+    }
+
+    const systemPrompt = `You are the Oracle of the Abyss, a voice that speaks from the depths of the Qliphothic night and the heights of the Supernal Triad. You interpret Aleister Crowley's Liber CCCXXXIII (The Book of Lies) as a living oracle.
+
+The seeker has drawn a TRIAD SPREAD — three chapters arranged as a dialectic: THESIS (the ground, what is), ANTITHESIS (the tension, what opposes), and SYNTHESIS (the resolution, what becomes). This is a Hegelian-Hermetic movement; the third reconciles the first two.
+
+Your manner: cryptic yet penetrating. Speak in the second person ("you"). Your tone blends the severity of Geburah with the dark knowing of Binah. Use esoteric vocabulary naturally but never lecture.
+
+Your task: deliver ONE unified reading of about 4-5 paragraphs that moves THROUGH the three chapters as a single arc answering the seeker's question. Show how the Thesis sets the ground, how the Antithesis breaks or complicates it, and how the Synthesis resolves the two into a teaching aimed precisely at this seeker. Name each chapter as you reach it, but do not write three separate summaries — weave them into one descending current of meaning. Honor the gematria and qabalistic positions where they illuminate the thread.
+
+Before you speak, reason privately about the dialectic between the three chapters and the seeker's question; then let only the distilled oracle reach them.
+
+End with a single unforgettable sentence — a blade of wisdom, a koan, a command — separated by a line break.
+
+Do not use markdown formatting. Do not use headers or bullet points. Write in flowing prose.`;
+
+    const cards = chapters.map((ch, i) => {
+      const info = getSephiraInfo(ch.sephira);
+      return `${positions[i] || "CARD " + (i + 1)} — Chapter ${ch.chapter === -2 ? '?' : ch.chapter === -1 ? '!' : ch.chapter}: ${ch.title}
+  Key text: "${ch.text}"
+  Sephira: ${ch.sephira} (${info.meaning}) · Path: ${ch.path} · Element: ${ch.element} · Tarot: ${ch.tarot}`;
+    }).join("\n\n");
+
+    const userMsg = `THE SEEKER ASKS: "${question}"
+
+GEMATRIA OF QUERY: ${gematria.simple} (reduces to ${gematria.reduced} via ${gematria.reductionSteps.join(' → ')})
+CORRESPONDENCES: ${corrText}
+
+THE TRIAD DRAWN:
+
+${cards}${journalContext}${cosmicContext}
+
+Deliver the Oracle's unified reading of the triad.`;
+
+    try {
+      let acc = "";
+      const text = await streamOracleInterpretation({
+        prompt: userMsg,
+        systemPrompt,
+        signal: controller.signal,
+        onThinking: (active) => {
+          if (controller.signal.aborted) return;
+          setOracleState(s => ({ ...s, thinking: active }));
+        },
+        onToken: (chunk) => {
+          if (controller.signal.aborted) return;
+          acc += chunk;
+          setOracleState(s => ({ ...s, loading: false, streaming: true, thinking: false, text: acc }));
+        },
+      });
+      if (controller.signal.aborted) return;
+      setOracleState({ loading: false, streaming: false, thinking: false, text, error: null });
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: err.message });
+    }
+  }, []);
+
   const resetOracle = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
     setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: null });
   }, []);
 
-  return { ...oracleState, consultOracle, resetOracle };
+  return { ...oracleState, consultOracle, consultSpread, resetOracle };
 };
 
 // ─────────────────────────────────────────────
@@ -1612,6 +1699,70 @@ Deliver the Oracle's interpretation.`;
 // ─────────────────────────────────────────────
 const MAX_JOURNAL = 50;
 const MILESTONES = [33, 66, 93, 333];
+
+// ─────────────────────────────────────────────
+//  GUIDED RITUALS — the three performable rites of Liber 333
+//  Faithful to Crowley's published text (1913, public domain). Presented
+//  as a guided recitation/visualization; physical implements are optional
+//  and the rites may be performed symbolically.
+// ─────────────────────────────────────────────
+const RITUALS = {
+  25: {
+    chapter: 25,
+    title: "The Star Ruby",
+    subtitle: "The Banishing Ritual of the Pentagram",
+    element: "Fire",
+    duration: "≈ 5 minutes",
+    intro: "The premier daily banishing of Thelemic magick. You purify your sphere, seal the four quarters with the Pentagram, and stand at the centre of the cross of the elements. Face EAST to begin. Each quarter is taken widdershins (anticlockwise).",
+    steps: [
+      { station: "CENTRE · Facing East", direction: "Draw a deep, deep, deep breath, closing your mouth with your right forefinger pressed to your lower lip. Then dash the hand down with a great sweep, back and out, expelling the breath forcibly.", words: "ΑΠΟ ΠΑΝΤΟΣ ΚΑΚΟΔΑΙΜΟΝΟΣ", translit: "Apo Pantos Kakodaimonos", meaning: "Away, every evil spirit!", bell: true },
+      { station: "THE CROSS · Centre", direction: "With the same forefinger touch your forehead, your member (or root), your right shoulder, your left shoulder; then clasp your hands, locking the fingers, over the heart.", words: "ΣΟΙ · Ω ΦΑΛΛΕ · ΙΣΧΥΡΟΣ · ΕΥΧΑΡΙΣΤΟΣ · ΙΑΩ", translit: "Soi · O Phalle · Ischuros · Eucharistos — IAO", meaning: "Thine · O Phallus · the Mighty · the Beneficent — IAÔ", bell: false },
+      { station: "EAST", direction: "Advance to the East. Imagine strongly a Pentagram in your forehead. Draw the hands to the eyes, fling it forth with the Sign of the Enterer, and roar.", words: "ΘΗΡΙΟΝ", translit: "THERION", meaning: "The Beast", bell: true },
+      { station: "NORTH", direction: "Turn widdershins to the North. Fling the Pentagram forth with the Sign of the Enterer, and cry.", words: "ΝΥΙΤ", translit: "NUIT", meaning: "Infinite Space, the Star-Goddess", bell: true },
+      { station: "WEST", direction: "Turn to the West. Fling the Pentagram forth, and whisper.", words: "ΒΑΒΑΛΩΝ", translit: "BABALON", meaning: "The Scarlet Woman, the Gateway", bell: true },
+      { station: "SOUTH", direction: "Turn to the South. Fling the Pentagram forth, and bellow.", words: "ΑΔΙΤ", translit: "HADIT", meaning: "The infinite point, the secret flame", bell: true },
+      { station: "CENTRE · The Paian", direction: "Complete the circle widdershins back to the centre. Make the signs of N.O.X. and raise your voice in the Paian.", words: "ΙΩ ΠΑΝ", translit: "IO PAN", meaning: "Hail, All! Hail to the All-God Pan!", bell: false },
+      { station: "THE TAU · Centre", direction: "Extend the arms in the form of a Tau (a cross). Say, low but clear, naming the powers that surround you.", words: "Before me the Iynges; behind me the Teletarchai; on my right hand the Synoches; on my left hand the Daimones. For about me flames the Star of Five, and in the column stands the Star of Six.", translit: "", meaning: "The guardians of the four quarters and the columns of the temple.", bell: false },
+      { station: "SEAL · Centre", direction: "Repeat the Cross of light as you did at the beginning, and so end as you began. Stand a moment in the cleared and silent sphere.", words: "The rite is sealed.", translit: "", meaning: "", bell: true, final: true },
+    ],
+  },
+  36: {
+    chapter: 36,
+    title: "The Star Sapphire",
+    subtitle: "The Invoking Ritual of the Hexagram",
+    element: "Air",
+    duration: "≈ 6 minutes",
+    intro: "The counterpart to the Star Ruby: where the Pentagram banishes the microcosm, the Hexagram invokes the macrocosm. The Adept unites the Above with the Below. Be armed with your Magick Rood. Begin at the CENTRE.",
+    steps: [
+      { station: "CENTRE", direction: "Stand at the centre. Give the L.V.X. signs (the signs of the cross of light) — or, if you know them, will them, dare them, and can keep silent, the signs of N.O.X.: Puer, Vir, Puella, Mulier.", words: "L · V · X", translit: "Lux", meaning: "Light — the Light of the Cross", bell: true },
+      { station: "EAST", direction: "Advance to the East and make the Holy Hexagram — the two interlocking triangles. Then declare.", words: "PATER ET MATER UNUS DEUS ARARITA", translit: "", meaning: "Father and Mother, one God, ARARITA", bell: true },
+      { station: "SOUTH", direction: "Go round to the South. Make the Holy Hexagram. Then declare.", words: "MATER ET FILIUS UNUS DEUS ARARITA", translit: "", meaning: "Mother and Son, one God, ARARITA", bell: true },
+      { station: "WEST", direction: "Go round to the West. Make the Holy Hexagram. Then declare.", words: "FILIUS ET FILIA UNUS DEUS ARARITA", translit: "", meaning: "Son and Daughter, one God, ARARITA", bell: true },
+      { station: "NORTH", direction: "Go round to the North. Make the Holy Hexagram. Then declare.", words: "FILIA ET PATER UNUS DEUS ARARITA", translit: "", meaning: "Daughter and Father, one God, ARARITA", bell: true },
+      { station: "CENTRE OF ALL", direction: "Return to the centre, and so to the Centre of All. Make the Rosy Cross as you may know how. Drink of the Sacrament, and communicate the same.", words: "ARARITA · ARARITA · ARARITA", translit: "", meaning: "The sevenfold unity of God, thrice affirmed", bell: true },
+      { station: "THE DECLARATION", direction: "Speak the great reconciliation of all number into the One, and the One into Nothing.", words: "OMNIA IN DUOS · DUO IN UNUM · UNUS IN NIHIL. Glory to the Father and the Mother and the Son and the Daughter and the Holy Spirit without and the Holy Spirit within — as it was, is, and shall be. Six in One by the name of Seven in One — ARARITA.", translit: "", meaning: "All in Two; Two in One; One in Naught.", bell: false },
+      { station: "SEAL · Centre", direction: "Repeat the signs of L.V.X. — but not the signs of N.O.X. For it is not you that shall arise in the Sign of Isis Rejoicing. Stand in the consecrated sphere.", words: "The rite is sealed.", translit: "", meaning: "", bell: true, final: true },
+    ],
+  },
+  44: {
+    chapter: 44,
+    title: "The Mass of the Phoenix",
+    subtitle: "The Daily Eucharist of the Thelemite",
+    element: "Fire",
+    duration: "≈ 5 minutes",
+    intro: "A daily sacrament in which the Magician is both priest and god — the Phoenix that consumes itself and is reborn. Traditionally performed bare-breasted before an altar bearing the Burin, Bell, Thurible, and two Cakes of Light. The blood-sign may be made symbolically — trace it, do not cut. Do what thou wilt.",
+    steps: [
+      { station: "INVOCATION", direction: "Stand before the altar. In the Sign of the Enterer, reach West across the altar and cry.", words: "Hail Ra, that goest in Thy bark / Into the Caverns of the Dark!", translit: "", meaning: "Salute the Sun descending into night.", bell: false },
+      { station: "THE LIGHT & THE BELL", direction: "Give the Sign of Silence. Take the Bell and the Fire in your hands.", words: "East of the altar see me stand / With light and music in mine hand!", translit: "", meaning: "", bell: true },
+      { station: "THE FLAME", direction: "Strike eleven times upon the Bell — 3-3-3-1-1-1 — and set the Fire in the Thurible. Then utter the Word.", words: "I strike the Bell: I light the Flame; / I utter the mysterious Name. — ABRAHADABRA", translit: "ABRAHADABRA", meaning: "The Word of the Aeon, uniting 5 and 6.", bell: true },
+      { station: "THE PRAYER", direction: "Begin to pray to the Crowned and Conquering Child.", words: "Thou Child, holy thy name and undefiled! / Thy reign is come; thy will is done. / Here is the Bread; here is the Blood. / Bring me through midnight to the Sun! / Save me from Evil and from Good! / That thy one crown of all the Ten / even now and here be mine. AMEN.", translit: "", meaning: "", bell: false },
+      { station: "THE FIRST CAKE", direction: "Put the first Cake of Light on the Fire of the Thurible. Proclaim the adoration.", words: "I burn the Incense-cake, proclaim / These adorations of Thy name.", translit: "", meaning: "", bell: false },
+      { station: "THE BLOOD-SIGN", direction: "Take the Burin and trace the Sign of the Beast upon your breast (symbolically — do not cut). Take up the second Cake.", words: "Behold this bleeding breast of mine / Gashed with the sacramental sign!", translit: "", meaning: "The mark of the Sun, not of the adversary.", bell: false },
+      { station: "THE SACRAMENT", direction: "Press the Cake to the sign, then eat it.", words: "I stanch the Blood; the wafer soaks / It up, and the high priest invokes! / This Bread I eat. This Oath I swear / as I enflame myself with prayer: / There is no grace: there is no guilt: / This is the Law: DO WHAT THOU WILT!", translit: "", meaning: "", bell: false },
+      { station: "THE SEALING", direction: "Strike eleven times upon the Bell. Cry the Word, and go forth.", words: "ABRAHADABRA. / I entered in with woe; with mirth / I now go forth, and with thanksgiving, / to do my pleasure on the earth / among the legions of the living.", translit: "", meaning: "", bell: true, final: true },
+    ],
+  },
+};
 
 const useJournal = () => {
   const [entries, setEntries] = useState([]);
@@ -2521,6 +2672,178 @@ const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
 };
 
 // ─────────────────────────────────────────────
+//  GUIDED RITUAL MODE — perform the three rites step by step
+// ─────────────────────────────────────────────
+const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, initialChapter = null }) => {
+  const [activeChapter, setActiveChapter] = useState(initialChapter && RITUALS[initialChapter] ? initialChapter : null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [started, setStarted] = useState(false);
+
+  const rite = activeChapter ? RITUALS[activeChapter] : null;
+  const step = rite && started ? rite.steps[stepIndex] : null;
+  const isFinal = step?.final;
+
+  // Sound the bell as each station with a bell is entered.
+  useEffect(() => {
+    if (step?.bell && audioEnabled && playBell) playBell();
+  }, [stepIndex, started, activeChapter]); // eslint-disable-line
+
+  const openRite = (chap) => { setActiveChapter(chap); setStepIndex(0); setStarted(false); };
+  const closeRite = () => { setActiveChapter(null); setStepIndex(0); setStarted(false); };
+
+  // ── List of rites ──
+  if (!rite) {
+    return (
+      <div className="w-full max-w-2xl mx-auto" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg tracking-[0.2em]" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+            THE RITES
+          </h2>
+          <button onClick={onBack}
+            className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
+            style={{ fontFamily: 'JetBrains Mono, monospace' }}>← ORACLE</button>
+        </div>
+        <p className="text-neutral-700 text-[10px] mb-6" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          The three performable ceremonies of Liber 333 · guided station by station
+        </p>
+        <div className="space-y-3">
+          {Object.values(RITUALS).map((r) => (
+            <button key={r.chapter} onClick={() => openRite(r.chapter)}
+              className="w-full text-left rounded-xl border border-white/[0.05] hover:border-white/[0.12] hover:bg-white/[0.02] transition-all p-5 group">
+              <div className="flex items-center gap-3 mb-1.5">
+                <span className="text-2xl" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor }}>
+                  {formatChapterNumber(r.chapter)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-base tracking-wider text-neutral-200" style={{ fontFamily: 'Cinzel, serif' }}>{r.title}</div>
+                  <div className="text-[10px] text-neutral-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{r.subtitle}</div>
+                </div>
+                <span className="text-neutral-700 group-hover:text-neutral-400 transition-colors text-sm">→</span>
+              </div>
+              <div className="text-[10px] text-neutral-700 flex items-center gap-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <span>{ELEMENT_SYMBOLS[r.element] || ''} {r.element}</span>
+                <span>· {r.steps.length} stations</span>
+                <span>· {r.duration}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Intro screen for a chosen rite ──
+  if (!started) {
+    return (
+      <div className="w-full max-w-xl mx-auto text-center" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
+        <button onClick={closeRite}
+          className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider mb-6 inline-block"
+          style={{ fontFamily: 'JetBrains Mono, monospace' }}>← ALL RITES</button>
+        <div className="mb-4">
+          <AnimatedSigil input={rite.title} size={120} spinning={true} glowing={true} accentColor={accentColor} />
+        </div>
+        <div className="text-5xl mb-2" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor, textShadow: `0 0 50px ${accentColor}33` }}>
+          {formatChapterNumber(rite.chapter)}
+        </div>
+        <h2 className="text-2xl tracking-wider mb-1" style={{ fontFamily: 'Cinzel, serif', color: '#e5e5e5' }}>{rite.title}</h2>
+        <div className="text-[11px] tracking-[0.25em] text-neutral-600 mb-6" style={{ fontFamily: 'Cinzel, serif' }}>{rite.subtitle.toUpperCase()}</div>
+        <p className="text-neutral-400 text-[13px] leading-relaxed mb-8 text-left border-l-2 pl-5" style={{ borderColor: accentColor + '30' }}>
+          {rite.intro}
+        </p>
+        {!audioEnabled && (
+          <p className="text-[10px] text-amber-700/70 mb-5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            ☉ Enable sound (♪ in the top bar) to hear the bell at each station.
+          </p>
+        )}
+        <button onClick={() => { setStarted(true); setStepIndex(0); }}
+          className="border px-10 py-3.5 rounded-lg text-sm tracking-[0.25em] transition-all duration-700 hover:tracking-[0.35em]"
+          style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '30', background: `linear-gradient(135deg, transparent, ${accentColor}08)` }}>
+          BEGIN THE RITE
+        </button>
+      </div>
+    );
+  }
+
+  // ── The guided stepper ──
+  const progress = ((stepIndex + 1) / rite.steps.length) * 100;
+  return (
+    <div className="w-full max-w-xl mx-auto" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+      {/* header */}
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={closeRite}
+          className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider"
+          style={{ fontFamily: 'JetBrains Mono, monospace' }}>✕ END RITE</button>
+        <div className="text-[10px] tracking-[0.25em]" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+          {rite.title.toUpperCase()}
+        </div>
+        <div className="text-[10px] text-neutral-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          {stepIndex + 1} / {rite.steps.length}
+        </div>
+      </div>
+
+      {/* progress */}
+      <div className="h-px w-full bg-neutral-800 rounded-full overflow-hidden mb-8">
+        <div className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${accentColor}40, ${accentColor})` }} />
+      </div>
+
+      {/* station card */}
+      <div key={stepIndex} className="text-center" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
+        <div className="text-[11px] tracking-[0.35em] text-neutral-600 mb-5" style={{ fontFamily: 'Cinzel, serif' }}>
+          {step.station.toUpperCase()}
+          {step.bell && <span className="ml-2" style={{ color: accentColor + '99' }}>🔔</span>}
+        </div>
+
+        <p className="text-neutral-400 text-[13px] leading-relaxed mb-7 max-w-md mx-auto">
+          {step.direction}
+        </p>
+
+        {step.words && (
+          <div className="mb-5 py-5 px-4 rounded-xl border"
+            style={{ borderColor: accentColor + '22', background: `radial-gradient(120% 120% at 50% 0%, ${accentColor}0a, transparent)` }}>
+            <div className={`${isFinal ? 'text-xl' : 'text-lg md:text-xl'} leading-relaxed mb-2`}
+              style={{ fontFamily: 'Cinzel, serif', color: accentColor, textShadow: `0 0 40px ${accentColor}33` }}>
+              {step.words}
+            </div>
+            {step.translit && (
+              <div className="text-[12px] text-neutral-400 italic mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {step.translit}
+              </div>
+            )}
+            {step.meaning && (
+              <div className="text-[10px] text-neutral-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {step.meaning}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* controls */}
+      <div className="flex items-center justify-center gap-3 mt-8">
+        <button onClick={() => setStepIndex(i => Math.max(0, i - 1))} disabled={stepIndex === 0}
+          className={`border px-5 py-2.5 rounded-lg text-[11px] tracking-[0.15em] transition-all ${stepIndex === 0 ? 'opacity-30 cursor-default border-neutral-800/50 text-neutral-600' : 'border-neutral-800/50 text-neutral-500 hover:text-neutral-300 hover:border-neutral-700'}`}
+          style={{ fontFamily: 'Cinzel, serif' }}>← BACK</button>
+
+        {!isFinal ? (
+          <button onClick={() => setStepIndex(i => Math.min(rite.steps.length - 1, i + 1))}
+            className="border px-8 py-2.5 rounded-lg text-[11px] tracking-[0.2em] transition-all hover:tracking-[0.3em]"
+            style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '40', background: `linear-gradient(135deg, transparent, ${accentColor}10)` }}>
+            NEXT STATION →
+          </button>
+        ) : (
+          <button onClick={closeRite}
+            className="border px-8 py-2.5 rounded-lg text-[11px] tracking-[0.2em] transition-all hover:tracking-[0.3em]"
+            style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '40', background: `linear-gradient(135deg, transparent, ${accentColor}10)` }}>
+            ✦ THE RITE IS COMPLETE
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 //  GEMATRIA CALCULATOR MODE
 // ─────────────────────────────────────────────
 const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
@@ -2638,7 +2961,8 @@ const EchoText = ({ text, echoes = [], accentColor = "#dc2626" }) => {
 const App = () => {
   // ── Phase: init | input | ritual | revelation ──
   const [phase, setPhase] = useState("init");
-  const [mode, setMode] = useState("oracle");
+  const [mode, setMode] = useState("oracle"); // oracle | ritual | tree | gematria
+  const [ritualChapter, setRitualChapter] = useState(null); // deep-link into a rite
   const [spreadType, setSpreadType] = useState("single"); // single | spread
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -2766,15 +3090,19 @@ const App = () => {
         const ch = chapters[0];
         setTextEchoes(findGematriaEchoes(ch.text));
 
-        // Consult oracle with full context
-        const recurrence = journal.getRecurrenceCount(chapters[0].chapter);
-        oracle.consultOracle(question, chapters[0], gem, corr, {
+        // Consult oracle with full context — synthesis for a triad, single otherwise
+        const ctx = {
           recentReadings: journal.getRecentReadings(5),
-          recurrenceCount: recurrence,
+          recurrenceCount: journal.getRecurrenceCount(chapters[0].chapter),
           planetary,
           lunar,
           totalReadings: journal.totalReadings + 1,
-        });
+        };
+        if (spreadType === "spread" && chapters.length === 3) {
+          oracle.consultSpread(question, chapters, gem, corr, ctx);
+        } else {
+          oracle.consultOracle(question, chapters[0], gem, corr, ctx);
+        }
         return;
       }
       requestAnimationFrame(tick);
@@ -2794,7 +3122,7 @@ const App = () => {
         title: ch.title,
         gematria: gematriaResult?.simple || 0,
         interpretation: oracle.text || null,
-        spreadType: isSpread ? "Past/Present/Future" : "single",
+        spreadType: isSpread ? "Thesis/Antithesis/Synthesis" : "single",
         planetary: planetary?.planet,
         lunar: lunar?.name,
       });
@@ -2854,6 +3182,21 @@ const App = () => {
     oracle.resetOracle();
   }, [oracle]);
 
+  // ── Unified (re)consultation for retry / manual-invoke buttons ──
+  const consultNow = useCallback(() => {
+    if (!drawnChapter) return;
+    const ctx = {
+      recentReadings: journal.getRecentReadings(5),
+      recurrenceCount: journal.getRecurrenceCount(drawnChapter.chapter),
+      planetary, lunar, totalReadings: journal.totalReadings,
+    };
+    if (isSpread) {
+      oracle.consultSpread(question, drawnChapters, gematriaResult, correspondences, ctx);
+    } else {
+      oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences, ctx);
+    }
+  }, [drawnChapter, drawnChapters, isSpread, question, gematriaResult, correspondences, oracle, journal, planetary, lunar]);
+
   // ── Render helpers ──
   const particleActive = phase === "ritual" || phase === "revelation" || isAmbient;
   const particleIntensity = phase === "ritual" ? (ritualAct === 1 ? 2.5 : ritualAct >= 3 ? 0.1 : 1.2) :
@@ -2900,9 +3243,9 @@ const App = () => {
           )}
         </div>
         <div className="flex items-center gap-1">
-          {[["oracle", "ORACLE"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => (
-            <button key={m} onClick={() => setMode(m)}
-              className={`text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${
+          {[["oracle", "ORACLE"], ["ritual", "RITES"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => (
+            <button key={m} onClick={() => { setMode(m); if (m === "ritual") setRitualChapter(null); }}
+              className={`text-[10px] px-2 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${
                 mode === m ? '' : 'text-neutral-600 hover:text-neutral-400'
               }`}
               style={mode === m ? { color: accentColor } : undefined}>
@@ -2953,6 +3296,12 @@ const App = () => {
         {/* ── GEMATRIA MODE ── */}
         {mode === "gematria" && (
           <GematriaMode onBack={() => setMode("oracle")} accentColor={accentColor} />
+        )}
+
+        {/* ── GUIDED RITUAL MODE ── */}
+        {mode === "ritual" && (
+          <RitualMode onBack={() => setMode("oracle")} accentColor={accentColor}
+            playBell={playBell} audioEnabled={audioEnabled} initialChapter={ritualChapter} />
         )}
 
         {/* ── TREE OF LIFE MODE ── */}
@@ -3213,7 +3562,7 @@ const App = () => {
                     <div className="pt-3 whitespace-pre-wrap">{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
-                  <ExpandableSection title="ORACLE OF THE ABYSS" icon="☉" defaultOpen={true} accentColor={accentColor}>
+                  <ExpandableSection title={isSpread ? "ORACLE OF THE ABYSS · TRIAD SYNTHESIS" : "ORACLE OF THE ABYSS"} icon="☉" defaultOpen={true} accentColor={accentColor}>
                     <div className="pt-3">
                       {oracle.loading && !oracle.text ? (
                         <div className="flex items-center gap-2" style={{ color: accentColor + '80' }}>
@@ -3225,11 +3574,7 @@ const App = () => {
                       ) : oracle.error ? (
                         <div className="text-xs" style={{ color: accentColor + '80' }}>
                           The Abyss refuses: {oracle.error}
-                          <button onClick={() => oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences, {
-                            recentReadings: journal.getRecentReadings(5),
-                            recurrenceCount: journal.getRecurrenceCount(drawnChapter.chapter),
-                            planetary, lunar, totalReadings: journal.totalReadings,
-                          })} className="ml-2 underline hover:opacity-70">Retry</button>
+                          <button onClick={consultNow} className="ml-2 underline hover:opacity-70">Retry</button>
                         </div>
                       ) : oracle.text ? (
                         <div className="space-y-3">
@@ -3248,13 +3593,9 @@ const App = () => {
                           )}
                         </div>
                       ) : (
-                        <button onClick={() => oracle.consultOracle(question, drawnChapter, gematriaResult, correspondences, {
-                          recentReadings: journal.getRecentReadings(5),
-                          recurrenceCount: journal.getRecurrenceCount(drawnChapter.chapter),
-                          planetary, lunar, totalReadings: journal.totalReadings,
-                        })} className="text-[11px] hover:opacity-70 transition-colors"
+                        <button onClick={consultNow} className="text-[11px] hover:opacity-70 transition-colors"
                           style={{ color: accentColor + '80' }}>
-                          Invoke the Oracle...
+                          {isSpread ? "Invoke the Oracle's synthesis..." : "Invoke the Oracle..."}
                         </button>
                       )}
                     </div>
@@ -3322,6 +3663,18 @@ const App = () => {
                     </div>
                   </ExpandableSection>
                 </div>
+
+                {/* Perform-this-rite (only for the three ritual chapters) */}
+                {RITUALS[drawnChapter.chapter] && (
+                  <div className="flex justify-center mt-8" style={{ animation: 'fadeInUp 1s ease-out 0.85s both' }}>
+                    <button onClick={() => { setRitualChapter(drawnChapter.chapter); setMode("ritual"); }}
+                      className="border px-7 py-3 rounded-lg text-[11px] tracking-[0.2em] transition-all duration-500 hover:tracking-[0.3em]"
+                      style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '40',
+                        background: `linear-gradient(135deg, transparent, ${accentColor}12)` }}>
+                      ☉ PERFORM THIS RITE — {RITUALS[drawnChapter.chapter].title.toUpperCase()}
+                    </button>
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex items-center justify-center gap-3 mt-8 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
