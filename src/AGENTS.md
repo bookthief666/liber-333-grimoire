@@ -1,33 +1,40 @@
 # AGENTS.md — Liber 333 Digital Grimoire
 
 ## Project overview
-A live digital oracle for Aleister Crowley's Liber 333 (The Book of Lies). Live at liber-333.vercel.app. Vite + React 18 + Tailwind CSS, deployed on Vercel.
+A live digital oracle for Aleister Crowley's Liber 333 (The Book of Lies). Live at liber-333.vercel.app. Vite + React 18 + Tailwind CSS, deployed on Vercel. Zero runtime UI dependencies beyond React, framer-motion, and lucide-react.
 
 ## Architecture
-- EVERYTHING is in `src/liber333.jsx` (~2,930 lines). Do NOT split into multiple files.
-- `src/api.js` — fetchOracleInterpretation helper
+- The React app lives in `src/liber333.jsx` (single file). Keeping it single-file is the default — only split if a change genuinely needs it.
+- `src/api.js` — `fetchOracleInterpretation` (buffered) + `streamOracleInterpretation` (SSE streaming) helpers
 - `src/main.jsx` — entry point
 - `src/index.css` — Tailwind directives only
-- `api/oracle.js` — Vercel serverless function
+- `api/oracle.js` — Vercel serverless function. Proxies to Claude (Opus 4.8) with extended thinking + SSE streaming; Gemini is a buffered fallback. Keys never reach the browser.
 - `index.html` — root HTML with Google Fonts and CSS keyframes
 
+## Modes / major features
+- **Oracle** — gematric divination → 7-act ritual → revelation. The Oracle of the Abyss streams its interpretation live (Opus 4.8, extended thinking) into the revelation panel.
+- **Tree of Life** — interactive SVG mapping all 96 chapters onto the 10 Sephiroth + 22 Paths. Click a sphere/path to read its chapters; click a chapter to study it.
+- **Gematria** — standalone calculator.
+- **Grimoire** — journal with milestones, recurrence detection, evolving sigil.
+- Background: `AbyssShader` (raw WebGL fractal-nebula, reacts to ritual phase + planetary color) layered under the 2D particle/CRT atmospherics. Degrades gracefully with no WebGL.
+
 ## Commands
-- Build: `npm run build`
+- Build: `npm run build` (always run after changes)
 - Dev: `npm run dev`
 
 ## Do
 - Use Tailwind classes for all styling
 - Use Cinzel/Cinzel Decorative for display text, JetBrains Mono for body
-- Use the accentColor variable for dynamic theming
-- Keep dark occult aesthetic: black bg, glass-morphism, generous negative space
+- Use the accentColor variable for dynamic (planetary) theming
+- Keep the dark occult aesthetic: black bg, glass-morphism, generous negative space
+- Keep the Oracle (Anthropic) on the latest Claude Opus model
 - Run `npm run build` after changes
 
 ## Don't
-- Do NOT split liber333.jsx into multiple files
-- Do NOT add new npm dependencies
-- Do NOT change the LIBER_333 chapter data array
-- Do NOT change the Oracle system prompt
-- Do NOT change the fetchOracleInterpretation pattern
 - Do NOT use light backgrounds, pastel colors, or generic fonts
-- Do NOT remove any existing features
+- Do NOT remove existing features
+- Do NOT introduce array holes in `LIBER_333` (trailing/double commas) — they create undefined chapters and break divination indexing
+- Prefer zero new dependencies; add one only when it clearly earns its weight
 
+## Constraints note
+Earlier versions forbade new deps, file splitting, and edits to chapter data / the Oracle prompt. These are now relaxed "for quality": evolve data, prompt, structure, and deps where it clearly improves the result — but justify each, and never regress the aesthetic or the divination integrity.

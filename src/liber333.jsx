@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "react";
-import { fetchOracleInterpretation } from './api.js';
+import { fetchOracleInterpretation, streamOracleInterpretation } from './api.js';
 
 // ─────────────────────────────────────────────
 //  COMPLETE CHAPTER DATA (94 entries)
@@ -330,7 +330,7 @@ const LIBER_333 = [
     path: "Qoph",
     element: "Water",
     tarot: "The Moon"
-  },,
+  },
 {
     chapter: 30,
     title: "JOHN-A-DREAMS",
@@ -630,7 +630,7 @@ const LIBER_333 = [
     path: "—",
     element: "Earth",
     tarot: "—"
-  },,
+  },
 {
     chapter: 60,
     title: "THE WOUND OF AMFORTAS",
@@ -1251,6 +1251,7 @@ const getSephiraInfo = (sephiraName) => {
     const s = SEPHIROTH_DATA[sephiraName];
     return {
       name: sephiraName,
+      number: s.number,
       meaning: s.meaning,
       color: s.color,
       planet: s.planet,
@@ -1501,14 +1502,14 @@ const useVoice = () => {
 //  AI ORACLE (Enhanced with journal context)
 // ─────────────────────────────────────────────
 const useAIOracle = () => {
-  const [oracleState, setOracleState] = useState({ loading: false, text: null, error: null });
+  const [oracleState, setOracleState] = useState({ loading: false, streaming: false, thinking: false, text: null, error: null });
   const abortRef = useRef(null);
 
   const consultOracle = useCallback(async (question, chapter, gematria, correspondences, context = {}) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setOracleState({ loading: true, text: null, error: null });
+    setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
 
     const sephInfo = getSephiraInfo(chapter.sephira);
     const corrText = correspondences.length > 0
@@ -1550,6 +1551,8 @@ If past readings are provided, weave them into the narrative — show the arc, t
 
 If cosmic timing is provided, let it inform your interpretation naturally — the planetary hour and lunar phase color the reading's significance.
 
+Before you speak, reason privately about the hidden architecture of this reading — the resonance between the query's gematria and the chapter's number, the qabalistic position, the arc of past readings, the cosmic timing. Then let only the distilled oracle reach the seeker.
+
 End with a single sentence — a blade of wisdom, a koan, a command — separated by a line break. Make it unforgettable.
 
 Do not use markdown formatting. Do not use headers or bullet points. Write in flowing prose.`;
@@ -1571,22 +1574,34 @@ QABALISTIC POSITION:
 Deliver the Oracle's interpretation.`;
 
     try {
-      const text = await fetchOracleInterpretation({
+      let acc = "";
+      const text = await streamOracleInterpretation({
         prompt: userMsg,
         systemPrompt: systemPrompt,
         signal: controller.signal,
+        onThinking: (active) => {
+          if (controller.signal.aborted) return;
+          setOracleState(s => ({ ...s, thinking: active }));
+        },
+        onToken: (chunk) => {
+          if (controller.signal.aborted) return;
+          acc += chunk;
+          // First token: the Oracle begins to speak — leave the loading veil.
+          setOracleState(s => ({ ...s, loading: false, streaming: true, thinking: false, text: acc }));
+        },
       });
 
-      setOracleState({ loading: false, text, error: null });
+      if (controller.signal.aborted) return;
+      setOracleState({ loading: false, streaming: false, thinking: false, text, error: null });
     } catch (err) {
       if (err.name === 'AbortError') return;
-      setOracleState({ loading: false, text: null, error: err.message });
+      setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: err.message });
     }
   }, []);
 
   const resetOracle = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
-    setOracleState({ loading: false, text: null, error: null });
+    setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: null });
   }, []);
 
   return { ...oracleState, consultOracle, resetOracle };
@@ -1924,6 +1939,163 @@ const NoiseBackground = () => (
 );
 
 // ─────────────────────────────────────────────
+//  WEBGL ABYSS — volumetric fractal nebula
+//  A full-screen fragment shader. Reacts to ritual phase (intensity)
+//  and the active planetary accent color. Degrades to nothing if the
+//  GPU/context is unavailable — the 2D layers remain underneath.
+// ─────────────────────────────────────────────
+const hexToRGB = (hex) => {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+  if (!m) return [0.86, 0.15, 0.15];
+  return [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255];
+};
+
+const ABYSS_FRAG = `
+precision highp float;
+uniform vec2  u_res;
+uniform float u_time;
+uniform float u_intensity;   // 0..~1.5, swells during ritual
+uniform vec3  u_accent;      // planetary color
+
+// hash / value noise
+float hash(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p,p+34.345); return fract(p.x*p.y); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float a = hash(i), b = hash(i+vec2(1.,0.)), c = hash(i+vec2(0.,1.)), d = hash(i+vec2(1.,1.));
+  vec2 u = f*f*(3.-2.*f);
+  return mix(a,b,u.x) + (c-a)*u.y*(1.-u.x) + (d-b)*u.x*u.y;
+}
+float fbm(vec2 p){
+  float v = 0.0, amp = 0.5;
+  mat2 rot = mat2(0.8,-0.6,0.6,0.8);
+  for(int i=0;i<6;i++){ v += amp*noise(p); p = rot*p*2.0 + 0.03*u_time; amp *= 0.5; }
+  return v;
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*u_res) / u_res.y;
+  float t = u_time*0.04;
+
+  // domain-warped fbm => roiling abyssal clouds
+  vec2 q = vec2(fbm(uv*1.6 + vec2(0.0,t)), fbm(uv*1.6 + vec2(5.2,-t)));
+  vec2 r = vec2(fbm(uv*1.6 + 3.0*q + vec2(1.7,9.2)), fbm(uv*1.6 + 3.0*q + vec2(8.3,2.8)));
+  float f = fbm(uv*1.6 + 2.5*r);
+
+  float density = pow(clamp(f,0.0,1.0), 2.2);
+  // pull toward center: a faint eye in the deep
+  float rad = length(uv);
+  float vign = smoothstep(1.25, 0.15, rad);
+  float core = smoothstep(0.55, 0.0, rad) * (0.35 + 0.5*u_intensity);
+
+  vec3 col = u_accent * density * (0.6 + 0.9*u_intensity);
+  col += u_accent * core * (0.4 + r.x*0.6);
+  col *= vign;
+  // subtle deep-violet base so pure black never reads flat
+  col += vec3(0.012, 0.006, 0.02) * vign;
+
+  float alpha = clamp(density*vign*(0.32 + 0.55*u_intensity) + core*0.4, 0.0, 0.9);
+  gl_FragColor = vec4(col, alpha);
+}`;
+
+const ABYSS_VERT = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.0,1.0); }`;
+
+const AbyssShader = ({ accentColor = "#dc2626", intensity = 0.3, active = true }) => {
+  const canvasRef = useRef(null);
+  const glRef = useRef(null);
+  const rafRef = useRef(0);
+  const stateRef = useRef({ intensity: 0.3, accent: [0.86, 0.15, 0.15] });
+
+  // keep latest props without re-initializing the GL context
+  useEffect(() => { stateRef.current.intensity = intensity; }, [intensity]);
+  useEffect(() => { stateRef.current.accent = hexToRGB(accentColor); }, [accentColor]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let gl;
+    try {
+      gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: false, antialias: false })
+        || canvas.getContext("experimental-webgl");
+    } catch (_) { gl = null; }
+    if (!gl) return; // graceful: 2D layers remain
+    glRef.current = gl;
+
+    const compile = (type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.warn("Abyss shader:", gl.getShaderInfoLog(sh)); return null;
+      }
+      return sh;
+    };
+    const vs = compile(gl.VERTEX_SHADER, ABYSS_VERT);
+    const fs = compile(gl.FRAGMENT_SHADER, ABYSS_FRAG);
+    if (!vs || !fs) return;
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn("Abyss link failed"); return; }
+    gl.useProgram(prog);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    const u_res = gl.getUniformLocation(prog, "u_res");
+    const u_time = gl.getUniformLocation(prog, "u_time");
+    const u_intensity = gl.getUniformLocation(prog, "u_intensity");
+    const u_accent = gl.getUniformLocation(prog, "u_accent");
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const w = Math.floor(window.innerWidth * dpr);
+      const h = Math.floor(window.innerHeight * dpr);
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w; canvas.height = h;
+        gl.viewport(0, 0, w, h);
+      }
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const start = performance.now();
+    let smoothI = stateRef.current.intensity;
+    const render = () => {
+      resize();
+      const time = (performance.now() - start) / 1000;
+      // ease intensity toward target for smooth ritual swells
+      smoothI += (stateRef.current.intensity - smoothI) * 0.04;
+      gl.uniform2f(u_res, canvas.width, canvas.height);
+      gl.uniform1f(u_time, time);
+      gl.uniform1f(u_intensity, smoothI);
+      const a = stateRef.current.accent;
+      gl.uniform3f(u_accent, a[0], a[1], a[2]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      rafRef.current = requestAnimationFrame(render);
+    };
+    render();
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("resize", resize);
+      const ext = gl.getExtension("WEBGL_lose_context");
+      if (ext) ext.loseContext();
+    };
+  }, []);
+
+  return (
+    <canvas ref={canvasRef}
+      className="fixed inset-0 pointer-events-none"
+      style={{ zIndex: 0, opacity: active ? 1 : 0, transition: "opacity 1.2s ease" }}
+      aria-hidden="true" />
+  );
+};
+
+// ─────────────────────────────────────────────
 //  AMBIENT WHISPERS (Idle floating text)
 // ─────────────────────────────────────────────
 const AmbientWhispers = ({ active }) => {
@@ -2118,6 +2290,230 @@ const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, on
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+//  TREE OF LIFE — interactive map of all 93 chapters
+//  Every chapter is seated on its Sephira or Path. Click a node or path
+//  to read the chapters that live there; click a chapter to consult it.
+// ─────────────────────────────────────────────
+const TREE_POS = {
+  "Kether":    { x: 50, y: 7 },
+  "Chokmah":   { x: 79, y: 19 },
+  "Binah":     { x: 21, y: 19 },
+  "Daath":     { x: 50, y: 31 },
+  "Chesed":    { x: 79, y: 43 },
+  "Geburah":   { x: 21, y: 43 },
+  "Tiphareth": { x: 50, y: 54 },
+  "Netzach":   { x: 79, y: 68 },
+  "Hod":       { x: 21, y: 68 },
+  "Yesod":     { x: 50, y: 80 },
+  "Malkuth":   { x: 50, y: 95 },
+};
+const TREE_NODE_ORDER = ["Kether","Chokmah","Binah","Daath","Chesed","Geburah","Tiphareth","Netzach","Hod","Yesod","Malkuth"];
+const VEIL_KEYS = ["Ain", "Ain Soph", "Ain Soph Aur"];
+
+const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
+  const [selected, setSelected] = useState(null); // location key
+  const [hover, setHover] = useState(null);
+
+  // group every chapter by its sephira/path string
+  const groups = useMemo(() => {
+    const g = {};
+    for (const ch of LIBER_333) {
+      const key = ch.sephira || "—";
+      (g[key] = g[key] || []).push(ch);
+    }
+    return g;
+  }, []);
+
+  // path keys = compound "A-B" sephira strings that resolve to two nodes
+  const paths = useMemo(() => {
+    return Object.keys(groups)
+      .filter(k => k.includes("-"))
+      .map(k => {
+        const [a, b] = k.split("-");
+        if (TREE_POS[a] && TREE_POS[b]) return { key: k, a, b };
+        return null;
+      })
+      .filter(Boolean);
+  }, [groups]);
+
+  const veilChapters = useMemo(
+    () => VEIL_KEYS.flatMap(k => groups[k] || []),
+    [groups]
+  );
+
+  const selChapters = selected === "__veils__" ? veilChapters : (selected ? (groups[selected] || []) : []);
+  const selInfo = selected && selected !== "__veils__" ? getSephiraInfo(selected) : null;
+
+  return (
+    <div className="w-full max-w-5xl mx-auto" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg tracking-[0.2em]" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+          THE TREE OF LIFE
+        </h2>
+        <button onClick={onBack}
+          className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
+          style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          ← ORACLE
+        </button>
+      </div>
+      <p className="text-neutral-700 text-[10px] mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        The 96 chapters mapped to the 10 Sephiroth and 22 Paths · tap a sphere or path
+      </p>
+
+      <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
+        {/* ── The diagram ── */}
+        <div className="relative rounded-xl border border-white/[0.04] overflow-hidden"
+          style={{ background: 'radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,0.02), transparent)' }}>
+          <svg viewBox="0 0 100 102" className="w-full" style={{ display: 'block' }}>
+            {/* veils above Kether */}
+            <text x="50" y="2.4" textAnchor="middle" fontSize="2.1"
+              fill={accentColor + '55'} style={{ fontFamily: 'Cinzel, serif', cursor: 'pointer', letterSpacing: '0.15em' }}
+              onClick={() => setSelected("__veils__")}>
+              ∅ AIN · SOPH · AUR ∅
+            </text>
+
+            {/* paths */}
+            {paths.map(({ key, a, b }) => {
+              const p1 = TREE_POS[a], p2 = TREE_POS[b];
+              const isSel = selected === key, isHov = hover === key;
+              const ch = groups[key]?.[0];
+              const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+              return (
+                <g key={key} style={{ cursor: 'pointer' }}
+                  onClick={() => setSelected(key)}
+                  onMouseEnter={() => setHover(key)} onMouseLeave={() => setHover(null)}>
+                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                    stroke={isSel || isHov ? accentColor : '#ffffff'}
+                    strokeOpacity={isSel ? 0.9 : isHov ? 0.5 : 0.12}
+                    strokeWidth={isSel ? 0.9 : 0.5}
+                    style={{ transition: 'stroke-opacity 0.3s, stroke 0.3s' }} />
+                  {/* invisible fat hit-area */}
+                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth="3" />
+                  {ch && ch.path && ch.path !== "—" && (
+                    <text x={mx} y={my + 0.6} textAnchor="middle" fontSize="2"
+                      fill={isSel || isHov ? accentColor : '#ffffff'} fillOpacity={isSel || isHov ? 0.95 : 0.3}
+                      style={{ fontFamily: 'JetBrains Mono, monospace', pointerEvents: 'none' }}>
+                      {HEBREW_LETTERS[ch.path]?.letter || ''}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {/* nodes */}
+            {TREE_NODE_ORDER.map((name) => {
+              const pos = TREE_POS[name];
+              const info = getSephiraInfo(name);
+              const list = groups[name] || [];
+              const isDaath = name === "Daath";
+              const isSel = selected === name, isHov = hover === name;
+              const r = isDaath ? 3.2 : 4.4;
+              return (
+                <g key={name} style={{ cursor: 'pointer' }}
+                  onClick={() => setSelected(name)}
+                  onMouseEnter={() => setHover(name)} onMouseLeave={() => setHover(null)}>
+                  {(isSel || isHov) && (
+                    <circle cx={pos.x} cy={pos.y} r={r + 2.4} fill={accentColor} opacity="0.18" />
+                  )}
+                  <circle cx={pos.x} cy={pos.y} r={r}
+                    fill={isDaath ? '#0a0510' : '#05050a'}
+                    stroke={isSel ? accentColor : (info.color || '#888')}
+                    strokeWidth={isSel ? 0.8 : 0.5}
+                    strokeDasharray={isDaath ? "1 1" : undefined}
+                    style={{ filter: `drop-shadow(0 0 ${isSel ? 3 : 1.4}px ${info.color}aa)`, transition: 'stroke 0.3s' }} />
+                  <text x={pos.x} y={pos.y + 0.4} textAnchor="middle" fontSize="2.4"
+                    fill={info.color} fillOpacity="0.95"
+                    style={{ fontFamily: 'Cinzel, serif', pointerEvents: 'none' }}>
+                    {info.number || (isDaath ? '' : '')}
+                  </text>
+                  <text x={pos.x} y={pos.y + r + 2.4} textAnchor="middle" fontSize="1.9"
+                    fill={isSel ? accentColor : '#888'} fillOpacity={isSel ? 1 : 0.6}
+                    style={{ fontFamily: 'Cinzel, serif', pointerEvents: 'none', letterSpacing: '0.05em' }}>
+                    {name.toUpperCase()}
+                  </text>
+                  {list.length > 0 && !isDaath && (
+                    <text x={pos.x + r - 0.2} y={pos.y - r + 0.6} textAnchor="middle" fontSize="1.7"
+                      fill={accentColor} fillOpacity="0.9"
+                      style={{ fontFamily: 'JetBrains Mono, monospace', pointerEvents: 'none' }}>
+                      {list.length}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* ── Detail panel ── */}
+        <div className="min-h-[280px]">
+          {!selected ? (
+            <div className="text-neutral-600 text-[12px] leading-relaxed border border-white/[0.04] rounded-xl p-5"
+              style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              <div className="text-neutral-400 mb-3 tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+                ✦ THE MAP OF EMANATION
+              </div>
+              Each sphere is a Sephira — a vessel of divine light. Each line is a Path — a letter of the Hebrew alphabet, a Tarot trump, a doorway between states.
+              <br /><br />
+              The Book of Lies is woven through the whole Tree: the ten numbered chapters descend the spheres from Crown to Kingdom; chapters 11–32 walk the twenty-two paths; the rest cluster where their gematria binds them.
+              <br /><br />
+              <span style={{ color: accentColor + 'aa' }}>Select a sphere or path to descend.</span>
+            </div>
+          ) : (
+            <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
+              <div className="flex items-center gap-2 mb-1">
+                {selected !== "__veils__" && selInfo && (
+                  <span className="w-3 h-3 rounded-full border border-white/20"
+                    style={{ background: selInfo.color, boxShadow: `0 0 8px ${selInfo.color}80` }} />
+                )}
+                <h3 className="text-base tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+                  {selected === "__veils__" ? "The Three Veils" : selected}
+                </h3>
+              </div>
+              {selInfo && (
+                <div className="text-[10px] text-neutral-600 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  {selInfo.meaning}
+                  {selInfo.planet && selInfo.planet !== "—" && <> · {selInfo.planet}</>}
+                  {selInfo.godName && selInfo.godName !== "—" && <> · {selInfo.godName}</>}
+                </div>
+              )}
+              {selected === "__veils__" && (
+                <div className="text-[10px] text-neutral-600 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  Ain · Ain Soph · Ain Soph Aur — the Boundless Negative before the first emanation
+                </div>
+              )}
+
+              {selChapters.length === 0 ? (
+                <div className="text-neutral-700 text-[11px] italic">No chapter seated here — a silent vessel.</div>
+              ) : (
+                <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
+                  {selChapters.map((ch) => (
+                    <button key={ch.chapter} onClick={() => onSelectChapter(ch)}
+                      className="w-full text-left flex items-start gap-3 px-3 py-2 rounded-lg border border-white/[0.04] hover:border-white/[0.1] hover:bg-white/[0.02] transition-all group">
+                      <span className="text-base shrink-0 w-8 text-center" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor }}>
+                        {formatChapterNumber(ch.chapter)}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[11px] text-neutral-300 tracking-wide truncate" style={{ fontFamily: 'Cinzel, serif' }}>
+                          {ch.title}
+                        </span>
+                        <span className="block text-[9px] text-neutral-600 mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                          {ch.element}{ch.tarot && ch.tarot !== "—" ? ` · ${ch.tarot}` : ''}
+                        </span>
+                      </span>
+                      <span className="text-neutral-700 group-hover:text-neutral-400 text-[10px] self-center transition-colors">→</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2441,10 +2837,31 @@ const App = () => {
     setSpreadType("single");
   }, []);
 
+  // ── View a chapter chosen from the Tree of Life (study, no divination) ──
+  const viewChapterFromTree = useCallback((ch) => {
+    const gem = calculateGematria(ch.title);
+    setMode("oracle");
+    setQuestion(`Contemplating Chapter ${formatChapterNumber(ch.chapter)} — ${ch.title}`);
+    setDrawnChapters([ch]);
+    setRevealIndex(0);
+    setGematriaResult(gem);
+    setCorrespondences(findCorrespondences(gem.simple));
+    setTextEchoes(findGematriaEchoes(ch.text));
+    setPhase("revelation");
+    setGlitchActive(false);
+    setSpreadType("single");
+    setSaved(false);
+    oracle.resetOracle();
+  }, [oracle]);
+
   // ── Render helpers ──
   const particleActive = phase === "ritual" || phase === "revelation" || isAmbient;
   const particleIntensity = phase === "ritual" ? (ritualAct === 1 ? 2.5 : ritualAct >= 3 ? 0.1 : 1.2) :
                             phase === "revelation" ? 0.4 : isAmbient ? 0.15 : 0;
+
+  // Abyss shader swell: deepest during the Communing act, gentle elsewhere.
+  const abyssIntensity = phase === "ritual" ? (ritualAct === 1 ? 1.15 : ritualAct >= 3 ? 0.2 : 0.7) :
+                         phase === "revelation" ? 0.5 : isAmbient ? 0.4 : 0.28;
 
   const ritualLabels = ["INVOKING", "COMMUNING", "RECEIVING", "　", "COMPLETE"];
 
@@ -2456,6 +2873,7 @@ const App = () => {
       style={{ fontFamily: 'JetBrains Mono, monospace' }}>
 
       {/* Background Layers */}
+      <AbyssShader accentColor={accentColor} intensity={abyssIntensity} active={true} />
       <NoiseBackground />
       <ParticleCanvas active={particleActive} intensity={particleIntensity} accentColor={accentColor} />
       {isAmbient && <AmbientWhispers active={true} />}
@@ -2482,17 +2900,15 @@ const App = () => {
           )}
         </div>
         <div className="flex items-center gap-1">
-          {mode === "oracle" ? (
-            <button onClick={() => setMode("gematria")}
-              className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03]">
-              GEMATRIA
+          {[["oracle", "ORACLE"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => (
+            <button key={m} onClick={() => setMode(m)}
+              className={`text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${
+                mode === m ? '' : 'text-neutral-600 hover:text-neutral-400'
+              }`}
+              style={mode === m ? { color: accentColor } : undefined}>
+              {label}
             </button>
-          ) : (
-            <button onClick={() => { setMode("oracle"); }}
-              className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03]">
-              ORACLE
-            </button>
-          )}
+          ))}
           <button onClick={() => setShowJournal(true)}
             className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] relative">
             GRIMOIRE
@@ -2537,6 +2953,11 @@ const App = () => {
         {/* ── GEMATRIA MODE ── */}
         {mode === "gematria" && (
           <GematriaMode onBack={() => setMode("oracle")} accentColor={accentColor} />
+        )}
+
+        {/* ── TREE OF LIFE MODE ── */}
+        {mode === "tree" && (
+          <TreeOfLife onBack={() => setMode("oracle")} onSelectChapter={viewChapterFromTree} accentColor={accentColor} />
         )}
 
         {/* ── ORACLE MODE ── */}
@@ -2792,12 +3213,14 @@ const App = () => {
                     <div className="pt-3 whitespace-pre-wrap">{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
-                  <ExpandableSection title="ORACLE OF THE ABYSS" icon="☉" defaultOpen={false} accentColor={accentColor}>
+                  <ExpandableSection title="ORACLE OF THE ABYSS" icon="☉" defaultOpen={true} accentColor={accentColor}>
                     <div className="pt-3">
-                      {oracle.loading ? (
+                      {oracle.loading && !oracle.text ? (
                         <div className="flex items-center gap-2" style={{ color: accentColor + '80' }}>
                           <span style={{ animation: 'ritualPulse 1.5s ease-in-out infinite' }}>☉</span>
-                          <span className="text-[11px]">The Oracle speaks from the depths...</span>
+                          <span className="text-[11px]">
+                            {oracle.thinking ? "The Oracle descends through the veils..." : "The Oracle speaks from the depths..."}
+                          </span>
                         </div>
                       ) : oracle.error ? (
                         <div className="text-xs" style={{ color: accentColor + '80' }}>
@@ -2810,8 +3233,13 @@ const App = () => {
                         </div>
                       ) : oracle.text ? (
                         <div className="space-y-3">
-                          <div className="whitespace-pre-wrap text-neutral-400 leading-relaxed">{oracle.text}</div>
-                          {voiceEnabled && voice.available && (
+                          <div className="whitespace-pre-wrap text-neutral-400 leading-relaxed">
+                            {oracle.text}
+                            {oracle.streaming && (
+                              <span style={{ color: accentColor, animation: 'ritualPulse 1s ease-in-out infinite' }}>▌</span>
+                            )}
+                          </div>
+                          {!oracle.streaming && voiceEnabled && voice.available && (
                             <button onClick={() => voice.speaking ? voice.stop() : voice.speak(oracle.text)}
                               className="text-[10px] tracking-wider transition-colors hover:opacity-70 flex items-center gap-1.5"
                               style={{ color: accentColor + '80', fontFamily: 'JetBrains Mono, monospace' }}>
