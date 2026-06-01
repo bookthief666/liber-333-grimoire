@@ -1466,29 +1466,75 @@ const useAudioEngine = (active, intensity = 0.5) => {
 // ─────────────────────────────────────────────
 const useVoice = () => {
   const synthRef = useRef(null);
+  const voiceRef = useRef(null);
   const [speaking, setSpeaking] = useState(false);
   const [available, setAvailable] = useState(false);
 
-  useEffect(() => {
-    if ('speechSynthesis' in window) {
-      synthRef.current = window.speechSynthesis;
-      setAvailable(true);
+  // Choose the deepest, most resonant male voice available — a sage/wizard
+  // timbre (British baritone preferred), in the spirit of Alan Moore.
+  const pickVoice = useCallback(() => {
+    const synth = synthRef.current;
+    if (!synth) return null;
+    const voices = synth.getVoices();
+    if (!voices.length) return null;
+    // Ranked preferences — earlier = deeper / more esoteric British male.
+    const ranked = [
+      /daniel/i,                        // iOS/macOS UK male — deep, grave
+      /arthur|oliver|george/i,          // British male names
+      /google uk english male/i,
+      /uk english male|en[-_]gb.*male/i,
+      /microsoft (george|ryan|james)/i,
+      /rishi|brian/i,
+      /\bmale\b/i,
+      /en[-_]gb/i,
+      /english/i,
+    ];
+    for (const re of ranked) {
+      const hit = voices.find(v => re.test(v.name) || (v.lang && re.test(v.lang)));
+      if (hit) return hit;
     }
+    return voices.find(v => /^en/i.test(v.lang)) || voices[0];
   }, []);
 
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    synthRef.current = window.speechSynthesis;
+    setAvailable(true);
+    const load = () => { voiceRef.current = pickVoice(); };
+    load();
+    // Voices often load asynchronously.
+    window.speechSynthesis.addEventListener?.('voiceschanged', load);
+    return () => window.speechSynthesis.removeEventListener?.('voiceschanged', load);
+  }, [pickVoice]);
+
   const speak = useCallback((text) => {
-    if (!synthRef.current) return;
+    if (!synthRef.current || !text) return;
     synthRef.current.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 0.82; utt.pitch = 0.7; utt.volume = 0.9;
-    const voices = synthRef.current.getVoices();
-    const deep = voices.find(v => /daniel|james|male|english/i.test(v.name)) || voices[0];
-    if (deep) utt.voice = deep;
-    utt.onend = () => setSpeaking(false);
-    utt.onerror = () => setSpeaking(false);
+    if (!voiceRef.current) voiceRef.current = pickVoice();
+
+    // Speak in measured sentences so the cadence feels like an incantation
+    // rather than a rushed monotone. Each clause gets a low, slow delivery.
+    const clauses = text
+      .replace(/\s+/g, ' ')
+      .split(/(?<=[.!?;:—])\s+/)
+      .filter(Boolean);
+
+    let started = false;
+    clauses.forEach((clause, i) => {
+      const utt = new SpeechSynthesisUtterance(clause);
+      utt.rate = 0.74;     // slow, deliberate
+      utt.pitch = 0.55;    // deep, grave
+      utt.volume = 1.0;
+      if (voiceRef.current) utt.voice = voiceRef.current;
+      if (i === 0) utt.onstart = () => { if (!started) { started = true; setSpeaking(true); } };
+      if (i === clauses.length - 1) {
+        utt.onend = () => setSpeaking(false);
+      }
+      utt.onerror = () => setSpeaking(false);
+      synthRef.current.speak(utt);
+    });
     setSpeaking(true);
-    synthRef.current.speak(utt);
-  }, []);
+  }, [pickVoice]);
 
   const stop = useCallback(() => {
     synthRef.current?.cancel();
@@ -2090,6 +2136,78 @@ const NoiseBackground = () => (
 );
 
 // ─────────────────────────────────────────────
+//  BABALON STAR — the seven-pointed Seal of Babalon
+//  A neon-crimson heptagram that shapeshifts {7/2}↔{7/3}, glitches with
+//  chromatic aberration, and teleports to new positions, fading in and
+//  out across the whole app. Pure atmosphere — pointer-events: none.
+// ─────────────────────────────────────────────
+const heptagramPath = (cx, cy, r, skip) => {
+  const pts = [];
+  for (let i = 0; i < 7; i++) {
+    const idx = (i * skip) % 7;
+    const a = (-90 + idx * (360 / 7)) * Math.PI / 180;
+    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return "M" + pts.join("L") + "Z";
+};
+
+const BabalonStar = ({ accentColor = "#ff0028" }) => {
+  const [s, setS] = useState({ top: 50, left: 50, size: 200, skip: 3, key: 0, spin: 48, dir: 1 });
+
+  useEffect(() => {
+    let alive = true;
+    const teleport = () => {
+      if (!alive) return;
+      setS(prev => ({
+        top: 10 + Math.random() * 72,
+        left: 12 + Math.random() * 68,
+        size: 120 + Math.random() * 190,
+        skip: Math.random() > 0.5 ? 3 : 2,
+        spin: 36 + Math.random() * 36,
+        dir: Math.random() > 0.5 ? 1 : -1,
+        key: prev.key + 1,
+      }));
+    };
+    const first = setTimeout(teleport, 1200);
+    const iv = setInterval(teleport, 8000);
+    return () => { alive = false; clearTimeout(first); clearInterval(iv); };
+  }, []);
+
+  const inner = heptagramPath(100, 100, 86, s.skip);
+  const ring = heptagramPath(100, 100, 60, s.skip === 3 ? 2 : 3);
+
+  return (
+    <div className="fixed pointer-events-none hidden sm:block"
+      aria-hidden="true"
+      style={{
+        zIndex: 1, top: `${s.top}%`, left: `${s.left}%`,
+        transform: 'translate(-50%, -50%)',
+        transition: 'top 2.8s cubic-bezier(.22,1,.36,1), left 2.8s cubic-bezier(.22,1,.36,1)',
+        animation: 'babalonAppear 1.6s ease-out both, babalonBreathe 8s ease-in-out 1.6s infinite',
+        mixBlendMode: 'screen',
+      }}>
+      <svg key={s.key} width={s.size} height={s.size} viewBox="0 0 200 200"
+        style={{ animation: `babalonSpin ${s.spin}s linear infinite`, transformOrigin: 'center', transform: `scaleX(${s.dir})` }}>
+        <defs>
+          <filter id="babGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+        {/* chromatic-aberration ghosts (glitch) */}
+        <path d={inner} fill="none" stroke="#00e0ff" strokeOpacity="0.35" strokeWidth="1" transform="translate(2.2,-1.4)" />
+        <path d={inner} fill="none" stroke="#ff2bdf" strokeOpacity="0.30" strokeWidth="1" transform="translate(-2.2,1.4)" />
+        {/* core heptagram */}
+        <path d={inner} fill="none" stroke={accentColor} strokeWidth="1.6" filter="url(#babGlow)" />
+        <path d={ring} fill="none" stroke={accentColor} strokeOpacity="0.5" strokeWidth="0.8" />
+        <circle cx="100" cy="100" r="92" fill="none" stroke={accentColor} strokeOpacity="0.18" strokeWidth="0.6" />
+        <circle cx="100" cy="100" r="3" fill={accentColor} filter="url(#babGlow)" />
+      </svg>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 //  WEBGL ABYSS — volumetric fractal nebula
 //  A full-screen fragment shader. Reacts to ritual phase (intensity)
 //  and the active planetary accent color. Degrades to nothing if the
@@ -2388,8 +2506,8 @@ const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, on
         style={{ background: 'linear-gradient(180deg, #080808 0%, #0a0a0a 100%)' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800/50">
           <div>
-            <h2 className="text-lg tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-              ☥ GRIMOIRE JOURNAL
+            <h2 className="text-2xl gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.05em' }}>
+              ☥ Grimoire Journal
             </h2>
             <div className="text-[10px] text-neutral-600 mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {totalReadings} total readings · {entries.length} saved
@@ -2505,8 +2623,8 @@ const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
   return (
     <div className="w-full max-w-5xl mx-auto" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg tracking-[0.2em]" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-          THE TREE OF LIFE
+        <h2 className="text-2xl gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.06em' }}>
+          The Tree of Life
         </h2>
         <button onClick={onBack}
           className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
@@ -2696,8 +2814,8 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
     return (
       <div className="w-full max-w-2xl mx-auto" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg tracking-[0.2em]" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-            THE RITES
+          <h2 className="text-2xl gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.06em' }}>
+            The Rites
           </h2>
           <button onClick={onBack}
             className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
@@ -2745,7 +2863,7 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
         <div className="text-5xl mb-2" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor, textShadow: `0 0 50px ${accentColor}33` }}>
           {formatChapterNumber(rite.chapter)}
         </div>
-        <h2 className="text-2xl tracking-wider mb-1" style={{ fontFamily: 'Cinzel, serif', color: '#e5e5e5' }}>{rite.title}</h2>
+        <h2 className="text-3xl mb-1 gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.04em' }}>{rite.title}</h2>
         <div className="text-[11px] tracking-[0.25em] text-neutral-600 mb-6" style={{ fontFamily: 'Cinzel, serif' }}>{rite.subtitle.toUpperCase()}</div>
         <p className="text-neutral-400 text-[13px] leading-relaxed mb-8 text-left border-l-2 pl-5" style={{ borderColor: accentColor + '30' }}>
           {rite.intro}
@@ -2859,7 +2977,7 @@ const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
         <span>←</span> RETURN TO ORACLE
       </button>
 
-      <h2 className="text-2xl text-center tracking-wider mb-2" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+      <h2 className="text-3xl text-center mb-2 gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.04em' }}>
         Gematria Calculator
       </h2>
       <p className="text-center text-neutral-600 text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
@@ -3220,60 +3338,78 @@ const App = () => {
       <NoiseBackground />
       <ParticleCanvas active={particleActive} intensity={particleIntensity} accentColor={accentColor} />
       {isAmbient && <AmbientWhispers active={true} />}
+      <BabalonStar accentColor={accentColor} />
       <Shockwave active={showShockwave} color={accentColor} />
       <CRTOverlay />
 
       {/* ═══ TOP NAVIGATION ═══ */}
-      <nav className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 py-2.5"
-        style={{ zIndex: 40, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <div className="flex items-center gap-3">
-          <span className="text-xs tracking-[0.15em] opacity-80" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-            LIBER CCCXXXIII
-          </span>
-          {planetary && (
-            <span className="text-[10px] text-neutral-600 hidden sm:inline-flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              <span style={{ color: accentColor }}>{planetary.symbol}</span>
-              {planetary.planet} Hour
+      <nav className="fixed top-0 left-0 right-0"
+        style={{ zIndex: 40, background: 'linear-gradient(180deg, rgba(8,0,0,0.94), rgba(0,0,0,0.86))', backdropFilter: 'blur(14px)', borderBottom: `1px solid ${accentColor}33`, paddingTop: 'calc(var(--safe-top) + 6px)' }}>
+        {/* Row 1 — brand + ambient state + sound toggles */}
+        <div className="flex items-center justify-between gap-2 px-3 pb-1.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-base sm:text-lg leading-none gilded truncate" style={{ fontFamily: "'Pirata One', 'Cinzel Decorative', serif", letterSpacing: '0.04em' }}>
+              Liber CCCXXXIII
             </span>
-          )}
-          {lunar && (
-            <span className="text-[10px] text-neutral-600 hidden sm:inline" title={lunar.name}>
-              {lunar.emoji}
-            </span>
-          )}
+            {planetary && (
+              <span className="text-[10px] text-neutral-500 hidden sm:inline-flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <span style={{ color: accentColor }}>{planetary.symbol}</span>
+                {planetary.planet} Hour
+                {lunar && <span title={lunar.name}>· {lunar.emoji}</span>}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {voice.available && (
+              <button onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) voice.stop(); }}
+                title="Sage's voice — narration"
+                className="text-[12px] w-8 h-8 rounded-full border flex items-center justify-center transition-all"
+                style={{
+                  color: voiceEnabled ? '#fff' : accentColor + 'cc',
+                  borderColor: voiceEnabled ? accentColor : accentColor + '40',
+                  background: voiceEnabled ? `radial-gradient(circle, ${accentColor}55, ${accentColor}22)` : 'transparent',
+                  boxShadow: voiceEnabled ? `0 0 12px ${accentColor}77` : 'none',
+                }}>◉</button>
+            )}
+            <button onClick={() => setAudioEnabled(!audioEnabled)}
+              title="Ambient sound & bells"
+              className="text-[13px] w-8 h-8 rounded-full border flex items-center justify-center transition-all"
+              style={{
+                color: audioEnabled ? '#fff' : accentColor + 'cc',
+                borderColor: audioEnabled ? accentColor : accentColor + '40',
+                background: audioEnabled ? `radial-gradient(circle, ${accentColor}55, ${accentColor}22)` : 'transparent',
+                boxShadow: audioEnabled ? `0 0 12px ${accentColor}77` : 'none',
+              }}>{audioEnabled ? "♫" : "♪"}</button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          {[["oracle", "ORACLE"], ["ritual", "RITES"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => (
-            <button key={m} onClick={() => { setMode(m); if (m === "ritual") setRitualChapter(null); }}
-              className={`text-[10px] px-2 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${
-                mode === m ? '' : 'text-neutral-600 hover:text-neutral-400'
-              }`}
-              style={mode === m ? { color: accentColor } : undefined}>
-              {label}
-            </button>
-          ))}
+        {/* Row 2 — mode pills (horizontally scrollable, never clipped) */}
+        <div className="nav-rail flex items-center gap-2 px-3 pb-2 overflow-x-auto">
+          {[["oracle", "ORACLE"], ["ritual", "RITES"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => {
+            const on = mode === m;
+            return (
+              <button key={m} onClick={() => { setMode(m); if (m === "ritual") setRitualChapter(null); }}
+                className="text-[10px] tracking-[0.18em] px-3.5 py-1.5 rounded-full border whitespace-nowrap transition-all duration-300"
+                style={{
+                  fontFamily: 'Cinzel, serif',
+                  color: on ? '#fff' : accentLight,
+                  borderColor: on ? accentColor : accentColor + '55',
+                  background: on ? `linear-gradient(135deg, ${accentColor}66, ${accentColor}22)` : `${accentColor}0d`,
+                  boxShadow: on ? `0 0 14px ${accentColor}66, inset 0 0 8px ${accentColor}33` : 'none',
+                }}>
+                {label}
+              </button>
+            );
+          })}
           <button onClick={() => setShowJournal(true)}
-            className="text-neutral-600 hover:text-neutral-400 text-[10px] px-2.5 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] relative">
+            className="text-[10px] tracking-[0.18em] px-3.5 py-1.5 rounded-full border whitespace-nowrap transition-all duration-300 relative"
+            style={{ fontFamily: 'Cinzel, serif', color: accentLight, borderColor: accentColor + '55', background: `${accentColor}0d` }}>
             GRIMOIRE
             {journal.entries.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-[8px] flex items-center justify-center"
-                style={{ background: accentColor + '30', color: accentColor }}>
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[8px] flex items-center justify-center font-bold"
+                style={{ background: accentColor, color: '#fff', boxShadow: `0 0 8px ${accentColor}` }}>
                 {journal.entries.length}
               </span>
             )}
-          </button>
-          {voice.available && (
-            <button onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) voice.stop(); }}
-              className={`text-[10px] px-2 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${voiceEnabled ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
-              style={{ color: voiceEnabled ? accentColor : '#666' }}
-              title="Voice narration">
-              ◉
-            </button>
-          )}
-          <button onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`text-[11px] px-2 py-1.5 transition-colors tracking-wider rounded hover:bg-white/[0.03] ${audioEnabled ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
-            style={{ color: audioEnabled ? accentColor : '#666' }}>
-            {audioEnabled ? "♫" : "♪"}
           </button>
         </div>
       </nav>
@@ -3291,7 +3427,7 @@ const App = () => {
       )}
 
       {/* ═══ MAIN CONTENT ═══ */}
-      <main className="relative pt-14 min-h-screen flex flex-col items-center justify-center px-4 pb-8" style={{ zIndex: 2 }}>
+      <main className="relative min-h-screen flex flex-col items-center justify-center px-4" style={{ zIndex: 2, paddingTop: 'calc(var(--safe-top) + 104px)', paddingBottom: 'calc(var(--safe-bottom) + 32px)' }}>
 
         {/* ── GEMATRIA MODE ── */}
         {mode === "gematria" && (
@@ -3324,24 +3460,26 @@ const App = () => {
                     YOUR SIGIL · {journal.totalReadings} READING{journal.totalReadings !== 1 ? 'S' : ''} · {evolutionRings} RING{evolutionRings !== 1 ? 'S' : ''} EVOLVED
                   </div>
                 )}
-                <h1 className="text-4xl md:text-5xl tracking-wider mb-3"
-                  style={{ fontFamily: 'Cinzel Decorative, Cinzel, serif', color: accentColor, textShadow: `0 0 60px ${accentColor}22` }}>
-                  THE BOOK OF LIES
+                <h1 className="text-5xl md:text-6xl mb-3 gilded leading-tight"
+                  style={{ fontFamily: "'UnifrakturCook', 'Cinzel Decorative', serif", filter: `drop-shadow(0 0 40px ${accentColor}55)` }}>
+                  The Book of Lies
                 </h1>
-                <p className="text-neutral-600 text-[10px] tracking-[0.35em] mb-1" style={{ fontFamily: 'Cinzel, serif' }}>
+                <hr className="gild-rule w-40 mx-auto mb-3" />
+                <p className="text-neutral-500 text-[11px] tracking-[0.35em] mb-1" style={{ fontFamily: "'Pirata One', serif" }}>
                   LIBER CCCXXXIII
                 </p>
-                <p className="text-neutral-700 text-[11px] mb-12" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  93 chapters · gematric divination · AI oracle
+                <p className="text-neutral-700 text-[11px] mb-12 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
+                  93 chapters · gematric divination · the Oracle of the Abyss
                 </p>
                 <button onClick={() => setPhase("input")}
-                  className="border px-10 py-3.5 rounded-lg text-sm tracking-[0.25em] transition-all duration-700 hover:tracking-[0.35em]"
+                  className="border-2 px-10 py-3.5 rounded-lg text-sm tracking-[0.25em] transition-all duration-700 hover:tracking-[0.35em]"
                   style={{
-                    fontFamily: 'Cinzel, serif', color: accentColor,
-                    borderColor: accentColor + '30',
-                    background: `linear-gradient(135deg, transparent, ${accentColor}08)`,
+                    fontFamily: 'Cinzel, serif', color: '#fff',
+                    borderColor: accentColor,
+                    background: `linear-gradient(135deg, ${accentColor}33, ${accentColor}11)`,
+                    boxShadow: `0 0 24px ${accentColor}55, inset 0 0 16px ${accentColor}22`,
                   }}>
-                  BEGIN CONSULTATION
+                  ✦ BEGIN CONSULTATION ✦
                 </button>
 
                 {/* Cosmic info */}
@@ -3363,11 +3501,11 @@ const App = () => {
                 <div className="mb-6 opacity-40">
                   <AnimatedSigil input="query" size={80} spinning={true} glowing={false} accentColor={accentColor} />
                 </div>
-                <h2 className="text-xl tracking-wider mb-2" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+                <h2 className="text-3xl mb-2 gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.04em' }}>
                   Speak Your Question
                 </h2>
-                <p className="text-neutral-600 text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  The gematria of your words will draw the chapter.
+                <p className="text-neutral-500 text-[13px] mb-8 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
+                  The gematria of your words shall draw the chapter from the Abyss.
                 </p>
 
                 <input type="text" value={question} onChange={e => setQuestion(e.target.value)}
@@ -3498,11 +3636,11 @@ const App = () => {
                     CHAPTER
                   </div>
 
-                  <div className="text-6xl md:text-7xl font-bold mb-3"
+                  <div className={`text-7xl md:text-8xl font-bold mb-2 ${glitchActive ? '' : 'gilded'}`}
                     style={{
-                      fontFamily: 'Cinzel Decorative, Cinzel, serif',
-                      color: accentColor,
-                      textShadow: `0 0 60px ${accentColor}33`,
+                      fontFamily: "'UnifrakturCook', 'Cinzel Decorative', serif",
+                      color: glitchActive ? accentColor : undefined,
+                      filter: `drop-shadow(0 0 40px ${accentColor}55)`,
                       animation: glitchActive ? 'numberSlam 0.6s ease-out' : 'none',
                     }}>
                     {glitchActive
@@ -3511,7 +3649,9 @@ const App = () => {
                     }
                   </div>
 
-                  <div className="text-lg text-neutral-300 tracking-wider mb-1" style={{ fontFamily: 'Cinzel, serif' }}>
+                  <hr className="gild-rule w-32 mx-auto mb-2" />
+
+                  <div className="text-xl text-neutral-200 tracking-wide mb-1" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.05em' }}>
                     {glitchActive
                       ? <GlitchText text={drawnChapter.title} active={true} speed={20} />
                       : drawnChapter.title
@@ -3537,12 +3677,19 @@ const App = () => {
                   )}
                 </div>
 
-                {/* Key Text */}
-                <div className="mb-8 border-l-2 pl-5 py-2" style={{ borderColor: accentColor + '30', animation: 'fadeInUp 1s ease-out 0.3s both' }}>
-                  <div className="relative">
+                {/* Key Text — illuminated manuscript leaf */}
+                <div className="mb-8 relative py-3 pl-6 pr-3"
+                  style={{ borderLeft: `2px solid ${accentColor}40`, animation: 'fadeInUp 1s ease-out 0.3s both' }}>
+                  <span aria-hidden="true" className="absolute -left-2 -top-1 text-base gilded" style={{ fontFamily: "'UnifrakturCook', serif" }}>❧</span>
+                  <span aria-hidden="true" className="absolute -left-2 -bottom-1 text-base gilded" style={{ fontFamily: "'UnifrakturCook', serif", transform: 'rotate(180deg)' }}>❧</span>
+                  <div className="relative text-neutral-200 leading-loose
+                      first-letter:text-6xl first-letter:float-left first-letter:pr-2 first-letter:mt-1 first-letter:leading-[0.7]
+                      first-letter:text-[#ff3b3b] first-letter:[font-family:'UnifrakturCook',serif]
+                      first-letter:[text-shadow:0_0_18px_rgba(255,59,59,0.65)]"
+                    style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16px' }}>
                     <TypewriterText text={drawnChapter.text} speed={12}
                       onComplete={() => { if (voiceEnabled) voice.speak(drawnChapter.text); }}
-                      className="text-neutral-400 text-[13px] leading-relaxed italic" />
+                      className="italic" />
                   </div>
                   {textEchoes.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -3559,7 +3706,7 @@ const App = () => {
                 {/* Expandable Sections */}
                 <div className="space-y-0" style={{ animation: 'fadeInUp 1s ease-out 0.6s both' }}>
                   <ExpandableSection title="COMMENTARY" icon="☥" defaultOpen={true} accentColor={accentColor}>
-                    <div className="pt-3 whitespace-pre-wrap">{drawnChapter.commentary}</div>
+                    <div className="pt-3 whitespace-pre-wrap text-neutral-300 leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '15px' }}>{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
                   <ExpandableSection title={isSpread ? "ORACLE OF THE ABYSS · TRIAD SYNTHESIS" : "ORACLE OF THE ABYSS"} icon="☉" defaultOpen={true} accentColor={accentColor}>
@@ -3578,7 +3725,7 @@ const App = () => {
                         </div>
                       ) : oracle.text ? (
                         <div className="space-y-3">
-                          <div className="whitespace-pre-wrap text-neutral-400 leading-relaxed">
+                          <div className="whitespace-pre-wrap text-neutral-300 leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '15.5px' }}>
                             {oracle.text}
                             {oracle.streaming && (
                               <span style={{ color: accentColor, animation: 'ritualPulse 1s ease-in-out infinite' }}>▌</span>
@@ -3703,8 +3850,9 @@ const App = () => {
       </main>
 
       {/* Footer */}
-      <footer className="relative text-center py-4 text-neutral-800 text-[10px]" style={{ zIndex: 2, fontFamily: 'JetBrains Mono, monospace' }}>
-        Do what thou wilt shall be the whole of the Law.
+      <footer className="relative text-center text-[13px] italic" style={{ zIndex: 2, fontFamily: "'IM Fell English', serif", paddingTop: '8px', paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
+        <hr className="gild-rule w-48 mx-auto mb-3 opacity-60" />
+        <span className="gilded">Do what thou wilt shall be the whole of the Law.</span>
       </footer>
     </div>
   );

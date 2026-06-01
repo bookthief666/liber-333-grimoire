@@ -22,10 +22,19 @@ A live digital oracle for Aleister Crowley's Liber 333 (The Book of Lies). Live 
 - Build: `npm run build` (always run after changes)
 - Dev: `npm run dev`
 
+## Design system (fonts & motifs)
+- Display / illuminated headings: `UnifrakturCook` (blackletter) and `Pirata One`; often with the `.gilded` class (animated gold↔crimson gradient text).
+- Long-form prose (chapter text, commentary, Oracle): `IM Fell English` (old-book serif), with a crimson illuminated drop-cap on the key text.
+- Technical readouts (gematria, correspondences, planetary/lunar): `JetBrains Mono`.
+- Ornaments: `.gild-rule` (gilded divider), `❧` flourishes, custom crimson scrollbars.
+- `BabalonStar`: animated neon heptagram (Seal of Babalon) that teleports/glitches across the app — atmosphere only, `pointer-events:none`, hidden on `<sm` screens.
+- Layout is safe-area aware (`--safe-top`/`--safe-bottom`, `viewport-fit=cover`); the nav is a two-row, horizontally-scrollable rail so it never clips on narrow/folding screens.
+
 ## Do
 - Use Tailwind classes for all styling
-- Use Cinzel/Cinzel Decorative for display text, JetBrains Mono for body
+- Use the illuminated font system above; keep mono only for numeric/technical readouts
 - Use the accentColor variable for dynamic (planetary) theming
+- Keep neon-crimson-on-black as the core palette
 - Keep the dark occult aesthetic: black bg, glass-morphism, generous negative space
 - Keep the Oracle (Anthropic) on the latest Claude Opus model
 - Run `npm run build` after changes

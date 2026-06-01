@@ -28,8 +28,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing prompt' });
   }
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
+  // Accept the canonical name first, then a few names this project has
+  // used in the wild so an existing Vercel variable still works.
+  const anthropicKey =
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.Liber333Oracle ||
+    process.env.LIBER333_ORACLE ||
+    process.env.LIBER_333_ORACLE ||
+    process.env.CLAUDE_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   // ── Streaming path (Anthropic only) ──────────────────────────────────
   if (stream && anthropicKey) {
