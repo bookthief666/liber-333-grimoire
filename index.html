@@ -104,9 +104,52 @@
       *::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
       *::-webkit-scrollbar-thumb { background: rgba(220,38,38,0.35); border-radius: 4px; }
       *::-webkit-scrollbar-thumb:hover { background: rgba(220,38,38,0.6); }
-      /* Safe-area aware root so nothing is clipped on notched / folding screens */
-      :root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
-      html, body { background: #000; -webkit-text-size-adjust: 100%; }
+      /* ── Astral starfield twinkle / drifting marginalia / rotating glyph ring ── */
+      @keyframes twinkle {
+        0%, 100% { opacity: 0.15; }
+        50% { opacity: 0.7; }
+      }
+      @keyframes glyphRing {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes glyphRingRev {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(-360deg); }
+      }
+      @keyframes marginaliaDrift {
+        0% { opacity: 0; transform: translateY(12px) scale(0.96); }
+        18% { opacity: 0.5; }
+        82% { opacity: 0.5; }
+        100% { opacity: 0; transform: translateY(-24px) scale(1.02); }
+      }
+      /* ── Astral palette ── */
+      :root {
+        --safe-top: env(safe-area-inset-top, 0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --void: #05030f;
+        --void-2: #0a0718;
+        --lux: #d8dcf2;      /* luminous silver text */
+        --lux-dim: #9aa0c4;  /* secondary silver */
+        --crimson: #ff2e4d;  /* reserved accent */
+      }
+      html, body { background: radial-gradient(140% 100% at 50% -10%, #0c0922 0%, #05030f 55%, #020108 100%); -webkit-text-size-adjust: 100%; }
+      /* Floating luminous text — a dark halo for legibility over any ground + a faint glow.
+         This is the core "floating, never-too-dark" treatment. */
+      .lux {
+        color: var(--lux);
+        text-shadow: 0 0 1px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.9), 0 0 22px rgba(150,160,230,0.20);
+      }
+      .lux-dim { color: var(--lux-dim); text-shadow: 0 0 1px rgba(0,0,0,0.95), 0 1px 8px rgba(0,0,0,0.85); }
+      .lux-crimson {
+        color: #ff5e74;
+        text-shadow: 0 0 1px rgba(0,0,0,0.9), 0 0 18px rgba(255,46,77,0.55), 0 0 40px rgba(255,46,77,0.25);
+      }
+      /* Hairline "starlight" rule — replaces borders between floating sections */
+      .star-rule {
+        height: 1px; border: 0;
+        background: linear-gradient(90deg, transparent, rgba(150,160,230,0.05), rgba(216,220,242,0.55), rgba(255,94,116,0.45), rgba(216,220,242,0.55), rgba(150,160,230,0.05), transparent);
+      }
       /* hide horizontal scrollbar on the nav rail but keep it scrollable */
       .nav-rail { scrollbar-width: none; -ms-overflow-style: none; }
       .nav-rail::-webkit-scrollbar { display: none; }

@@ -22,19 +22,20 @@ A live digital oracle for Aleister Crowley's Liber 333 (The Book of Lies). Live 
 - Build: `npm run build` (always run after changes)
 - Dev: `npm run dev`
 
-## Design system (fonts & motifs)
-- Display / illuminated headings: `UnifrakturCook` (blackletter) and `Pirata One`; often with the `.gilded` class (animated gold↔crimson gradient text).
-- Long-form prose (chapter text, commentary, Oracle): `IM Fell English` (old-book serif), with a crimson illuminated drop-cap on the key text.
-- Technical readouts (gematria, correspondences, planetary/lunar): `JetBrains Mono`.
-- Ornaments: `.gild-rule` (gilded divider), `❧` flourishes, custom crimson scrollbars.
-- `BabalonStar`: animated neon heptagram (Seal of Babalon) that teleports/glitches across the app — atmosphere only, `pointer-events:none`, hidden on `<sm` screens.
-- Layout is safe-area aware (`--safe-top`/`--safe-bottom`, `viewport-fit=cover`); the nav is a two-row, horizontally-scrollable rail so it never clips on narrow/folding screens.
+## Design system — "Astral Void" (fonts, color & motifs)
+- **Palette:** deep indigo-black cosmos ground (`--void`/radial body gradient), luminous **silver** text (`--lux`), **crimson `#ff2e4d`** reserved as the accent. Planetary `accentColor` is used ONLY for subtle tinting (sigil, particles, nebula stars) — never for primary text.
+- **No boxes around text.** Sections/buttons/nav are *floating text*; separate with `.star-rule` (gradient hairline), not borders. The only frame kept is the Tree-of-Life diagram.
+- **Floating-text utilities (index.html):** `.lux` (silver + dark halo + faint glow — keeps text readable over any background), `.lux-dim` (secondary), `.lux-crimson` (accent/glow). Use these instead of `text-neutral-*` for legibility.
+- **Typography (full grimoire-gothic):** titles/headings → `UnifrakturCook` blackletter (bright, via `.gilded`); medium headings → `Pirata One`; long-form prose → `IM Fell English`; numeric readouts → `JetBrains Mono`. Key chapter text has a crimson illuminated drop-cap.
+- **Background:** `AbyssShader` = a dark indigo nebula + twinkling starfield (kept dim so it never washes out text); `ParticleCanvas` draws silver stars + **constellation lines**.
+- **Living symbolism:** `BabalonStar` (roaming glitching heptagram), `ZodiacRing` (counter-rotating zodiac/planet glyph wheels behind the sigil), `Marginalia` (drifting occult glyphs at the edges). All `pointer-events:none`, hidden `<sm` where noted.
+- Layout is safe-area aware (`--safe-top/--safe-bottom`, `viewport-fit=cover`); nav is a two-row, horizontally-scrollable rail.
 
 ## Do
-- Use Tailwind classes for all styling
-- Use the illuminated font system above; keep mono only for numeric/technical readouts
-- Use the accentColor variable for dynamic (planetary) theming
-- Keep neon-crimson-on-black as the core palette
+- Use Tailwind + the `.lux`/`.lux-dim`/`.lux-crimson` + `.gilded` utilities; avoid dark `text-neutral-6/7/800` for real content
+- Float text on the cosmos; use `.star-rule` instead of borders
+- Keep mono only for numeric/technical readouts
+- Keep the indigo-silver-crimson astral palette
 - Keep the dark occult aesthetic: black bg, glass-morphism, generous negative space
 - Keep the Oracle (Anthropic) on the latest Claude Opus model
 - Run `npm run build` after changes

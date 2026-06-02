@@ -1942,15 +1942,33 @@ const ParticleCanvas = ({ active, intensity = 1, accentColor = "#dc2626" }) => {
         p.life -= p.decay;
         if (p.life <= 0) return false;
         const a = p.life, r = p.size * p.life;
-        const pc = p.bright ? { r: 255, g: 180, b: 80 } : c;
+        // silver stars, with ~30% tinted by the planetary accent
+        const pc = p.bright ? c : { r: 205, g: 212, b: 245 };
         ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${pc.r},${pc.g},${pc.b},${a * 0.7})`; ctx.fill();
+        ctx.fillStyle = `rgba(${pc.r},${pc.g},${pc.b},${a * 0.85})`; ctx.fill();
         ctx.beginPath(); ctx.arc(p.x, p.y, r * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,${pc.g + 60},${pc.b + 30},${a * 0.5})`; ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${a * 0.6})`; ctx.fill();
         ctx.beginPath(); ctx.arc(p.x, p.y, r * 3.5, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${pc.r},${pc.g},${pc.b},${a * 0.06})`; ctx.fill();
         return true;
       });
+
+      // Constellation lines — link nearby stars with faint silver threads.
+      const ps = particlesRef.current;
+      const N = Math.min(ps.length, 70);
+      const D = 120, D2 = D * D;
+      ctx.lineWidth = 0.6;
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const dx = ps[i].x - ps[j].x, dy = ps[i].y - ps[j].y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < D2) {
+            const a = (1 - d2 / D2) * 0.28 * Math.min(ps[i].life, ps[j].life);
+            ctx.strokeStyle = `rgba(190,200,240,${a})`;
+            ctx.beginPath(); ctx.moveTo(ps[i].x, ps[i].y); ctx.lineTo(ps[j].x, ps[j].y); ctx.stroke();
+          }
+        }
+      }
       animRef.current = requestAnimationFrame(animate);
     };
     animate();
@@ -2208,6 +2226,75 @@ const BabalonStar = ({ accentColor = "#ff0028" }) => {
 };
 
 // ─────────────────────────────────────────────
+//  ZODIAC RING — slow counter-rotating glyph wheels behind the sigil
+// ─────────────────────────────────────────────
+const ZODIAC = ["♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓"];
+const PLANET_GLYPHS = ["☉","☽","☿","♀","♂","♃","♄"];
+
+const ZodiacRing = ({ size = 320, accentColor = "#ff2e4d" }) => {
+  const ring = (glyphs, radius, dur, rev, op, fs) => (
+    <div className="absolute inset-0" style={{ animation: `${rev ? 'glyphRingRev' : 'glyphRing'} ${dur}s linear infinite` }}>
+      {glyphs.map((g, i) => {
+        const a = (i / glyphs.length) * 2 * Math.PI - Math.PI / 2;
+        const x = 50 + (radius * Math.cos(a));
+        const y = 50 + (radius * Math.sin(a));
+        return (
+          <span key={i} className="absolute -translate-x-1/2 -translate-y-1/2"
+            style={{ left: `${x}%`, top: `${y}%`, fontSize: fs, color: accentColor, opacity: op,
+              textShadow: `0 0 8px ${accentColor}88`, fontFamily: 'serif' }}>
+            {g}
+          </span>
+        );
+      })}
+    </div>
+  );
+  return (
+    <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+      style={{ width: size, height: size, zIndex: -1 }} aria-hidden="true">
+      {ring(ZODIAC, 46, 120, false, 0.22, '13px')}
+      {ring(PLANET_GLYPHS, 32, 90, true, 0.28, '12px')}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+//  MARGINALIA — faint occult glyphs drifting at the edges (always on)
+// ─────────────────────────────────────────────
+const MARGINALIA_GLYPHS = ["☉","☽","☿","♀","♂","♃","♄","♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓","✶","✷","⸸","☤","🜍","🜏","🜔","∴","∵","☉","ϟ"];
+const Marginalia = () => {
+  const [items, setItems] = useState([]);
+  const idRef = useRef(0);
+  useEffect(() => {
+    const spawn = () => {
+      const edge = Math.random() > 0.5;
+      setItems(prev => [...prev.slice(-7), {
+        id: idRef.current++,
+        g: MARGINALIA_GLYPHS[Math.floor(Math.random() * MARGINALIA_GLYPHS.length)],
+        x: edge ? 4 + Math.random() * 14 : 82 + Math.random() * 14, // hug left/right margins
+        y: 18 + Math.random() * 64,
+        size: 14 + Math.random() * 22,
+        dur: 7 + Math.random() * 5,
+      }]);
+    };
+    spawn();
+    const iv = setInterval(spawn, 3200);
+    return () => clearInterval(iv);
+  }, []);
+  return (
+    <div className="fixed inset-0 pointer-events-none hidden sm:block" style={{ zIndex: 1 }} aria-hidden="true">
+      {items.map(it => (
+        <span key={it.id} className="absolute"
+          style={{ left: `${it.x}%`, top: `${it.y}%`, fontSize: it.size, color: 'rgba(150,160,230,0.45)',
+            textShadow: '0 0 10px rgba(120,130,200,0.4)', fontFamily: 'serif',
+            animation: `marginaliaDrift ${it.dur}s ease-in-out both` }}>
+          {it.g}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 //  WEBGL ABYSS — volumetric fractal nebula
 //  A full-screen fragment shader. Reacts to ritual phase (intensity)
 //  and the active planetary accent color. Degrades to nothing if the
@@ -2223,8 +2310,8 @@ const ABYSS_FRAG = `
 precision highp float;
 uniform vec2  u_res;
 uniform float u_time;
-uniform float u_intensity;   // 0..~1.5, swells during ritual
-uniform vec3  u_accent;      // planetary color
+uniform float u_intensity;   // 0..~1.2, swells during ritual
+uniform vec3  u_accent;      // planetary color (used sparingly as colored stars)
 
 // hash / value noise
 float hash(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p,p+34.345); return fract(p.x*p.y); }
@@ -2237,32 +2324,51 @@ float noise(vec2 p){
 float fbm(vec2 p){
   float v = 0.0, amp = 0.5;
   mat2 rot = mat2(0.8,-0.6,0.6,0.8);
-  for(int i=0;i<6;i++){ v += amp*noise(p); p = rot*p*2.0 + 0.03*u_time; amp *= 0.5; }
+  for(int i=0;i<5;i++){ v += amp*noise(p); p = rot*p*2.0 + 0.015*u_time; amp *= 0.5; }
   return v;
+}
+
+// star layer: sparse bright points that twinkle
+float stars(vec2 uv, float density, float sz, float tw){
+  vec2 g = floor(uv*density);
+  vec2 f = fract(uv*density) - 0.5;
+  float h = hash(g);
+  float h2 = hash(g+7.1);
+  if (h < 0.86) return 0.0;                 // most cells empty
+  float d = length(f);
+  float twinkle = 0.5 + 0.5*sin(u_time*tw + h2*6.28);
+  return smoothstep(sz, 0.0, d) * twinkle;
 }
 
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*u_res) / u_res.y;
-  float t = u_time*0.04;
-
-  // domain-warped fbm => roiling abyssal clouds
-  vec2 q = vec2(fbm(uv*1.6 + vec2(0.0,t)), fbm(uv*1.6 + vec2(5.2,-t)));
-  vec2 r = vec2(fbm(uv*1.6 + 3.0*q + vec2(1.7,9.2)), fbm(uv*1.6 + 3.0*q + vec2(8.3,2.8)));
-  float f = fbm(uv*1.6 + 2.5*r);
-
-  float density = pow(clamp(f,0.0,1.0), 2.2);
-  // pull toward center: a faint eye in the deep
   float rad = length(uv);
-  float vign = smoothstep(1.25, 0.15, rad);
-  float core = smoothstep(0.55, 0.0, rad) * (0.35 + 0.5*u_intensity);
+  float vign = smoothstep(1.35, 0.1, rad);
 
-  vec3 col = u_accent * density * (0.6 + 0.9*u_intensity);
-  col += u_accent * core * (0.4 + r.x*0.6);
-  col *= vign;
-  // subtle deep-violet base so pure black never reads flat
-  col += vec3(0.012, 0.006, 0.02) * vign;
+  // Deep indigo nebula — DARK. Never multiplied by a pale accent (no gray washout).
+  float t = u_time*0.02;
+  vec2 q = vec2(fbm(uv*1.2 + vec2(0.0,t)), fbm(uv*1.2 + vec2(4.2,-t)));
+  float neb = fbm(uv*1.1 + 1.8*q);
+  neb = pow(clamp(neb,0.0,1.0), 2.6);
+  vec3 nebCol = mix(vec3(0.04,0.03,0.10), vec3(0.10,0.05,0.20), neb);  // indigo→violet
+  vec3 col = nebCol * neb * (0.5 + 0.5*u_intensity) * vign;
 
-  float alpha = clamp(density*vign*(0.32 + 0.55*u_intensity) + core*0.4, 0.0, 0.9);
+  // a faint crimson swell at the heart during ritual
+  float core = smoothstep(0.6, 0.0, rad) * u_intensity;
+  col += vec3(0.22,0.02,0.06) * core * 0.5;
+
+  // three star layers (parallax depth) — silver, plus a few accent-tinted
+  float s = 0.0;
+  s += stars(uv + vec2(0.0, t*0.3), 9.0,  0.06, 2.0) * 0.7;
+  s += stars(uv*1.7 + 11.0,        16.0, 0.05, 3.0) * 0.5;
+  s += stars(uv*2.6 - 5.0,         26.0, 0.04, 4.5) * 0.35;
+  vec3 starCol = mix(vec3(0.8,0.85,1.0), u_accent, 0.25);
+  col += starCol * s * vign;
+
+  // base lift so pure black never reads flat
+  col += vec3(0.01,0.008,0.022) * vign;
+
+  float alpha = clamp(neb*vign*(0.16 + 0.30*u_intensity) + s*0.9*vign + core*0.4, 0.0, 0.92);
   gl_FragColor = vec4(col, alpha);
 }`;
 
@@ -2394,9 +2500,11 @@ const AmbientWhispers = ({ active }) => {
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 2 }}>
       {fragments.map(f => (
-        <div key={f.id} className="absolute text-neutral-800 text-xs italic"
+        <div key={f.id} className="absolute text-xs italic"
           style={{
-            fontFamily: 'Cinzel, serif',
+            fontFamily: "'IM Fell English', serif",
+            color: 'rgba(176,184,224,0.5)',
+            textShadow: '0 0 12px rgba(120,130,200,0.4)',
             left: `${f.x}%`, top: `${f.y}%`,
             animation: `whisperFade 8s ease-in-out ${f.delay}s both`,
             maxWidth: '200px', textAlign: 'center', lineHeight: 1.4,
@@ -2431,20 +2539,20 @@ const Shockwave = ({ active, color = "#dc2626" }) => {
 const ExpandableSection = ({ title, icon, children, defaultOpen = false, accentColor = "#dc2626" }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-neutral-800/60 rounded-lg overflow-hidden mb-3"
-      style={{ background: 'rgba(8,8,8,0.7)', backdropFilter: 'blur(4px)' }}>
+    <div className="mb-5">
       <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.02] transition-colors">
-        <span className="flex items-center gap-2.5 text-sm tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-          <span className="text-base opacity-70">{icon}</span>
+        className="w-full flex items-center justify-between py-2 text-left group">
+        <span className="flex items-center gap-2.5 text-lg lux-crimson tracking-wide"
+          style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif" }}>
+          <span className="text-base opacity-90">{icon}</span>
           {title}
         </span>
-        <span className="text-neutral-700 text-[10px] transition-transform duration-300"
+        <span className="lux-dim text-[10px] transition-transform duration-300"
           style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
       </button>
-      <div className="overflow-hidden transition-all duration-500" style={{ maxHeight: open ? '2000px' : '0', opacity: open ? 1 : 0 }}>
-        <div className="px-5 pb-4 text-neutral-400 text-[13px] leading-relaxed border-t border-neutral-800/30"
-          style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+      <hr className="star-rule mb-3" style={{ opacity: open ? 0.8 : 0.3, transition: 'opacity 0.4s' }} />
+      <div className="overflow-hidden transition-all duration-500" style={{ maxHeight: open ? '4000px' : '0', opacity: open ? 1 : 0 }}>
+        <div className="pb-2 lux text-[15px] leading-relaxed">
           {children}
         </div>
       </div>
@@ -2475,13 +2583,13 @@ const MilestoneOverlay = ({ number, onDismiss }) => {
         <div className="text-3xl tracking-wider text-amber-500 mb-4" style={{ fontFamily: 'Cinzel, serif', textShadow: '0 0 40px rgba(245,158,11,0.3)' }}>
           {m.title}
         </div>
-        <div className="text-neutral-500 text-sm leading-relaxed mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        <div className="lux text-sm leading-relaxed mb-8" style={{ fontFamily: "'IM Fell English', serif" }}>
           {m.text}
         </div>
         <button onClick={onDismiss}
-          className="border border-amber-800/40 text-amber-600 px-8 py-2.5 rounded-lg text-xs tracking-[0.2em] hover:bg-amber-900/10 transition-all"
-          style={{ fontFamily: 'Cinzel, serif' }}>
-          CONTINUE
+          className="text-xs tracking-[0.25em] transition-all hover:tracking-[0.4em]"
+          style={{ fontFamily: 'Cinzel, serif', color: '#f0b75e', textShadow: '0 0 16px rgba(240,183,94,0.5)' }}>
+          ✦ CONTINUE ✦
         </button>
       </div>
     </div>
@@ -2501,62 +2609,65 @@ const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, on
 
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 60 }}>
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl border border-neutral-800/60 overflow-hidden"
-        style={{ background: 'linear-gradient(180deg, #080808 0%, #0a0a0a 100%)' }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800/50">
+      <div className="absolute inset-0 backdrop-blur-md" style={{ background: 'rgba(5,3,15,0.88)' }} onClick={onClose} />
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+        style={{ background: 'radial-gradient(120% 80% at 50% 0%, rgba(20,14,45,0.9), rgba(5,3,15,0.95))', borderRadius: '16px', boxShadow: '0 0 60px rgba(120,80,200,0.15)' }}>
+        <div className="flex items-center justify-between px-5 py-4">
           <div>
-            <h2 className="text-2xl gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.05em' }}>
+            <h2 className="text-2xl gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
               ☥ Grimoire Journal
             </h2>
-            <div className="text-[10px] text-neutral-600 mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="text-[10px] lux-dim mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {totalReadings} total readings · {entries.length} saved
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {entries.length > 0 && (
-              <button onClick={onClear} className="text-[10px] text-neutral-700 hover:text-red-800 transition-colors"
+              <button onClick={onClear} className="text-[10px] lux-dim hover:lux-crimson transition-colors"
                 style={{ fontFamily: 'JetBrains Mono, monospace' }}>CLEAR ALL</button>
             )}
-            <button onClick={onClose} className="text-neutral-600 hover:text-white transition-colors text-xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/5">×</button>
+            <button onClick={onClose} className="lux-dim hover:text-white transition-colors text-2xl leading-none">×</button>
           </div>
         </div>
+        <hr className="star-rule opacity-50" />
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        <div className="flex-1 overflow-y-auto p-4">
           {entries.length === 0 ? (
-            <div className="text-center py-16 text-neutral-700 text-sm">
-              <div className="text-4xl mb-4 opacity-20">☉</div>
+            <div className="text-center py-16 lux-dim text-sm" style={{ fontFamily: "'IM Fell English', serif" }}>
+              <div className="text-4xl mb-4 opacity-30">☉</div>
               No readings recorded yet.
             </div>
-          ) : entries.map((entry) => (
-            <div key={entry.id}
-              className="group border border-neutral-800/40 rounded-lg p-4 hover:border-neutral-700/50 transition-all cursor-pointer hover:bg-white/[0.01]"
-              onClick={() => { onSelect?.(entry); onClose(); }}>
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-xs font-bold" style={{ color: accentColor, fontFamily: 'Cinzel, serif' }}>
-                      {formatChapterNumber(entry.chapter)}
-                    </span>
-                    <span className="text-neutral-400 text-xs truncate" style={{ fontFamily: 'Cinzel, serif' }}>
-                      {entry.title}
-                    </span>
-                    {recurrenceMap[entry.chapter] > 1 && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-900/30 text-amber-600">
-                        ×{recurrenceMap[entry.chapter]}
+          ) : entries.map((entry, idx) => (
+            <div key={entry.id}>
+              <div className="group py-3 px-1 hover:bg-white/[0.03] rounded transition-all cursor-pointer"
+                onClick={() => { onSelect?.(entry); onClose(); }}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg lux-crimson" style={{ fontFamily: "'UnifrakturCook', serif" }}>
+                        {formatChapterNumber(entry.chapter)}
                       </span>
-                    )}
+                      <span className="lux text-sm truncate" style={{ fontFamily: "'Pirata One', serif" }}>
+                        {entry.title}
+                      </span>
+                      {recurrenceMap[entry.chapter] > 1 && (
+                        <span className="text-[9px]" style={{ color: '#f0b75e', textShadow: '0 0 8px rgba(240,183,94,0.5)' }}>
+                          ×{recurrenceMap[entry.chapter]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="lux text-[12px] truncate italic" style={{ fontFamily: "'IM Fell English', serif" }}>{entry.question}</div>
+                    <div className="lux-dim text-[10px] mt-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {" · "}{entry.gematria}
+                      {entry.spreadType && ` · ${entry.spreadType}`}
+                    </div>
                   </div>
-                  <div className="text-neutral-500 text-[11px] truncate">{entry.question}</div>
-                  <div className="text-neutral-700 text-[10px] mt-1">
-                    {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    {" · "}{entry.gematria}
-                    {entry.spreadType && ` · ${entry.spreadType}`}
-                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+                    className="opacity-0 group-hover:opacity-100 lux-dim hover:lux-crimson transition-all text-sm ml-3">✕</button>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-                  className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-700 transition-all text-sm ml-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/5">✕</button>
               </div>
+              {idx < entries.length - 1 && <hr className="star-rule opacity-20" />}
             </div>
           ))}
         </div>
@@ -2627,12 +2738,12 @@ const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
           The Tree of Life
         </h2>
         <button onClick={onBack}
-          className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
+          className="text-neutral-400 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
           style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           ← ORACLE
         </button>
       </div>
-      <p className="text-neutral-700 text-[10px] mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+      <p className="text-neutral-400 text-[10px] mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
         The 96 chapters mapped to the 10 Sephiroth and 22 Paths · tap a sphere or path
       </p>
 
@@ -2723,60 +2834,60 @@ const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
         {/* ── Detail panel ── */}
         <div className="min-h-[280px]">
           {!selected ? (
-            <div className="text-neutral-600 text-[12px] leading-relaxed border border-white/[0.04] rounded-xl p-5"
-              style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              <div className="text-neutral-400 mb-3 tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-                ✦ THE MAP OF EMANATION
+            <div className="lux text-[14px] leading-relaxed p-2"
+              style={{ fontFamily: "'IM Fell English', serif" }}>
+              <div className="mb-3 tracking-wider lux-crimson text-lg" style={{ fontFamily: "'UnifrakturCook', serif" }}>
+                ✦ The Map of Emanation
               </div>
               Each sphere is a Sephira — a vessel of divine light. Each line is a Path — a letter of the Hebrew alphabet, a Tarot trump, a doorway between states.
               <br /><br />
               The Book of Lies is woven through the whole Tree: the ten numbered chapters descend the spheres from Crown to Kingdom; chapters 11–32 walk the twenty-two paths; the rest cluster where their gematria binds them.
               <br /><br />
-              <span style={{ color: accentColor + 'aa' }}>Select a sphere or path to descend.</span>
+              <span className="lux-crimson">Select a sphere or path to descend.</span>
             </div>
           ) : (
             <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
               <div className="flex items-center gap-2 mb-1">
                 {selected !== "__veils__" && selInfo && (
-                  <span className="w-3 h-3 rounded-full border border-white/20"
-                    style={{ background: selInfo.color, boxShadow: `0 0 8px ${selInfo.color}80` }} />
+                  <span className="w-3 h-3 rounded-full"
+                    style={{ background: selInfo.color, boxShadow: `0 0 12px ${selInfo.color}` }} />
                 )}
-                <h3 className="text-base tracking-wider" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
+                <h3 className="text-xl gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif" }}>
                   {selected === "__veils__" ? "The Three Veils" : selected}
                 </h3>
               </div>
               {selInfo && (
-                <div className="text-[10px] text-neutral-600 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <div className="text-[10px] text-neutral-400 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                   {selInfo.meaning}
                   {selInfo.planet && selInfo.planet !== "—" && <> · {selInfo.planet}</>}
                   {selInfo.godName && selInfo.godName !== "—" && <> · {selInfo.godName}</>}
                 </div>
               )}
               {selected === "__veils__" && (
-                <div className="text-[10px] text-neutral-600 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <div className="text-[10px] text-neutral-400 mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                   Ain · Ain Soph · Ain Soph Aur — the Boundless Negative before the first emanation
                 </div>
               )}
 
               {selChapters.length === 0 ? (
-                <div className="text-neutral-700 text-[11px] italic">No chapter seated here — a silent vessel.</div>
+                <div className="text-neutral-400 text-[11px] italic">No chapter seated here — a silent vessel.</div>
               ) : (
                 <div className="space-y-1.5 max-h-[340px] overflow-y-auto pr-1">
                   {selChapters.map((ch) => (
                     <button key={ch.chapter} onClick={() => onSelectChapter(ch)}
-                      className="w-full text-left flex items-start gap-3 px-3 py-2 rounded-lg border border-white/[0.04] hover:border-white/[0.1] hover:bg-white/[0.02] transition-all group">
-                      <span className="text-base shrink-0 w-8 text-center" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor }}>
+                      className="w-full text-left flex items-start gap-3 px-1 py-2 hover:bg-white/[0.03] rounded transition-all group">
+                      <span className="text-lg shrink-0 w-8 text-center lux-crimson" style={{ fontFamily: "'UnifrakturCook', serif" }}>
                         {formatChapterNumber(ch.chapter)}
                       </span>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[11px] text-neutral-300 tracking-wide truncate" style={{ fontFamily: 'Cinzel, serif' }}>
+                        <span className="block text-[13px] lux tracking-wide truncate" style={{ fontFamily: "'Pirata One', serif" }}>
                           {ch.title}
                         </span>
-                        <span className="block text-[9px] text-neutral-600 mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                        <span className="block text-[9px] lux-dim mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                           {ch.element}{ch.tarot && ch.tarot !== "—" ? ` · ${ch.tarot}` : ''}
                         </span>
                       </span>
-                      <span className="text-neutral-700 group-hover:text-neutral-400 text-[10px] self-center transition-colors">→</span>
+                      <span className="lux-dim group-hover:lux-crimson text-[12px] self-center transition-colors">→</span>
                     </button>
                   ))}
                 </div>
@@ -2818,32 +2929,35 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
             The Rites
           </h2>
           <button onClick={onBack}
-            className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
+            className="text-neutral-400 hover:text-neutral-400 text-[10px] tracking-wider px-3 py-1.5 rounded hover:bg-white/[0.03] transition-colors"
             style={{ fontFamily: 'JetBrains Mono, monospace' }}>← ORACLE</button>
         </div>
-        <p className="text-neutral-700 text-[10px] mb-6" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        <p className="text-neutral-400 text-[10px] mb-6" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           The three performable ceremonies of Liber 333 · guided station by station
         </p>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {Object.values(RITUALS).map((r) => (
-            <button key={r.chapter} onClick={() => openRite(r.chapter)}
-              className="w-full text-left rounded-xl border border-white/[0.05] hover:border-white/[0.12] hover:bg-white/[0.02] transition-all p-5 group">
-              <div className="flex items-center gap-3 mb-1.5">
-                <span className="text-2xl" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor }}>
-                  {formatChapterNumber(r.chapter)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-base tracking-wider text-neutral-200" style={{ fontFamily: 'Cinzel, serif' }}>{r.title}</div>
-                  <div className="text-[10px] text-neutral-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{r.subtitle}</div>
+            <div key={r.chapter}>
+              <button onClick={() => openRite(r.chapter)}
+                className="w-full text-left hover:bg-white/[0.03] rounded-lg transition-all p-3 group">
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-3xl lux-crimson" style={{ fontFamily: "'UnifrakturCook', serif" }}>
+                    {formatChapterNumber(r.chapter)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xl gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif" }}>{r.title}</div>
+                    <div className="text-[11px] lux-dim italic" style={{ fontFamily: "'IM Fell English', serif" }}>{r.subtitle}</div>
+                  </div>
+                  <span className="lux-dim group-hover:lux-crimson transition-colors text-base">→</span>
                 </div>
-                <span className="text-neutral-700 group-hover:text-neutral-400 transition-colors text-sm">→</span>
-              </div>
-              <div className="text-[10px] text-neutral-700 flex items-center gap-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                <span>{ELEMENT_SYMBOLS[r.element] || ''} {r.element}</span>
-                <span>· {r.steps.length} stations</span>
-                <span>· {r.duration}</span>
-              </div>
-            </button>
+                <div className="text-[10px] lux-dim flex items-center gap-3 pl-12" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  <span>{ELEMENT_SYMBOLS[r.element] || ''} {r.element}</span>
+                  <span>· {r.steps.length} stations</span>
+                  <span>· {r.duration}</span>
+                </div>
+              </button>
+              <hr className="star-rule opacity-30 mt-2" />
+            </div>
           ))}
         </div>
       </div>
@@ -2855,28 +2969,28 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
     return (
       <div className="w-full max-w-xl mx-auto text-center" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
         <button onClick={closeRite}
-          className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider mb-6 inline-block"
+          className="text-neutral-400 hover:text-neutral-400 text-[10px] tracking-wider mb-6 inline-block"
           style={{ fontFamily: 'JetBrains Mono, monospace' }}>← ALL RITES</button>
         <div className="mb-4">
           <AnimatedSigil input={rite.title} size={120} spinning={true} glowing={true} accentColor={accentColor} />
         </div>
-        <div className="text-5xl mb-2" style={{ fontFamily: 'Cinzel Decorative, serif', color: accentColor, textShadow: `0 0 50px ${accentColor}33` }}>
+        <div className="text-6xl mb-2 gilded" style={{ fontFamily: "'UnifrakturCook', serif", filter: `drop-shadow(0 0 30px ${accentColor}66)` }}>
           {formatChapterNumber(rite.chapter)}
         </div>
-        <h2 className="text-3xl mb-1 gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.04em' }}>{rite.title}</h2>
-        <div className="text-[11px] tracking-[0.25em] text-neutral-600 mb-6" style={{ fontFamily: 'Cinzel, serif' }}>{rite.subtitle.toUpperCase()}</div>
-        <p className="text-neutral-400 text-[13px] leading-relaxed mb-8 text-left border-l-2 pl-5" style={{ borderColor: accentColor + '30' }}>
+        <h2 className="text-3xl mb-1 gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>{rite.title}</h2>
+        <div className="text-[11px] tracking-[0.25em] lux-dim mb-6" style={{ fontFamily: 'Cinzel, serif' }}>{rite.subtitle.toUpperCase()}</div>
+        <p className="lux text-[15px] leading-relaxed mb-8 text-left max-w-md mx-auto" style={{ fontFamily: "'IM Fell English', serif" }}>
           {rite.intro}
         </p>
         {!audioEnabled && (
-          <p className="text-[10px] text-amber-700/70 mb-5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          <p className="text-[11px] mb-5" style={{ color: '#f0b75e', textShadow: '0 0 10px rgba(240,183,94,0.4)', fontFamily: 'JetBrains Mono, monospace' }}>
             ☉ Enable sound (♪ in the top bar) to hear the bell at each station.
           </p>
         )}
         <button onClick={() => { setStarted(true); setStepIndex(0); }}
-          className="border px-10 py-3.5 rounded-lg text-sm tracking-[0.25em] transition-all duration-700 hover:tracking-[0.35em]"
-          style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '30', background: `linear-gradient(135deg, transparent, ${accentColor}08)` }}>
-          BEGIN THE RITE
+          className="text-base tracking-[0.3em] lux-crimson transition-all duration-700 hover:tracking-[0.45em]"
+          style={{ fontFamily: 'Cinzel, serif' }}>
+          ✦ BEGIN THE RITE ✦
         </button>
       </div>
     );
@@ -2889,47 +3003,46 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
       {/* header */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={closeRite}
-          className="text-neutral-600 hover:text-neutral-400 text-[10px] tracking-wider"
+          className="lux-dim hover:lux-crimson text-[10px] tracking-wider transition-colors"
           style={{ fontFamily: 'JetBrains Mono, monospace' }}>✕ END RITE</button>
-        <div className="text-[10px] tracking-[0.25em]" style={{ fontFamily: 'Cinzel, serif', color: accentColor }}>
-          {rite.title.toUpperCase()}
+        <div className="text-[11px] tracking-[0.2em] lux-crimson" style={{ fontFamily: 'Cinzel, serif' }}>
+          {rite.title}
         </div>
-        <div className="text-[10px] text-neutral-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        <div className="text-[10px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
           {stepIndex + 1} / {rite.steps.length}
         </div>
       </div>
 
       {/* progress */}
-      <div className="h-px w-full bg-neutral-800 rounded-full overflow-hidden mb-8">
-        <div className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${accentColor}40, ${accentColor})` }} />
+      <div className="h-px w-full mb-9" style={{ background: 'rgba(150,160,230,0.15)' }}>
+        <div className="h-full transition-all duration-500"
+          style={{ width: `${progress}%`, background: 'linear-gradient(90deg, rgba(150,160,230,0.4), #ff5e74)', boxShadow: '0 0 8px rgba(255,94,116,0.6)' }} />
       </div>
 
-      {/* station card */}
+      {/* station — floating, no box */}
       <div key={stepIndex} className="text-center" style={{ animation: 'fadeInUp 0.5s ease-out' }}>
-        <div className="text-[11px] tracking-[0.35em] text-neutral-600 mb-5" style={{ fontFamily: 'Cinzel, serif' }}>
+        <div className="text-[11px] tracking-[0.35em] lux-crimson mb-5" style={{ fontFamily: 'Cinzel, serif' }}>
           {step.station.toUpperCase()}
-          {step.bell && <span className="ml-2" style={{ color: accentColor + '99' }}>🔔</span>}
+          {step.bell && <span className="ml-2">🔔</span>}
         </div>
 
-        <p className="text-neutral-400 text-[13px] leading-relaxed mb-7 max-w-md mx-auto">
+        <p className="lux text-[15px] leading-relaxed mb-8 max-w-md mx-auto" style={{ fontFamily: "'IM Fell English', serif" }}>
           {step.direction}
         </p>
 
         {step.words && (
-          <div className="mb-5 py-5 px-4 rounded-xl border"
-            style={{ borderColor: accentColor + '22', background: `radial-gradient(120% 120% at 50% 0%, ${accentColor}0a, transparent)` }}>
-            <div className={`${isFinal ? 'text-xl' : 'text-lg md:text-xl'} leading-relaxed mb-2`}
-              style={{ fontFamily: 'Cinzel, serif', color: accentColor, textShadow: `0 0 40px ${accentColor}33` }}>
+          <div className="mb-6">
+            <div className={`${isFinal ? 'text-2xl' : 'text-xl md:text-2xl'} leading-relaxed mb-3 gilded`}
+              style={{ fontFamily: "'Cinzel', serif" }}>
               {step.words}
             </div>
             {step.translit && (
-              <div className="text-[12px] text-neutral-400 italic mb-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              <div className="text-[13px] lux italic mb-1" style={{ fontFamily: "'IM Fell English', serif" }}>
                 {step.translit}
               </div>
             )}
             {step.meaning && (
-              <div className="text-[10px] text-neutral-600" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+              <div className="text-[11px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                 {step.meaning}
               </div>
             )}
@@ -2937,22 +3050,22 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
         )}
       </div>
 
-      {/* controls */}
-      <div className="flex items-center justify-center gap-3 mt-8">
+      {/* controls — floating text */}
+      <div className="flex items-center justify-center gap-8 mt-10">
         <button onClick={() => setStepIndex(i => Math.max(0, i - 1))} disabled={stepIndex === 0}
-          className={`border px-5 py-2.5 rounded-lg text-[11px] tracking-[0.15em] transition-all ${stepIndex === 0 ? 'opacity-30 cursor-default border-neutral-800/50 text-neutral-600' : 'border-neutral-800/50 text-neutral-500 hover:text-neutral-300 hover:border-neutral-700'}`}
+          className={`text-[11px] tracking-[0.18em] transition-all ${stepIndex === 0 ? 'opacity-25 cursor-default lux-dim' : 'lux-dim hover:text-[#d8dcf2]'}`}
           style={{ fontFamily: 'Cinzel, serif' }}>← BACK</button>
 
         {!isFinal ? (
           <button onClick={() => setStepIndex(i => Math.min(rite.steps.length - 1, i + 1))}
-            className="border px-8 py-2.5 rounded-lg text-[11px] tracking-[0.2em] transition-all hover:tracking-[0.3em]"
-            style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '40', background: `linear-gradient(135deg, transparent, ${accentColor}10)` }}>
+            className="text-[12px] tracking-[0.2em] lux-crimson transition-all hover:tracking-[0.32em]"
+            style={{ fontFamily: 'Cinzel, serif' }}>
             NEXT STATION →
           </button>
         ) : (
           <button onClick={closeRite}
-            className="border px-8 py-2.5 rounded-lg text-[11px] tracking-[0.2em] transition-all hover:tracking-[0.3em]"
-            style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '40', background: `linear-gradient(135deg, transparent, ${accentColor}10)` }}>
+            className="text-[12px] tracking-[0.2em] lux-crimson transition-all hover:tracking-[0.32em]"
+            style={{ fontFamily: 'Cinzel, serif' }}>
             ✦ THE RITE IS COMPLETE
           </button>
         )}
@@ -2972,62 +3085,61 @@ const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
   return (
     <div className="w-full max-w-xl mx-auto px-4">
       <button onClick={onBack}
-        className="text-neutral-600 hover:text-neutral-400 text-xs tracking-widest mb-8 transition-colors flex items-center gap-2"
+        className="text-neutral-400 hover:text-neutral-400 text-xs tracking-widest mb-8 transition-colors flex items-center gap-2"
         style={{ fontFamily: 'JetBrains Mono, monospace' }}>
         <span>←</span> RETURN TO ORACLE
       </button>
 
-      <h2 className="text-3xl text-center mb-2 gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.04em' }}>
+      <h2 className="text-3xl text-center mb-2 gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
         Gematria Calculator
       </h2>
-      <p className="text-center text-neutral-600 text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+      <p className="text-center lux-dim text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
         English Qabalah · A=1 B=2 ... Z=26
       </p>
 
       <div className="relative">
         <input type="text" value={input} onChange={e => setInput(e.target.value)}
           placeholder="Enter a word or phrase..."
-          className="w-full bg-transparent border border-neutral-800 rounded-lg px-4 py-3.5 text-neutral-200 text-sm
-            placeholder-neutral-700 focus:outline-none transition-colors"
-          style={{ fontFamily: 'JetBrains Mono, monospace', borderColor: input ? accentColor + '40' : undefined }}
+          className="w-full bg-transparent px-2 py-3 text-center text-lg lux placeholder:text-[#5b608a] focus:outline-none transition-all"
+          style={{
+            fontFamily: "'IM Fell English', serif", border: 'none', borderBottom: '1px solid transparent',
+            borderImage: input ? 'linear-gradient(90deg, transparent, #ff5e74, transparent) 1' : 'linear-gradient(90deg, transparent, rgba(150,160,230,0.4), transparent) 1',
+          }}
         />
       </div>
 
       {result && (
         <div className="mt-8 space-y-6">
           <div className="text-center">
-            <div className="text-7xl font-bold mb-1" style={{ fontFamily: 'Cinzel, serif', color: accentColor, textShadow: `0 0 40px ${accentColor}33` }}>
+            <div className="text-7xl mb-1 gilded" style={{ fontFamily: "'UnifrakturCook', serif", filter: `drop-shadow(0 0 30px ${accentColor}55)` }}>
               {result.simple}
             </div>
-            <div className="text-neutral-600 text-[11px]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="lux-dim text-[11px]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {result.reductionSteps.join(" → ")} · {result.raw} letter{result.raw !== 1 ? 's' : ''}
             </div>
           </div>
 
           {corr.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[10px] text-neutral-600 tracking-[0.3em] mb-2" style={{ fontFamily: 'Cinzel, serif' }}>CORRESPONDENCES</div>
+              <div className="text-[10px] lux-crimson tracking-[0.3em] mb-2" style={{ fontFamily: 'Cinzel, serif' }}>CORRESPONDENCES</div>
               {corr.map((c, i) => (
-                <div key={i} className="flex items-start gap-2 text-[12px]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${
-                    c.type === 'direct' ? 'bg-red-900/40 text-red-500' :
-                    c.type === 'square' ? 'bg-amber-900/40 text-amber-500' :
-                    c.type === 'factor' ? 'bg-neutral-800 text-neutral-400' :
-                    'bg-neutral-800/50 text-neutral-500'
-                  }`}>{c.type}</span>
-                  <span className="text-neutral-400">{c.text}</span>
+                <div key={i} className="flex items-start gap-2 text-[13px]" style={{ fontFamily: "'IM Fell English', serif" }}>
+                  <span className="text-[9px] uppercase tracking-wider mt-1"
+                    style={{ color: c.type === 'direct' ? '#ff8fa0' : c.type === 'square' ? '#f0b75e' : '#9aa0c4' }}>{c.type}</span>
+                  <span className="lux">{c.text}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="border-t border-neutral-800/50 pt-4">
-            <div className="text-[10px] text-neutral-600 tracking-[0.3em] mb-3" style={{ fontFamily: 'Cinzel, serif' }}>HEBREW LETTERS</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-neutral-500" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          <div className="pt-4">
+            <hr className="star-rule mb-3 opacity-40" />
+            <div className="text-[10px] lux-crimson tracking-[0.3em] mb-3" style={{ fontFamily: 'Cinzel, serif' }}>HEBREW LETTERS</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {Object.entries(HEBREW_LETTERS).map(([name, data]) => (
                 <div key={name} className="flex items-center gap-2">
-                  <span className="w-4 text-center" style={{ color: accentColor + '99' }}>{data.letter}</span>
-                  <span className="text-neutral-600 w-8 text-right">{data.value}</span>
+                  <span className="w-4 text-center lux-crimson">{data.letter}</span>
+                  <span className="lux w-8 text-right">{data.value}</span>
                   <span>{name}</span>
                 </div>
               ))}
@@ -3321,8 +3433,9 @@ const App = () => {
                             phase === "revelation" ? 0.4 : isAmbient ? 0.15 : 0;
 
   // Abyss shader swell: deepest during the Communing act, gentle elsewhere.
-  const abyssIntensity = phase === "ritual" ? (ritualAct === 1 ? 1.15 : ritualAct >= 3 ? 0.2 : 0.7) :
-                         phase === "revelation" ? 0.5 : isAmbient ? 0.4 : 0.28;
+  // Kept low so the cosmos never washes out the floating text.
+  const abyssIntensity = phase === "ritual" ? (ritualAct === 1 ? 0.85 : ritualAct >= 3 ? 0.15 : 0.5) :
+                         phase === "revelation" ? 0.3 : isAmbient ? 0.28 : 0.2;
 
   const ritualLabels = ["INVOKING", "COMMUNING", "RECEIVING", "　", "COMPLETE"];
 
@@ -3330,83 +3443,74 @@ const App = () => {
   const spreadLabels = ["THESIS", "ANTITHESIS", "SYNTHESIS"];
 
   return (
-    <div className="min-h-screen bg-black text-neutral-300 relative overflow-x-hidden"
-      style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+    <div className="min-h-screen relative overflow-x-hidden"
+      style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--lux)', background: 'transparent' }}>
 
       {/* Background Layers */}
       <AbyssShader accentColor={accentColor} intensity={abyssIntensity} active={true} />
       <NoiseBackground />
       <ParticleCanvas active={particleActive} intensity={particleIntensity} accentColor={accentColor} />
       {isAmbient && <AmbientWhispers active={true} />}
-      <BabalonStar accentColor={accentColor} />
+      <Marginalia />
+      <BabalonStar accentColor="#ff2e4d" />
       <Shockwave active={showShockwave} color={accentColor} />
       <CRTOverlay />
 
       {/* ═══ TOP NAVIGATION ═══ */}
       <nav className="fixed top-0 left-0 right-0"
-        style={{ zIndex: 40, background: 'linear-gradient(180deg, rgba(8,0,0,0.94), rgba(0,0,0,0.86))', backdropFilter: 'blur(14px)', borderBottom: `1px solid ${accentColor}33`, paddingTop: 'calc(var(--safe-top) + 6px)' }}>
+        style={{ zIndex: 40, background: 'linear-gradient(180deg, rgba(7,5,18,0.92), rgba(5,3,15,0.78) 70%, transparent)', backdropFilter: 'blur(10px)', paddingTop: 'calc(var(--safe-top) + 8px)' }}>
         {/* Row 1 — brand + ambient state + sound toggles */}
         <div className="flex items-center justify-between gap-2 px-3 pb-1.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-base sm:text-lg leading-none gilded truncate" style={{ fontFamily: "'Pirata One', 'Cinzel Decorative', serif", letterSpacing: '0.04em' }}>
+            <span className="text-lg sm:text-xl leading-none gilded truncate" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
               Liber CCCXXXIII
             </span>
             {planetary && (
-              <span className="text-[10px] text-neutral-500 hidden sm:inline-flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                <span style={{ color: accentColor }}>{planetary.symbol}</span>
+              <span className="text-[10px] lux-dim hidden sm:inline-flex items-center gap-1.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                <span style={{ color: '#ff5e74' }}>{planetary.symbol}</span>
                 {planetary.planet} Hour
                 {lunar && <span title={lunar.name}>· {lunar.emoji}</span>}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
             {voice.available && (
               <button onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) voice.stop(); }}
                 title="Sage's voice — narration"
-                className="text-[12px] w-8 h-8 rounded-full border flex items-center justify-center transition-all"
+                className="text-[15px] transition-all duration-300"
                 style={{
-                  color: voiceEnabled ? '#fff' : accentColor + 'cc',
-                  borderColor: voiceEnabled ? accentColor : accentColor + '40',
-                  background: voiceEnabled ? `radial-gradient(circle, ${accentColor}55, ${accentColor}22)` : 'transparent',
-                  boxShadow: voiceEnabled ? `0 0 12px ${accentColor}77` : 'none',
+                  color: voiceEnabled ? '#ff5e74' : '#7e84ad',
+                  textShadow: voiceEnabled ? '0 0 14px rgba(255,46,77,0.8)' : 'none',
                 }}>◉</button>
             )}
             <button onClick={() => setAudioEnabled(!audioEnabled)}
               title="Ambient sound & bells"
-              className="text-[13px] w-8 h-8 rounded-full border flex items-center justify-center transition-all"
+              className="text-[16px] transition-all duration-300"
               style={{
-                color: audioEnabled ? '#fff' : accentColor + 'cc',
-                borderColor: audioEnabled ? accentColor : accentColor + '40',
-                background: audioEnabled ? `radial-gradient(circle, ${accentColor}55, ${accentColor}22)` : 'transparent',
-                boxShadow: audioEnabled ? `0 0 12px ${accentColor}77` : 'none',
+                color: audioEnabled ? '#ff5e74' : '#7e84ad',
+                textShadow: audioEnabled ? '0 0 14px rgba(255,46,77,0.8)' : 'none',
               }}>{audioEnabled ? "♫" : "♪"}</button>
           </div>
         </div>
-        {/* Row 2 — mode pills (horizontally scrollable, never clipped) */}
-        <div className="nav-rail flex items-center gap-2 px-3 pb-2 overflow-x-auto">
+        {/* Row 2 — floating mode glyphs (horizontally scrollable, never clipped) */}
+        <div className="nav-rail flex items-center gap-5 px-4 pb-2 overflow-x-auto">
           {[["oracle", "ORACLE"], ["ritual", "RITES"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => {
             const on = mode === m;
             return (
               <button key={m} onClick={() => { setMode(m); if (m === "ritual") setRitualChapter(null); }}
-                className="text-[10px] tracking-[0.18em] px-3.5 py-1.5 rounded-full border whitespace-nowrap transition-all duration-300"
-                style={{
-                  fontFamily: 'Cinzel, serif',
-                  color: on ? '#fff' : accentLight,
-                  borderColor: on ? accentColor : accentColor + '55',
-                  background: on ? `linear-gradient(135deg, ${accentColor}66, ${accentColor}22)` : `${accentColor}0d`,
-                  boxShadow: on ? `0 0 14px ${accentColor}66, inset 0 0 8px ${accentColor}33` : 'none',
-                }}>
+                className={`relative text-[12px] tracking-[0.22em] whitespace-nowrap transition-all duration-300 ${on ? 'lux-crimson' : 'lux-dim hover:text-[#cfd3ee]'}`}
+                style={{ fontFamily: 'Cinzel, serif' }}>
+                {on && <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[9px]" style={{ color: '#ff5e74' }}>✦</span>}
                 {label}
               </button>
             );
           })}
           <button onClick={() => setShowJournal(true)}
-            className="text-[10px] tracking-[0.18em] px-3.5 py-1.5 rounded-full border whitespace-nowrap transition-all duration-300 relative"
-            style={{ fontFamily: 'Cinzel, serif', color: accentLight, borderColor: accentColor + '55', background: `${accentColor}0d` }}>
+            className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300"
+            style={{ fontFamily: 'Cinzel, serif' }}>
             GRIMOIRE
             {journal.entries.length > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[8px] flex items-center justify-center font-bold"
-                style={{ background: accentColor, color: '#fff', boxShadow: `0 0 8px ${accentColor}` }}>
+              <span className="absolute -top-2 -right-3 text-[9px] font-bold lux-crimson">
                 {journal.entries.length}
               </span>
             )}
@@ -3451,7 +3555,8 @@ const App = () => {
             {/* ═══ INIT PHASE ═══ */}
             {phase === "init" && (
               <div className="text-center max-w-lg mx-auto" style={{ animation: 'fadeIn 2s ease-out' }}>
-                <div className="mb-6" style={{ animation: isAmbient ? 'breathe 8s ease-in-out infinite' : 'none' }}>
+                <div className="mb-6 relative inline-flex items-center justify-center" style={{ animation: isAmbient ? 'breathe 8s ease-in-out infinite' : 'none' }}>
+                  <ZodiacRing size={300} accentColor="#ff2e4d" />
                   <AnimatedSigil input="LIBER CCCXXXIII" size={180} spinning={true} glowing={true}
                     evolutionRings={evolutionRings} accentColor={accentColor} />
                 </div>
@@ -3464,32 +3569,27 @@ const App = () => {
                   style={{ fontFamily: "'UnifrakturCook', 'Cinzel Decorative', serif", filter: `drop-shadow(0 0 40px ${accentColor}55)` }}>
                   The Book of Lies
                 </h1>
-                <hr className="gild-rule w-40 mx-auto mb-3" />
-                <p className="text-neutral-500 text-[11px] tracking-[0.35em] mb-1" style={{ fontFamily: "'Pirata One', serif" }}>
+                <hr className="star-rule w-48 mx-auto mb-3" />
+                <p className="lux-dim text-[11px] tracking-[0.35em] mb-1" style={{ fontFamily: "'Pirata One', serif" }}>
                   LIBER CCCXXXIII
                 </p>
-                <p className="text-neutral-700 text-[11px] mb-12 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
+                <p className="lux-dim text-[12px] mb-12 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
                   93 chapters · gematric divination · the Oracle of the Abyss
                 </p>
                 <button onClick={() => setPhase("input")}
-                  className="border-2 px-10 py-3.5 rounded-lg text-sm tracking-[0.25em] transition-all duration-700 hover:tracking-[0.35em]"
-                  style={{
-                    fontFamily: 'Cinzel, serif', color: '#fff',
-                    borderColor: accentColor,
-                    background: `linear-gradient(135deg, ${accentColor}33, ${accentColor}11)`,
-                    boxShadow: `0 0 24px ${accentColor}55, inset 0 0 16px ${accentColor}22`,
-                  }}>
+                  className="text-base tracking-[0.3em] lux-crimson transition-all duration-700 hover:tracking-[0.45em]"
+                  style={{ fontFamily: 'Cinzel, serif' }}>
                   ✦ BEGIN CONSULTATION ✦
                 </button>
 
                 {/* Cosmic info */}
                 {planetary && (
-                  <div className="mt-10 text-[10px] text-neutral-700 space-y-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  <div className="mt-12 text-[11px] lux-dim space-y-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     <div>
-                      <span style={{ color: accentColor + '80' }}>{planetary.symbol}</span> {planetary.planet} hour
+                      <span style={{ color: '#ff5e74' }}>{planetary.symbol}</span> {planetary.planet} hour
                       {lunar && <> · {lunar.emoji} {lunar.name}</>}
                     </div>
-                    <div className="text-neutral-800">{planetary.timeOfDay}</div>
+                    <div className="opacity-70">{planetary.timeOfDay}</div>
                   </div>
                 )}
               </div>
@@ -3501,47 +3601,48 @@ const App = () => {
                 <div className="mb-6 opacity-40">
                   <AnimatedSigil input="query" size={80} spinning={true} glowing={false} accentColor={accentColor} />
                 </div>
-                <h2 className="text-3xl mb-2 gilded" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.04em' }}>
+                <h2 className="text-3xl mb-2 gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
                   Speak Your Question
                 </h2>
-                <p className="text-neutral-500 text-[13px] mb-8 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
+                <p className="lux-dim text-[13px] mb-8 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
                   The gematria of your words shall draw the chapter from the Abyss.
                 </p>
 
                 <input type="text" value={question} onChange={e => setQuestion(e.target.value)}
                   onKeyDown={handleKeyDown} autoFocus
                   placeholder="What do you seek to know?"
-                  className="w-full bg-transparent border-b-2 px-2 py-3 text-neutral-200 text-center text-lg
-                    placeholder-neutral-700 focus:outline-none transition-all duration-500"
-                  style={{ fontFamily: 'JetBrains Mono, monospace', borderColor: question ? accentColor + '60' : '#262626' }}
+                  className="w-full bg-transparent px-2 py-3 text-center text-lg lux
+                    placeholder:text-[#5b608a] focus:outline-none transition-all duration-500"
+                  style={{
+                    fontFamily: "'IM Fell English', serif",
+                    border: 'none',
+                    borderBottom: '1px solid transparent',
+                    borderImage: question
+                      ? 'linear-gradient(90deg, transparent, #ff5e74, transparent) 1'
+                      : 'linear-gradient(90deg, transparent, rgba(150,160,230,0.4), transparent) 1',
+                  }}
                 />
 
-                {/* Spread selector */}
-                <div className="flex items-center justify-center gap-4 mt-6">
+                {/* Spread selector — floating text */}
+                <div className="flex items-center justify-center gap-6 mt-7">
                   <button onClick={() => setSpreadType("single")}
-                    className={`text-[10px] tracking-widest px-3 py-1.5 rounded transition-all ${
-                      spreadType === "single" ? 'bg-white/[0.05]' : 'opacity-40 hover:opacity-70'
-                    }`} style={{ color: spreadType === "single" ? accentColor : '#666', fontFamily: 'JetBrains Mono, monospace' }}>
-                    SINGLE
+                    className={`text-[11px] tracking-widest transition-all ${spreadType === "single" ? 'lux-crimson' : 'lux-dim opacity-70 hover:opacity-100'}`}
+                    style={{ fontFamily: 'Cinzel, serif' }}>
+                    {spreadType === "single" ? "✦ " : ""}SINGLE
                   </button>
                   <button onClick={() => setSpreadType("spread")}
-                    className={`text-[10px] tracking-widest px-3 py-1.5 rounded transition-all ${
-                      spreadType === "spread" ? 'bg-white/[0.05]' : 'opacity-40 hover:opacity-70'
-                    }`} style={{ color: spreadType === "spread" ? accentColor : '#666', fontFamily: 'JetBrains Mono, monospace' }}>
-                    TRIAD SPREAD
+                    className={`text-[11px] tracking-widest transition-all ${spreadType === "spread" ? 'lux-crimson' : 'lux-dim opacity-70 hover:opacity-100'}`}
+                    style={{ fontFamily: 'Cinzel, serif' }}>
+                    {spreadType === "spread" ? "✦ " : ""}TRIAD SPREAD
                   </button>
                 </div>
 
                 <button onClick={performDivination} disabled={!question.trim()}
-                  className={`mt-8 border px-10 py-3 rounded-lg text-sm tracking-[0.25em] transition-all duration-500 ${
-                    question.trim() ? 'cursor-pointer hover:tracking-[0.35em]' : 'cursor-not-allowed'
+                  className={`mt-9 text-base tracking-[0.3em] transition-all duration-500 ${
+                    question.trim() ? 'cursor-pointer lux-crimson hover:tracking-[0.45em]' : 'cursor-not-allowed lux-dim opacity-40'
                   }`}
-                  style={{
-                    fontFamily: 'Cinzel, serif',
-                    color: question.trim() ? accentColor : '#404040',
-                    borderColor: question.trim() ? accentColor + '30' : '#1a1a1a',
-                  }}>
-                  DIVINE
+                  style={{ fontFamily: 'Cinzel, serif' }}>
+                  ✦ DIVINE ✦
                 </button>
               </div>
             )}
@@ -3562,7 +3663,7 @@ const App = () => {
                 </div>
 
                 {ritualAct <= 1 && (
-                  <div className="text-neutral-600 text-[11px] tracking-widest mb-2" style={{ animation: 'ritualPulse 2s ease-in-out infinite' }}>
+                  <div className="lux-dim text-[11px] tracking-widest mb-2" style={{ animation: 'ritualPulse 2s ease-in-out infinite' }}>
                     GEMATRIA: {gematriaResult?.simple}
                   </div>
                 )}
@@ -3603,16 +3704,12 @@ const App = () => {
                   <div className="flex items-center justify-center gap-2 mb-6" style={{ animation: 'fadeIn 1s ease-out' }}>
                     {drawnChapters.map((ch, i) => (
                       <button key={i} onClick={() => { setRevealIndex(i); setTextEchoes(findGematriaEchoes(ch.text)); }}
-                        className={`px-4 py-2 rounded-lg text-[10px] tracking-wider transition-all border ${
-                          i === revealIndex ? 'bg-white/[0.04]' : 'opacity-40 hover:opacity-70'
+                        className={`px-4 py-2 text-[10px] tracking-wider transition-all ${
+                          i === revealIndex ? 'lux-crimson' : 'lux-dim opacity-70 hover:opacity-100'
                         }`}
-                        style={{
-                          fontFamily: 'Cinzel, serif',
-                          color: i === revealIndex ? accentColor : '#666',
-                          borderColor: i === revealIndex ? accentColor + '30' : 'transparent',
-                        }}>
-                        <div className="text-[9px] text-neutral-600 mb-0.5">{spreadLabels[i]}</div>
-                        <div>{formatChapterNumber(ch.chapter)}</div>
+                        style={{ fontFamily: 'Cinzel, serif' }}>
+                        <div className="text-[9px] mb-0.5 opacity-80">{spreadLabels[i]}</div>
+                        <div className="text-base">{formatChapterNumber(ch.chapter)}</div>
                       </button>
                     ))}
                   </div>
@@ -3620,18 +3717,19 @@ const App = () => {
 
                 {/* Chapter Header */}
                 <div className="text-center mb-8" style={{ animation: 'fadeInUp 0.8s ease-out' }}>
-                  <div className="mb-4">
+                  <div className="mb-4 relative inline-flex items-center justify-center">
+                    <ZodiacRing size={210} accentColor="#ff2e4d" />
                     <AnimatedSigil input={question || drawnChapter.title} size={120} spinning={true} glowing={true}
                       evolutionRings={evolutionRings} accentColor={accentColor} />
                   </div>
 
                   {isSpread && (
-                    <div className="text-[10px] tracking-[0.35em] text-neutral-600 mb-2" style={{ fontFamily: 'Cinzel, serif' }}>
+                    <div className="text-[10px] tracking-[0.35em] lux-crimson mb-2" style={{ fontFamily: 'Cinzel, serif' }}>
                       {spreadLabels[revealIndex]}
                     </div>
                   )}
 
-                  <div className="text-[10px] tracking-[0.3em] text-neutral-600 mb-2"
+                  <div className="text-[10px] tracking-[0.3em] lux-dim mb-2"
                     style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     CHAPTER
                   </div>
@@ -3649,160 +3747,155 @@ const App = () => {
                     }
                   </div>
 
-                  <hr className="gild-rule w-32 mx-auto mb-2" />
+                  <hr className="star-rule w-40 mx-auto mb-3" />
 
-                  <div className="text-xl text-neutral-200 tracking-wide mb-1" style={{ fontFamily: "'Pirata One', 'Cinzel', serif", letterSpacing: '0.05em' }}>
+                  <div className="text-2xl lux tracking-wide mb-1" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.03em' }}>
                     {glitchActive
                       ? <GlitchText text={drawnChapter.title} active={true} speed={20} />
                       : drawnChapter.title
                     }
                   </div>
 
-                  {/* Recurrence badge */}
+                  {/* Recurrence — floating, no box */}
                   {journal.getRecurrenceCount(drawnChapter.chapter) > 0 && (
-                    <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full text-[9px]"
-                      style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706', fontFamily: 'JetBrains Mono, monospace' }}>
+                    <div className="mt-2 text-[10px] tracking-wide" style={{ color: '#f0b75e', textShadow: '0 0 12px rgba(240,183,94,0.5)', fontFamily: 'JetBrains Mono, monospace' }}>
                       ↻ Drawn {journal.getRecurrenceCount(drawnChapter.chapter) + 1}× — the Book insists
                     </div>
                   )}
 
                   {gematriaResult && (
-                    <div className="text-[11px] text-neutral-600 mt-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                    <div className="text-[12px] lux-dim mt-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       {gematriaResult.simple} → {gematriaResult.reductionSteps.join(" → ")}
                       {drawnChapter.element && ELEMENT_SYMBOLS[drawnChapter.element] &&
                         ` ${ELEMENT_SYMBOLS[drawnChapter.element]}`}
-                      {planetary && <> · <span style={{ color: accentColor + '80' }}>{planetary.symbol}</span> {planetary.planet}</>}
+                      {planetary && <> · <span style={{ color: '#ff5e74' }}>{planetary.symbol}</span> {planetary.planet}</>}
                       {lunar && <> · {lunar.emoji}</>}
                     </div>
                   )}
                 </div>
 
-                {/* Key Text — illuminated manuscript leaf */}
-                <div className="mb-8 relative py-3 pl-6 pr-3"
-                  style={{ borderLeft: `2px solid ${accentColor}40`, animation: 'fadeInUp 1s ease-out 0.3s both' }}>
-                  <span aria-hidden="true" className="absolute -left-2 -top-1 text-base gilded" style={{ fontFamily: "'UnifrakturCook', serif" }}>❧</span>
-                  <span aria-hidden="true" className="absolute -left-2 -bottom-1 text-base gilded" style={{ fontFamily: "'UnifrakturCook', serif", transform: 'rotate(180deg)' }}>❧</span>
-                  <div className="relative text-neutral-200 leading-loose
+                {/* Key Text — floating illuminated verse, no box */}
+                <div className="mb-10 relative text-center px-2" style={{ animation: 'fadeInUp 1s ease-out 0.3s both' }}>
+                  <div aria-hidden="true" className="lux-crimson text-sm mb-3" style={{ fontFamily: "'UnifrakturCook', serif" }}>✦ ❧ ✦</div>
+                  <div className="relative lux leading-loose text-left
                       first-letter:text-6xl first-letter:float-left first-letter:pr-2 first-letter:mt-1 first-letter:leading-[0.7]
-                      first-letter:text-[#ff3b3b] first-letter:[font-family:'UnifrakturCook',serif]
-                      first-letter:[text-shadow:0_0_18px_rgba(255,59,59,0.65)]"
-                    style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16px' }}>
+                      first-letter:text-[#ff5e74] first-letter:[font-family:'UnifrakturCook',serif]
+                      first-letter:[text-shadow:0_0_22px_rgba(255,94,116,0.8)]"
+                    style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '17px' }}>
                     <TypewriterText text={drawnChapter.text} speed={12}
                       onComplete={() => { if (voiceEnabled) voice.speak(drawnChapter.text); }}
                       className="italic" />
                   </div>
                   {textEchoes.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    <div className="mt-4 flex flex-wrap gap-2.5 justify-center">
                       {textEchoes.map((e, i) => (
-                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded"
-                          style={{ background: accentColor + '15', color: accentColor + 'aa', fontFamily: 'JetBrains Mono, monospace' }}>
+                        <span key={i} className="text-[10px]"
+                          style={{ color: '#ff8fa0', textShadow: '0 0 10px rgba(255,46,77,0.4)', fontFamily: 'JetBrains Mono, monospace' }}>
                           {e.word}={e.value}
                         </span>
                       ))}
                     </div>
                   )}
+                  <div aria-hidden="true" className="lux-crimson text-sm mt-4" style={{ fontFamily: "'UnifrakturCook', serif" }}>✦ ❧ ✦</div>
                 </div>
 
                 {/* Expandable Sections */}
                 <div className="space-y-0" style={{ animation: 'fadeInUp 1s ease-out 0.6s both' }}>
-                  <ExpandableSection title="COMMENTARY" icon="☥" defaultOpen={true} accentColor={accentColor}>
-                    <div className="pt-3 whitespace-pre-wrap text-neutral-300 leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '15px' }}>{drawnChapter.commentary}</div>
+                  <ExpandableSection title="Commentary" icon="☥" defaultOpen={true} accentColor={accentColor}>
+                    <div className="pt-1 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16px' }}>{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
                   <ExpandableSection title={isSpread ? "ORACLE OF THE ABYSS · TRIAD SYNTHESIS" : "ORACLE OF THE ABYSS"} icon="☉" defaultOpen={true} accentColor={accentColor}>
-                    <div className="pt-3">
+                    <div className="pt-1">
                       {oracle.loading && !oracle.text ? (
-                        <div className="flex items-center gap-2" style={{ color: accentColor + '80' }}>
+                        <div className="flex items-center gap-2 lux-crimson">
                           <span style={{ animation: 'ritualPulse 1.5s ease-in-out infinite' }}>☉</span>
-                          <span className="text-[11px]">
+                          <span className="text-[12px]">
                             {oracle.thinking ? "The Oracle descends through the veils..." : "The Oracle speaks from the depths..."}
                           </span>
                         </div>
                       ) : oracle.error ? (
-                        <div className="text-xs" style={{ color: accentColor + '80' }}>
-                          The Abyss refuses: {oracle.error}
-                          <button onClick={consultNow} className="ml-2 underline hover:opacity-70">Retry</button>
+                        <div className="text-[13px] lux">
+                          <span className="lux-crimson">The Abyss refuses:</span> {oracle.error}
+                          <button onClick={consultNow} className="ml-2 underline lux-crimson">Retry</button>
                         </div>
                       ) : oracle.text ? (
                         <div className="space-y-3">
-                          <div className="whitespace-pre-wrap text-neutral-300 leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '15.5px' }}>
+                          <div className="whitespace-pre-wrap leading-relaxed lux" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16.5px' }}>
                             {oracle.text}
                             {oracle.streaming && (
-                              <span style={{ color: accentColor, animation: 'ritualPulse 1s ease-in-out infinite' }}>▌</span>
+                              <span style={{ color: '#ff5e74', animation: 'ritualPulse 1s ease-in-out infinite' }}>▌</span>
                             )}
                           </div>
                           {!oracle.streaming && voiceEnabled && voice.available && (
                             <button onClick={() => voice.speaking ? voice.stop() : voice.speak(oracle.text)}
-                              className="text-[10px] tracking-wider transition-colors hover:opacity-70 flex items-center gap-1.5"
-                              style={{ color: accentColor + '80', fontFamily: 'JetBrains Mono, monospace' }}>
+                              className="text-[11px] tracking-wider transition-colors lux-crimson hover:opacity-80 flex items-center gap-1.5"
+                              style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                               {voice.speaking ? "◼ STOP" : "▶ SPEAK"}
                             </button>
                           )}
                         </div>
                       ) : (
-                        <button onClick={consultNow} className="text-[11px] hover:opacity-70 transition-colors"
-                          style={{ color: accentColor + '80' }}>
+                        <button onClick={consultNow} className="text-[12px] lux-crimson hover:opacity-80 transition-colors">
                           {isSpread ? "Invoke the Oracle's synthesis..." : "Invoke the Oracle..."}
                         </button>
                       )}
                     </div>
                   </ExpandableSection>
 
-                  <ExpandableSection title="QABALISTIC ANALYSIS" icon="♁" defaultOpen={false} accentColor={accentColor}>
-                    <div className="pt-3 space-y-3">
+                  <ExpandableSection title="Qabalistic Analysis" icon="♁" defaultOpen={false} accentColor={accentColor}>
+                    <div className="pt-1 space-y-3">
                       {(() => {
                         const info = getSephiraInfo(drawnChapter.sephira);
                         return (
                           <>
-                            <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="grid grid-cols-2 gap-2.5 text-[12px]">
                               <div>
-                                <span className="text-neutral-600">Sephira:</span>{" "}
-                                <span className="text-neutral-300">{drawnChapter.sephira}</span>
-                                <span className="text-neutral-600 ml-1">({info.meaning})</span>
+                                <span className="lux-dim">Sephira:</span>{" "}
+                                <span className="lux">{drawnChapter.sephira}</span>
+                                <span className="lux-dim ml-1">({info.meaning})</span>
                               </div>
                               <div>
-                                <span className="text-neutral-600">Path:</span>{" "}
-                                <span className="text-neutral-300">{drawnChapter.path}</span>
+                                <span className="lux-dim">Path:</span>{" "}
+                                <span className="lux">{drawnChapter.path}</span>
                                 {drawnChapter.path !== "—" && drawnChapter.path !== "∅" && HEBREW_LETTERS[drawnChapter.path] && (
-                                  <span className="ml-1" style={{ color: accentColor + '99' }}>{HEBREW_LETTERS[drawnChapter.path].letter}</span>
+                                  <span className="ml-1 lux-crimson">{HEBREW_LETTERS[drawnChapter.path].letter}</span>
                                 )}
                               </div>
                               <div>
-                                <span className="text-neutral-600">Element:</span>{" "}
-                                <span className="text-neutral-300">{drawnChapter.element}</span>
-                                {ELEMENT_SYMBOLS[drawnChapter.element] && <span className="ml-1">{ELEMENT_SYMBOLS[drawnChapter.element]}</span>}
+                                <span className="lux-dim">Element:</span>{" "}
+                                <span className="lux">{drawnChapter.element}</span>
+                                {ELEMENT_SYMBOLS[drawnChapter.element] && <span className="ml-1 lux">{ELEMENT_SYMBOLS[drawnChapter.element]}</span>}
                               </div>
                               <div>
-                                <span className="text-neutral-600">Tarot:</span>{" "}
-                                <span className="text-neutral-300">{drawnChapter.tarot}</span>
+                                <span className="lux-dim">Tarot:</span>{" "}
+                                <span className="lux">{drawnChapter.tarot}</span>
                               </div>
-                              {info.planet !== "—" && <div><span className="text-neutral-600">Planet:</span> <span className="text-neutral-300">{info.planet}</span></div>}
-                              {info.godName !== "—" && <div><span className="text-neutral-600">God Name:</span> <span className="text-neutral-300">{info.godName}</span></div>}
-                              {info.archangel !== "—" && <div><span className="text-neutral-600">Archangel:</span> <span className="text-neutral-300">{info.archangel}</span></div>}
+                              {info.planet !== "—" && <div><span className="lux-dim">Planet:</span> <span className="lux">{info.planet}</span></div>}
+                              {info.godName !== "—" && <div><span className="lux-dim">God Name:</span> <span className="lux">{info.godName}</span></div>}
+                              {info.archangel !== "—" && <div><span className="lux-dim">Archangel:</span> <span className="lux">{info.archangel}</span></div>}
                             </div>
 
                             {correspondences.length > 0 && (
-                              <div className="border-t border-neutral-800/30 pt-3">
-                                <div className="text-[10px] text-neutral-600 mb-2 tracking-wider">
+                              <div className="pt-3">
+                                <hr className="star-rule mb-3 opacity-40" />
+                                <div className="text-[10px] lux-dim mb-2 tracking-wider">
                                   GEMATRIC CORRESPONDENCES ({gematriaResult?.simple})
                                 </div>
                                 {correspondences.map((c, i) => (
-                                  <div key={i} className="flex items-start gap-2 text-[11px] mb-1">
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded ${
-                                      c.type === 'direct' ? 'bg-red-900/30 text-red-600' :
-                                      c.type === 'square' ? 'bg-amber-900/30 text-amber-600' :
-                                      'bg-neutral-800/50 text-neutral-500'
-                                    }`}>{c.type}</span>
-                                    <span className="text-neutral-500">{c.text}</span>
+                                  <div key={i} className="flex items-start gap-2 text-[12px] mb-1.5">
+                                    <span className="text-[9px] tracking-wider uppercase"
+                                      style={{ color: c.type === 'direct' ? '#ff8fa0' : c.type === 'square' ? '#f0b75e' : '#9aa0c4' }}>{c.type}</span>
+                                    <span className="lux">{c.text}</span>
                                   </div>
                                 ))}
                               </div>
                             )}
 
                             <div className="flex items-center gap-2 mt-2">
-                              <div className="w-3 h-3 rounded-full border border-neutral-700"
-                                style={{ backgroundColor: info.color, boxShadow: `0 0 8px ${info.color}40` }} />
-                              <span className="text-[10px] text-neutral-600">{drawnChapter.sephira}</span>
+                              <div className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: info.color, boxShadow: `0 0 10px ${info.color}` }} />
+                              <span className="text-[11px] lux-dim">{drawnChapter.sephira}</span>
                             </div>
                           </>
                         );
@@ -3815,32 +3908,24 @@ const App = () => {
                 {RITUALS[drawnChapter.chapter] && (
                   <div className="flex justify-center mt-8" style={{ animation: 'fadeInUp 1s ease-out 0.85s both' }}>
                     <button onClick={() => { setRitualChapter(drawnChapter.chapter); setMode("ritual"); }}
-                      className="border px-7 py-3 rounded-lg text-[11px] tracking-[0.2em] transition-all duration-500 hover:tracking-[0.3em]"
-                      style={{ fontFamily: 'Cinzel, serif', color: accentColor, borderColor: accentColor + '40',
-                        background: `linear-gradient(135deg, transparent, ${accentColor}12)` }}>
-                      ☉ PERFORM THIS RITE — {RITUALS[drawnChapter.chapter].title.toUpperCase()}
+                      className="text-[12px] tracking-[0.22em] lux-crimson transition-all duration-500 hover:tracking-[0.34em]"
+                      style={{ fontFamily: 'Cinzel, serif' }}>
+                      ☉ Perform this Rite — {RITUALS[drawnChapter.chapter].title}
                     </button>
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                <div className="flex items-center justify-center gap-3 mt-8 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
+                {/* Action Buttons — floating glowing links */}
+                <div className="flex items-center justify-center gap-8 mt-10 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
                   <button onClick={saveReading} disabled={saved}
-                    className={`border px-6 py-2.5 rounded-lg text-[11px] tracking-[0.15em] transition-all duration-300 ${
-                      saved ? 'cursor-default opacity-40' : 'hover:bg-white/[0.03]'
-                    }`}
-                    style={{
-                      fontFamily: 'Cinzel, serif',
-                      color: saved ? '#555' : accentColor,
-                      borderColor: saved ? '#222' : accentColor + '30',
-                    }}>
-                    {saved ? "✓ RECORDED" : "SAVE TO GRIMOIRE"}
+                    className={`text-[12px] tracking-[0.18em] transition-all duration-300 ${saved ? 'cursor-default lux-dim opacity-60' : 'lux-crimson hover:tracking-[0.28em]'}`}
+                    style={{ fontFamily: 'Cinzel, serif' }}>
+                    {saved ? "✓ Recorded" : "✦ Save to Grimoire"}
                   </button>
                   <button onClick={resetToInput}
-                    className="border border-neutral-800/50 text-neutral-500 px-6 py-2.5 rounded-lg text-[11px] tracking-[0.15em]
-                      hover:border-neutral-700 hover:text-neutral-400 hover:bg-white/[0.02] transition-all duration-300"
+                    className="text-[12px] tracking-[0.18em] lux-dim hover:text-[#d8dcf2] hover:tracking-[0.28em] transition-all duration-300"
                     style={{ fontFamily: 'Cinzel, serif' }}>
-                    NEW READING
+                    New Reading →
                   </button>
                 </div>
               </div>

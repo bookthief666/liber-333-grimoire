@@ -60,12 +60,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ text });
     } catch (err) {
       console.error('Anthropic error:', err.message);
-      if (!geminiKey) return res.status(500).json({ error: err.message });
-      // else fall through to Gemini
+      // Do NOT mask the real Anthropic failure behind Gemini. Surface it.
+      return res.status(502).json({ error: `Anthropic: ${err.message}` });
     }
   }
 
-  // ── Buffered Gemini fallback ─────────────────────────────────────────
+  // ── Buffered Gemini — only when NO Anthropic key is configured ───────
   if (geminiKey) {
     try {
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
   }
 
   return res.status(500).json({
-    error: 'No API key configured. Add ANTHROPIC_API_KEY or GEMINI_API_KEY in Vercel environment variables.',
+    error: 'No Anthropic key found. In Vercel → Settings → Environment Variables, set ANTHROPIC_API_KEY to your secret value (it begins with "sk-ant-"), scope it to Production, then redeploy.',
   });
 }
 
