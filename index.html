@@ -153,6 +153,11 @@
       /* hide horizontal scrollbar on the nav rail but keep it scrollable */
       .nav-rail { scrollbar-width: none; -ms-overflow-style: none; }
       .nav-rail::-webkit-scrollbar { display: none; }
+      /* Ritual button glow on hover */
+      .btn-ritual { transition: letter-spacing 0.5s ease, filter 0.35s ease, opacity 0.3s ease; }
+      .btn-ritual:hover:not(:disabled) { filter: drop-shadow(0 0 10px rgba(255,46,77,0.65)); }
+      .btn-dim-hover { transition: letter-spacing 0.4s ease, color 0.3s ease, filter 0.35s ease; }
+      .btn-dim-hover:hover { filter: drop-shadow(0 0 8px rgba(216,220,242,0.3)); color: #d8dcf2; }
     </style>
   </head>
   <body class="bg-black">

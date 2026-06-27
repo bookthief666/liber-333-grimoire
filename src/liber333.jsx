@@ -3561,7 +3561,7 @@ const App = () => {
                     evolutionRings={evolutionRings} accentColor={accentColor} />
                 </div>
                 {evolutionRings > 0 && (
-                  <div className="text-[9px] text-amber-700/60 tracking-widest mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                  <div className="text-[9px] tracking-widest mb-4" style={{ fontFamily: 'JetBrains Mono, monospace', color: '#f0b75e', textShadow: '0 0 14px rgba(240,183,94,0.55)' }}>
                     YOUR SIGIL · {journal.totalReadings} READING{journal.totalReadings !== 1 ? 'S' : ''} · {evolutionRings} RING{evolutionRings !== 1 ? 'S' : ''} EVOLVED
                   </div>
                 )}
@@ -3577,7 +3577,7 @@ const App = () => {
                   93 chapters · gematric divination · the Oracle of the Abyss
                 </p>
                 <button onClick={() => setPhase("input")}
-                  className="text-base tracking-[0.3em] lux-crimson transition-all duration-700 hover:tracking-[0.45em]"
+                  className="btn-ritual text-base tracking-[0.3em] lux-crimson hover:tracking-[0.45em]"
                   style={{ fontFamily: 'Cinzel, serif' }}>
                   ✦ BEGIN CONSULTATION ✦
                 </button>
@@ -3598,8 +3598,8 @@ const App = () => {
             {/* ═══ INPUT PHASE ═══ */}
             {phase === "input" && (
               <div className="w-full max-w-lg mx-auto text-center" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
-                <div className="mb-6 opacity-40">
-                  <AnimatedSigil input="query" size={80} spinning={true} glowing={false} accentColor={accentColor} />
+                <div className="mb-6 opacity-65">
+                  <AnimatedSigil input="query" size={80} spinning={true} glowing={true} accentColor={accentColor} />
                 </div>
                 <h2 className="text-3xl mb-2 gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
                   Speak Your Question
@@ -3623,6 +3623,20 @@ const App = () => {
                   }}
                 />
 
+                {/* Live gematria preview */}
+                {question.trim() && (() => {
+                  const g = calculateGematria(question);
+                  return (
+                    <div className="mt-3 text-[11px] tracking-[0.18em]"
+                      style={{ fontFamily: 'JetBrains Mono, monospace', color: '#9aa0c4', animation: 'fadeIn 0.4s ease-out' }}>
+                      ∑ {g.simple}
+                      {g.reductionSteps.length > 1 && (
+                        <span className="opacity-60"> → {g.reductionSteps.slice(1).join(' → ')}</span>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Spread selector — floating text */}
                 <div className="flex items-center justify-center gap-6 mt-7">
                   <button onClick={() => setSpreadType("single")}
@@ -3638,8 +3652,8 @@ const App = () => {
                 </div>
 
                 <button onClick={performDivination} disabled={!question.trim()}
-                  className={`mt-9 text-base tracking-[0.3em] transition-all duration-500 ${
-                    question.trim() ? 'cursor-pointer lux-crimson hover:tracking-[0.45em]' : 'cursor-not-allowed lux-dim opacity-40'
+                  className={`mt-9 text-base tracking-[0.3em] ${
+                    question.trim() ? 'btn-ritual cursor-pointer lux-crimson hover:tracking-[0.45em]' : 'cursor-not-allowed lux-dim opacity-40'
                   }`}
                   style={{ fontFamily: 'Cinzel, serif' }}>
                   ✦ DIVINE ✦
@@ -3680,15 +3694,16 @@ const App = () => {
 
                 {/* Progress bar */}
                 <div className="w-full max-w-xs mx-auto mt-8">
-                  <div className="h-px w-full bg-neutral-800 rounded-full overflow-hidden">
+                  <div className="w-full rounded-full overflow-hidden" style={{ height: '2px', background: 'rgba(150,160,230,0.1)' }}>
                     <div className="h-full rounded-full transition-all duration-200"
                       style={{
                         width: `${ritualProgress}%`,
                         background: `linear-gradient(90deg, ${accentColor}40, ${accentColor}, ${accentLight})`,
+                        boxShadow: `0 0 10px ${accentColor}90, 0 0 20px ${accentColor}40`,
                       }} />
                   </div>
-                  <div className="text-center mt-2 text-[10px] tracking-[0.3em]"
-                    style={{ fontFamily: 'JetBrains Mono, monospace', color: accentColor + '80' }}>
+                  <div className="text-center mt-3 text-[10px] tracking-[0.35em]"
+                    style={{ fontFamily: 'JetBrains Mono, monospace', color: accentColor, textShadow: `0 0 14px ${accentColor}80` }}>
                     {ritualLabels[ritualAct] || ""}
                   </div>
                 </div>
@@ -3808,11 +3823,34 @@ const App = () => {
                   <ExpandableSection title={isSpread ? "ORACLE OF THE ABYSS · TRIAD SYNTHESIS" : "ORACLE OF THE ABYSS"} icon="☉" defaultOpen={true} accentColor={accentColor}>
                     <div className="pt-1">
                       {oracle.loading && !oracle.text ? (
-                        <div className="flex items-center gap-2 lux-crimson">
-                          <span style={{ animation: 'ritualPulse 1.5s ease-in-out infinite' }}>☉</span>
-                          <span className="text-[12px]">
-                            {oracle.thinking ? "The Oracle descends through the veils..." : "The Oracle speaks from the depths..."}
-                          </span>
+                        <div className="py-6 text-center space-y-5" style={{ animation: 'fadeIn 0.6s ease-out' }}>
+                          <div className="flex items-center justify-center gap-4">
+                            {['☽','☿','♀','☉','♂','♃','♄'].map((g, i) => (
+                              <span key={i} style={{
+                                fontSize: '18px',
+                                color: '#ff5e74',
+                                opacity: 0.25,
+                                textShadow: '0 0 18px rgba(255,94,116,0.9)',
+                                animation: `ritualPulse ${1.3 + i * 0.22}s ease-in-out infinite`,
+                                animationDelay: `${i * 0.13}s`,
+                              }}>{g}</span>
+                            ))}
+                          </div>
+                          <div className="italic text-[13px] tracking-wide" style={{
+                            fontFamily: "'IM Fell English', serif",
+                            color: '#ff8fa0',
+                            animation: 'ritualPulse 2.5s ease-in-out infinite',
+                            textShadow: '0 0 22px rgba(255,46,77,0.35)',
+                          }}>
+                            {oracle.thinking
+                              ? "The Oracle descends into the Abyss…"
+                              : "The Oracle speaks from the depths…"}
+                          </div>
+                          <div className="flex items-center justify-center gap-5" style={{ opacity: 0.22 }}>
+                            {['∴','∵','∴','∵','∴'].map((g, i) => (
+                              <span key={i} style={{ fontSize: '11px', color: '#9aa0c4', animation: `ritualPulse ${2.2 + i * 0.55}s ease-in-out infinite`, animationDelay: `${i * 0.28}s` }}>{g}</span>
+                            ))}
+                          </div>
                         </div>
                       ) : oracle.error ? (
                         <div className="text-[13px] lux">
@@ -3821,10 +3859,16 @@ const App = () => {
                         </div>
                       ) : oracle.text ? (
                         <div className="space-y-3">
-                          <div className="whitespace-pre-wrap leading-relaxed lux" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16.5px' }}>
+                          <div className="whitespace-pre-wrap leading-relaxed lux" style={{
+                            fontFamily: "'IM Fell English', Georgia, serif",
+                            fontSize: '16.5px',
+                            ...(oracle.streaming ? {
+                              textShadow: '0 0 1px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.9), 0 0 35px rgba(255,94,116,0.07)',
+                            } : {}),
+                          }}>
                             {oracle.text}
                             {oracle.streaming && (
-                              <span style={{ color: '#ff5e74', animation: 'ritualPulse 1s ease-in-out infinite' }}>▌</span>
+                              <span style={{ color: '#ff5e74', animation: 'ritualPulse 0.9s ease-in-out infinite' }}>▌</span>
                             )}
                           </div>
                           {!oracle.streaming && voiceEnabled && voice.available && (
@@ -3918,12 +3962,12 @@ const App = () => {
                 {/* Action Buttons — floating glowing links */}
                 <div className="flex items-center justify-center gap-8 mt-10 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
                   <button onClick={saveReading} disabled={saved}
-                    className={`text-[12px] tracking-[0.18em] transition-all duration-300 ${saved ? 'cursor-default lux-dim opacity-60' : 'lux-crimson hover:tracking-[0.28em]'}`}
+                    className={`text-[12px] tracking-[0.18em] ${saved ? 'cursor-default lux-dim opacity-60' : 'btn-ritual lux-crimson hover:tracking-[0.28em]'}`}
                     style={{ fontFamily: 'Cinzel, serif' }}>
                     {saved ? "✓ Recorded" : "✦ Save to Grimoire"}
                   </button>
                   <button onClick={resetToInput}
-                    className="text-[12px] tracking-[0.18em] lux-dim hover:text-[#d8dcf2] hover:tracking-[0.28em] transition-all duration-300"
+                    className="btn-dim-hover text-[12px] tracking-[0.18em] lux-dim hover:tracking-[0.28em]"
                     style={{ fontFamily: 'Cinzel, serif' }}>
                     New Reading →
                   </button>
