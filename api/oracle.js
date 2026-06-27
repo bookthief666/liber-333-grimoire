@@ -110,7 +110,8 @@ function buildBody({ prompt, systemPrompt, thinking, stream }) {
     messages: [{ role: 'user', content: prompt }],
   };
   if (thinking) {
-    body.thinking = { type: 'adaptive', budget_tokens: THINKING_BUDGET };
+    body.thinking = { type: 'adaptive' };
+    body.output_config = { effort: 'high' };
   }
   if (stream) body.stream = true;
   return body;
