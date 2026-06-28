@@ -153,14 +153,56 @@
       /* hide horizontal scrollbar on the nav rail but keep it scrollable */
       .nav-rail { scrollbar-width: none; -ms-overflow-style: none; }
       .nav-rail::-webkit-scrollbar { display: none; }
+      /* Global button reset — prevents browser adding borders/backgrounds */
+      button { border: 0; background: transparent; cursor: pointer; padding: 0; }
       /* Ritual button glow on hover */
       .btn-ritual { transition: letter-spacing 0.5s ease, filter 0.35s ease, opacity 0.3s ease; }
-      .btn-ritual:hover:not(:disabled) { filter: drop-shadow(0 0 10px rgba(255,46,77,0.65)); }
+      .btn-ritual:hover:not(:disabled) { filter: drop-shadow(0 0 12px rgba(255,46,77,0.7)); }
       .btn-dim-hover { transition: letter-spacing 0.4s ease, color 0.3s ease, filter 0.35s ease; }
       .btn-dim-hover:hover { filter: drop-shadow(0 0 8px rgba(216,220,242,0.3)); color: #d8dcf2; }
+      /* CSS star field — guaranteed base layer, visible even without WebGL */
+      .css-stars {
+        position: fixed; inset: 0; pointer-events: none; z-index: 0;
+        background:
+          radial-gradient(1px 1px at 12% 18%, rgba(216,220,242,0.7) 0%, transparent 100%),
+          radial-gradient(1px 1px at 28% 42%, rgba(216,220,242,0.5) 0%, transparent 100%),
+          radial-gradient(1px 1px at 45% 8%,  rgba(216,220,242,0.8) 0%, transparent 100%),
+          radial-gradient(1px 1px at 62% 31%, rgba(216,220,242,0.6) 0%, transparent 100%),
+          radial-gradient(1px 1px at 78% 55%, rgba(216,220,242,0.7) 0%, transparent 100%),
+          radial-gradient(1px 1px at 88% 14%, rgba(216,220,242,0.5) 0%, transparent 100%),
+          radial-gradient(1px 1px at 5%  70%, rgba(216,220,242,0.6) 0%, transparent 100%),
+          radial-gradient(1px 1px at 35% 82%, rgba(216,220,242,0.4) 0%, transparent 100%),
+          radial-gradient(1px 1px at 92% 77%, rgba(216,220,242,0.7) 0%, transparent 100%),
+          radial-gradient(1px 1px at 55% 61%, rgba(216,220,242,0.5) 0%, transparent 100%),
+          radial-gradient(1px 1px at 18% 92%, rgba(216,220,242,0.6) 0%, transparent 100%),
+          radial-gradient(1px 1px at 72% 88%, rgba(216,220,242,0.4) 0%, transparent 100%),
+          radial-gradient(2px 2px at 40% 25%, rgba(255,200,200,0.5) 0%, transparent 100%),
+          radial-gradient(2px 2px at 82% 40%, rgba(200,210,255,0.4) 0%, transparent 100%),
+          radial-gradient(2px 2px at 20% 60%, rgba(255,210,180,0.4) 0%, transparent 100%),
+          radial-gradient(1px 1px at 95% 5%,  rgba(216,220,242,0.8) 0%, transparent 100%),
+          radial-gradient(1px 1px at 50% 95%, rgba(216,220,242,0.5) 0%, transparent 100%),
+          radial-gradient(1px 1px at 7%  35%, rgba(216,220,242,0.6) 0%, transparent 100%),
+          radial-gradient(1px 1px at 65% 72%, rgba(216,220,242,0.5) 0%, transparent 100%),
+          radial-gradient(1px 1px at 30% 12%, rgba(216,220,242,0.7) 0%, transparent 100%);
+      }
+      /* Slow shimmer on the faint nebula cloud */
+      .css-nebula {
+        position: fixed; inset: 0; pointer-events: none; z-index: 0;
+        background: radial-gradient(ellipse 70% 45% at 60% 30%, rgba(80,40,160,0.12) 0%, transparent 70%),
+                    radial-gradient(ellipse 50% 60% at 25% 65%, rgba(40,20,100,0.09) 0%, transparent 70%),
+                    radial-gradient(ellipse 40% 30% at 80% 75%, rgba(100,30,60,0.08) 0%, transparent 70%);
+        animation: nebulaDrift 30s ease-in-out infinite alternate;
+      }
+      @keyframes nebulaDrift {
+        0%   { opacity: 0.6; transform: scale(1)   translateX(0); }
+        50%  { opacity: 1.0; transform: scale(1.04) translateX(8px); }
+        100% { opacity: 0.7; transform: scale(1.01) translateX(-5px); }
+      }
     </style>
   </head>
   <body class="bg-black">
+    <div class="css-nebula" aria-hidden="true"></div>
+    <div class="css-stars" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

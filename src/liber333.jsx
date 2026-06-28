@@ -2194,32 +2194,42 @@ const BabalonStar = ({ accentColor = "#ff0028" }) => {
   const inner = heptagramPath(100, 100, 86, s.skip);
   const ring = heptagramPath(100, 100, 60, s.skip === 3 ? 2 : 3);
 
+  const mobileSize = Math.min(s.size, 140); // cap on narrow screens
+
   return (
-    <div className="fixed pointer-events-none hidden sm:block"
+    <div className="fixed pointer-events-none"
       aria-hidden="true"
       style={{
         zIndex: 1, top: `${s.top}%`, left: `${s.left}%`,
         transform: 'translate(-50%, -50%)',
         transition: 'top 2.8s cubic-bezier(.22,1,.36,1), left 2.8s cubic-bezier(.22,1,.36,1)',
         animation: 'babalonAppear 1.6s ease-out both, babalonBreathe 8s ease-in-out 1.6s infinite',
-        mixBlendMode: 'screen',
       }}>
-      <svg key={s.key} width={s.size} height={s.size} viewBox="0 0 200 200"
-        style={{ animation: `babalonSpin ${s.spin}s linear infinite`, transformOrigin: 'center', transform: `scaleX(${s.dir})` }}>
+      <svg key={s.key}
+        width="100%" height="100%"
+        viewBox="0 0 200 200"
+        style={{
+          width: `min(${s.size}px, 38vw)`,
+          height: `min(${s.size}px, 38vw)`,
+          animation: `babalonSpin ${s.spin}s linear infinite`,
+          transformOrigin: 'center',
+          transform: `scaleX(${s.dir})`,
+          overflow: 'visible',
+        }}>
         <defs>
-          <filter id="babGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="2.2" result="b" />
+          <filter id="babGlow" x="-50%" y="-50%" width="200%" height="200%" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="3" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
-        {/* chromatic-aberration ghosts (glitch) */}
-        <path d={inner} fill="none" stroke="#00e0ff" strokeOpacity="0.35" strokeWidth="1" transform="translate(2.2,-1.4)" />
-        <path d={inner} fill="none" stroke="#ff2bdf" strokeOpacity="0.30" strokeWidth="1" transform="translate(-2.2,1.4)" />
-        {/* core heptagram */}
-        <path d={inner} fill="none" stroke={accentColor} strokeWidth="1.6" filter="url(#babGlow)" />
-        <path d={ring} fill="none" stroke={accentColor} strokeOpacity="0.5" strokeWidth="0.8" />
-        <circle cx="100" cy="100" r="92" fill="none" stroke={accentColor} strokeOpacity="0.18" strokeWidth="0.6" />
-        <circle cx="100" cy="100" r="3" fill={accentColor} filter="url(#babGlow)" />
+        {/* chromatic-aberration ghosts */}
+        <path d={inner} fill="none" stroke="#00e0ff" strokeOpacity="0.40" strokeWidth="1.5" transform="translate(2.5,-1.5)" />
+        <path d={inner} fill="none" stroke="#ff2bdf" strokeOpacity="0.35" strokeWidth="1.5" transform="translate(-2.5,1.5)" />
+        {/* core heptagram — thicker, brighter */}
+        <path d={inner} fill="none" stroke="#ff2e4d" strokeWidth="2.8" filter="url(#babGlow)" strokeOpacity="0.9" />
+        <path d={ring} fill="none" stroke="#ff2e4d" strokeOpacity="0.55" strokeWidth="1.4" />
+        <circle cx="100" cy="100" r="92" fill="none" stroke="#ff2e4d" strokeOpacity="0.22" strokeWidth="0.8" />
+        <circle cx="100" cy="100" r="4" fill="#ff2e4d" filter="url(#babGlow)" opacity="0.9" />
       </svg>
     </div>
   );
@@ -2251,8 +2261,8 @@ const ZodiacRing = ({ size = 320, accentColor = "#ff2e4d" }) => {
   return (
     <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
       style={{ width: size, height: size, zIndex: -1 }} aria-hidden="true">
-      {ring(ZODIAC, 46, 120, false, 0.22, '13px')}
-      {ring(PLANET_GLYPHS, 32, 90, true, 0.28, '12px')}
+      {ring(ZODIAC, 46, 120, false, 0.38, '15px')}
+      {ring(PLANET_GLYPHS, 32, 90, true, 0.45, '14px')}
     </div>
   );
 };
@@ -2334,41 +2344,41 @@ float stars(vec2 uv, float density, float sz, float tw){
   vec2 f = fract(uv*density) - 0.5;
   float h = hash(g);
   float h2 = hash(g+7.1);
-  if (h < 0.86) return 0.0;                 // most cells empty
+  if (h < 0.78) return 0.0;                 // 22% of cells have stars (denser field)
   float d = length(f);
-  float twinkle = 0.5 + 0.5*sin(u_time*tw + h2*6.28);
+  float twinkle = 0.45 + 0.55*sin(u_time*tw + h2*6.28);
   return smoothstep(sz, 0.0, d) * twinkle;
 }
 
 void main(){
   vec2 uv = (gl_FragCoord.xy - 0.5*u_res) / u_res.y;
   float rad = length(uv);
-  float vign = smoothstep(1.35, 0.1, rad);
+  float vign = smoothstep(1.4, 0.05, rad);
 
-  // Deep indigo nebula — DARK. Never multiplied by a pale accent (no gray washout).
+  // Deep indigo nebula — visible but never muddy
   float t = u_time*0.02;
   vec2 q = vec2(fbm(uv*1.2 + vec2(0.0,t)), fbm(uv*1.2 + vec2(4.2,-t)));
   float neb = fbm(uv*1.1 + 1.8*q);
-  neb = pow(clamp(neb,0.0,1.0), 2.6);
-  vec3 nebCol = mix(vec3(0.04,0.03,0.10), vec3(0.10,0.05,0.20), neb);  // indigo→violet
-  vec3 col = nebCol * neb * (0.5 + 0.5*u_intensity) * vign;
+  neb = pow(clamp(neb,0.0,1.0), 2.2);
+  vec3 nebCol = mix(vec3(0.08,0.05,0.18), vec3(0.22,0.10,0.40), neb);
+  vec3 col = nebCol * neb * (1.0 + 0.8*u_intensity) * vign;
 
-  // a faint crimson swell at the heart during ritual
+  // crimson swell at the heart during ritual
   float core = smoothstep(0.6, 0.0, rad) * u_intensity;
-  col += vec3(0.22,0.02,0.06) * core * 0.5;
+  col += vec3(0.30,0.03,0.08) * core * 0.7;
 
-  // three star layers (parallax depth) — silver, plus a few accent-tinted
+  // three star layers — denser and brighter
   float s = 0.0;
-  s += stars(uv + vec2(0.0, t*0.3), 9.0,  0.06, 2.0) * 0.7;
-  s += stars(uv*1.7 + 11.0,        16.0, 0.05, 3.0) * 0.5;
-  s += stars(uv*2.6 - 5.0,         26.0, 0.04, 4.5) * 0.35;
-  vec3 starCol = mix(vec3(0.8,0.85,1.0), u_accent, 0.25);
+  s += stars(uv + vec2(0.0, t*0.3), 9.0,  0.07, 2.0) * 1.1;
+  s += stars(uv*1.7 + 11.0,        16.0, 0.06, 3.0) * 0.85;
+  s += stars(uv*2.6 - 5.0,         26.0, 0.05, 4.5) * 0.60;
+  vec3 starCol = mix(vec3(0.85,0.90,1.0), u_accent, 0.20);
   col += starCol * s * vign;
 
-  // base lift so pure black never reads flat
-  col += vec3(0.01,0.008,0.022) * vign;
+  // faint indigo floor — prevents pure-black flatness
+  col += vec3(0.02,0.015,0.045) * vign;
 
-  float alpha = clamp(neb*vign*(0.16 + 0.30*u_intensity) + s*0.9*vign + core*0.4, 0.0, 0.92);
+  float alpha = clamp(neb*vign*(0.32 + 0.55*u_intensity) + s*vign + core*0.5, 0.0, 0.95);
   gl_FragColor = vec4(col, alpha);
 }`;
 
@@ -3586,7 +3596,7 @@ const App = () => {
           <>
             {/* ═══ INIT PHASE ═══ */}
             {phase === "init" && (
-              <div className="text-center max-w-lg mx-auto" style={{ animation: 'fadeIn 2s ease-out' }}>
+              <div className="text-center max-w-lg mx-auto w-full" style={{ animation: 'fadeIn 2s ease-out' }}>
                 <div className="mb-6 relative inline-flex items-center justify-center" style={{ animation: isAmbient ? 'breathe 8s ease-in-out infinite' : 'none' }}>
                   <ZodiacRing size={zodiacInit} accentColor="#ff2e4d" />
                   <AnimatedSigil input="LIBER CCCXXXIII" size={sigilInit} spinning={true} glowing={true}
@@ -3616,12 +3626,15 @@ const App = () => {
 
                 {/* Cosmic info */}
                 {planetary && (
-                  <div className="mt-12 text-[11px] lux-dim space-y-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    <div>
+                  <div className="mt-10 space-y-2">
+                    <div className="text-[11px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                       <span style={{ color: '#ff5e74' }}>{planetary.symbol}</span> {planetary.planet} hour
                       {lunar && <> · {lunar.emoji} {lunar.name}</>}
+                      {planetary.timeOfDay && <span className="opacity-60"> · {planetary.timeOfDay}</span>}
                     </div>
-                    <div className="opacity-70">{planetary.timeOfDay}</div>
+                    <div className="text-[11px] italic opacity-40" style={{ fontFamily: "'IM Fell English', serif", color: '#d8dcf2' }}>
+                      Every man and every woman is a star.
+                    </div>
                   </div>
                 )}
               </div>
