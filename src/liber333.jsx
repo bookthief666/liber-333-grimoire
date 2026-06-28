@@ -2538,21 +2538,31 @@ const Shockwave = ({ active, color = "#dc2626" }) => {
 // ─────────────────────────────────────────────
 const ExpandableSection = ({ title, icon, children, defaultOpen = false, accentColor = "#dc2626" }) => {
   const [open, setOpen] = useState(defaultOpen);
+  const contentRef = useRef(null);
+  const [contentH, setContentH] = useState(0);
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const obs = new ResizeObserver(() => setContentH(contentRef.current?.scrollHeight || 0));
+    obs.observe(contentRef.current);
+    setContentH(contentRef.current.scrollHeight);
+    return () => obs.disconnect();
+  }, [children]);
   return (
     <div className="mb-5">
       <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between py-2 text-left group">
+        className="w-full flex items-center justify-between py-3 text-left group border-0 bg-transparent min-h-[44px]">
         <span className="flex items-center gap-2.5 text-lg lux-crimson tracking-wide"
           style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif" }}>
           <span className="text-base opacity-90">{icon}</span>
           {title}
         </span>
-        <span className="lux-dim text-[10px] transition-transform duration-300"
+        <span className="lux-dim text-[13px] transition-transform duration-300 px-2"
           style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
       </button>
       <hr className="star-rule mb-3" style={{ opacity: open ? 0.8 : 0.3, transition: 'opacity 0.4s' }} />
-      <div className="overflow-hidden transition-all duration-500" style={{ maxHeight: open ? '4000px' : '0', opacity: open ? 1 : 0 }}>
-        <div className="pb-2 lux text-[15px] leading-relaxed">
+      <div className="overflow-hidden transition-all duration-500"
+        style={{ maxHeight: open ? `${contentH + 24}px` : '0', opacity: open ? 1 : 0 }}>
+        <div ref={contentRef} className="pb-2 lux leading-relaxed" style={{ fontSize: 'clamp(13px, 3.8vw, 15px)' }}>
           {children}
         </div>
       </div>
@@ -2979,7 +2989,7 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
         </div>
         <h2 className="text-3xl mb-1 gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>{rite.title}</h2>
         <div className="text-[11px] tracking-[0.25em] lux-dim mb-6" style={{ fontFamily: 'Cinzel, serif' }}>{rite.subtitle.toUpperCase()}</div>
-        <p className="lux text-[15px] leading-relaxed mb-8 text-left max-w-md mx-auto" style={{ fontFamily: "'IM Fell English', serif" }}>
+        <p className="lux leading-relaxed mb-8 text-left max-w-md mx-auto" style={{ fontFamily: "'IM Fell English', serif", fontSize: 'clamp(13px, 3.8vw, 15px)' }}>
           {rite.intro}
         </p>
         {!audioEnabled && (
@@ -3026,7 +3036,7 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
           {step.bell && <span className="ml-2">🔔</span>}
         </div>
 
-        <p className="lux text-[15px] leading-relaxed mb-8 max-w-md mx-auto" style={{ fontFamily: "'IM Fell English', serif" }}>
+        <p className="lux leading-relaxed mb-8 max-w-md mx-auto" style={{ fontFamily: "'IM Fell English', serif", fontSize: 'clamp(13px, 3.8vw, 15px)' }}>
           {step.direction}
         </p>
 
@@ -3053,7 +3063,7 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
       {/* controls — floating text */}
       <div className="flex items-center justify-center gap-8 mt-10">
         <button onClick={() => setStepIndex(i => Math.max(0, i - 1))} disabled={stepIndex === 0}
-          className={`text-[11px] tracking-[0.18em] transition-all ${stepIndex === 0 ? 'opacity-25 cursor-default lux-dim' : 'lux-dim hover:text-[#d8dcf2]'}`}
+          className={`text-[12px] tracking-[0.18em] transition-all min-h-[44px] px-3 border-0 bg-transparent ${stepIndex === 0 ? 'opacity-25 cursor-default lux-dim' : 'lux-dim hover:text-[#d8dcf2]'}`}
           style={{ fontFamily: 'Cinzel, serif' }}>← BACK</button>
 
         {!isFinal ? (
@@ -3124,7 +3134,7 @@ const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
               <div className="text-[10px] lux-crimson tracking-[0.3em] mb-2" style={{ fontFamily: 'Cinzel, serif' }}>CORRESPONDENCES</div>
               {corr.map((c, i) => (
                 <div key={i} className="flex items-start gap-2 text-[13px]" style={{ fontFamily: "'IM Fell English', serif" }}>
-                  <span className="text-[9px] uppercase tracking-wider mt-1"
+                  <span className="text-[10px] uppercase tracking-wider mt-1"
                     style={{ color: c.type === 'direct' ? '#ff8fa0' : c.type === 'square' ? '#f0b75e' : '#9aa0c4' }}>{c.type}</span>
                   <span className="lux">{c.text}</span>
                 </div>
@@ -3135,7 +3145,7 @@ const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
           <div className="pt-4">
             <hr className="star-rule mb-3 opacity-40" />
             <div className="text-[10px] lux-crimson tracking-[0.3em] mb-3" style={{ fontFamily: 'Cinzel, serif' }}>HEBREW LETTERS</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-[12px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
               {Object.entries(HEBREW_LETTERS).map(([name, data]) => (
                 <div key={name} className="flex items-center gap-2">
                   <span className="w-4 text-center lux-crimson">{data.letter}</span>
@@ -3186,6 +3196,19 @@ const EchoText = ({ text, echoes = [], accentColor = "#dc2626" }) => {
 
 
 // ─────────────────────────────────────────────
+//  VIEWPORT WIDTH HOOK (responsive sigil sizes)
+// ─────────────────────────────────────────────
+const useWindowWidth = () => {
+  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 768);
+  useEffect(() => {
+    const update = () => setW(window.innerWidth);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return w;
+};
+
+// ─────────────────────────────────────────────
 //  MAIN APP
 // ─────────────────────────────────────────────
 const App = () => {
@@ -3222,11 +3245,20 @@ const App = () => {
   const voice = useVoice();
 
   // ── Derived values ──
+  const vw = useWindowWidth();
   const accentColor = planetary?.color || "#dc2626";
   const accentLight = planetary?.colorLight || "#f87171";
   const drawnChapter = drawnChapters[revealIndex] || drawnChapters[0] || null;
   const isSpread = spreadType === "spread" && drawnChapters.length === 3;
   const evolutionRings = Math.min(Math.floor(journal.totalReadings / 5), 4);
+
+  // ── Responsive sigil / ring sizes ──
+  const sigilInit    = Math.round(Math.min(180, Math.max(110, vw * 0.40)));
+  const zodiacInit   = Math.round(Math.min(290, Math.max(170, vw * 0.68)));
+  const sigilReveal  = Math.round(Math.min(120, Math.max(80,  vw * 0.26)));
+  const zodiacReveal = Math.round(Math.min(210, Math.max(130, vw * 0.48)));
+  const sigilRitual  = Math.round(Math.min(220, Math.max(100, vw * 0.52)));
+  const sigilInput   = Math.round(Math.min(80,  Math.max(52,  vw * 0.18)));
 
 
   // ── Idle detection for ambient mode ──
@@ -3477,7 +3509,7 @@ const App = () => {
             {voice.available && (
               <button onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) voice.stop(); }}
                 title="Sage's voice — narration"
-                className="text-[15px] transition-all duration-300"
+                className="text-[17px] transition-all duration-300 border-0 bg-transparent min-w-[44px] min-h-[44px] flex items-center justify-center"
                 style={{
                   color: voiceEnabled ? '#ff5e74' : '#7e84ad',
                   textShadow: voiceEnabled ? '0 0 14px rgba(255,46,77,0.8)' : 'none',
@@ -3485,7 +3517,7 @@ const App = () => {
             )}
             <button onClick={() => setAudioEnabled(!audioEnabled)}
               title="Ambient sound & bells"
-              className="text-[16px] transition-all duration-300"
+              className="text-[18px] transition-all duration-300 border-0 bg-transparent min-w-[44px] min-h-[44px] flex items-center justify-center"
               style={{
                 color: audioEnabled ? '#ff5e74' : '#7e84ad',
                 textShadow: audioEnabled ? '0 0 14px rgba(255,46,77,0.8)' : 'none',
@@ -3498,7 +3530,7 @@ const App = () => {
             const on = mode === m;
             return (
               <button key={m} onClick={() => { setMode(m); if (m === "ritual") setRitualChapter(null); }}
-                className={`relative text-[12px] tracking-[0.22em] whitespace-nowrap transition-all duration-300 ${on ? 'lux-crimson' : 'lux-dim hover:text-[#cfd3ee]'}`}
+                className={`relative text-[12px] tracking-[0.22em] whitespace-nowrap transition-all duration-300 border-0 bg-transparent min-h-[44px] px-1 ${on ? 'lux-crimson' : 'lux-dim hover:text-[#cfd3ee]'}`}
                 style={{ fontFamily: 'Cinzel, serif' }}>
                 {on && <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[9px]" style={{ color: '#ff5e74' }}>✦</span>}
                 {label}
@@ -3506,7 +3538,7 @@ const App = () => {
             );
           })}
           <button onClick={() => setShowJournal(true)}
-            className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300"
+            className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300 border-0 bg-transparent min-h-[44px] px-1"
             style={{ fontFamily: 'Cinzel, serif' }}>
             GRIMOIRE
             {journal.entries.length > 0 && (
@@ -3556,8 +3588,8 @@ const App = () => {
             {phase === "init" && (
               <div className="text-center max-w-lg mx-auto" style={{ animation: 'fadeIn 2s ease-out' }}>
                 <div className="mb-6 relative inline-flex items-center justify-center" style={{ animation: isAmbient ? 'breathe 8s ease-in-out infinite' : 'none' }}>
-                  <ZodiacRing size={300} accentColor="#ff2e4d" />
-                  <AnimatedSigil input="LIBER CCCXXXIII" size={180} spinning={true} glowing={true}
+                  <ZodiacRing size={zodiacInit} accentColor="#ff2e4d" />
+                  <AnimatedSigil input="LIBER CCCXXXIII" size={sigilInit} spinning={true} glowing={true}
                     evolutionRings={evolutionRings} accentColor={accentColor} />
                 </div>
                 {evolutionRings > 0 && (
@@ -3599,7 +3631,7 @@ const App = () => {
             {phase === "input" && (
               <div className="w-full max-w-lg mx-auto text-center" style={{ animation: 'fadeInUp 0.6s ease-out' }}>
                 <div className="mb-6 opacity-65">
-                  <AnimatedSigil input="query" size={80} spinning={true} glowing={true} accentColor={accentColor} />
+                  <AnimatedSigil input="query" size={sigilInput} spinning={true} glowing={true} accentColor={accentColor} />
                 </div>
                 <h2 className="text-3xl mb-2 gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
                   Speak Your Question
@@ -3672,7 +3704,7 @@ const App = () => {
                   transform: ritualAct === 1 ? 'scale(1.15)' : ritualAct >= 2 ? 'scale(0.7)' : 'scale(1)',
                   transition: 'transform 1.5s ease-in-out',
                 }}>
-                  <AnimatedSigil input={question} size={ritualAct === 1 ? 260 : 200} spinning={true} glowing={true}
+                  <AnimatedSigil input={question} size={ritualAct === 1 ? sigilRitual : Math.round(sigilRitual * 0.80)} spinning={true} glowing={true}
                     accentColor={accentColor} />
                 </div>
 
@@ -3716,14 +3748,14 @@ const App = () => {
 
                 {/* Spread navigation */}
                 {isSpread && (
-                  <div className="flex items-center justify-center gap-2 mb-6" style={{ animation: 'fadeIn 1s ease-out' }}>
+                  <div className="flex items-center justify-center gap-4 mb-6 flex-wrap" style={{ animation: 'fadeIn 1s ease-out' }}>
                     {drawnChapters.map((ch, i) => (
                       <button key={i} onClick={() => { setRevealIndex(i); setTextEchoes(findGematriaEchoes(ch.text)); }}
-                        className={`px-4 py-2 text-[10px] tracking-wider transition-all ${
+                        className={`px-4 py-2 min-h-[44px] text-[11px] tracking-wider transition-all border-0 bg-transparent ${
                           i === revealIndex ? 'lux-crimson' : 'lux-dim opacity-70 hover:opacity-100'
                         }`}
                         style={{ fontFamily: 'Cinzel, serif' }}>
-                        <div className="text-[9px] mb-0.5 opacity-80">{spreadLabels[i]}</div>
+                        <div className="text-[11px] mb-0.5 opacity-80">{spreadLabels[i]}</div>
                         <div className="text-base">{formatChapterNumber(ch.chapter)}</div>
                       </button>
                     ))}
@@ -3733,8 +3765,8 @@ const App = () => {
                 {/* Chapter Header */}
                 <div className="text-center mb-8" style={{ animation: 'fadeInUp 0.8s ease-out' }}>
                   <div className="mb-4 relative inline-flex items-center justify-center">
-                    <ZodiacRing size={210} accentColor="#ff2e4d" />
-                    <AnimatedSigil input={question || drawnChapter.title} size={120} spinning={true} glowing={true}
+                    <ZodiacRing size={zodiacReveal} accentColor="#ff2e4d" />
+                    <AnimatedSigil input={question || drawnChapter.title} size={sigilReveal} spinning={true} glowing={true}
                       evolutionRings={evolutionRings} accentColor={accentColor} />
                   </div>
 
@@ -3796,7 +3828,7 @@ const App = () => {
                       first-letter:text-6xl first-letter:float-left first-letter:pr-2 first-letter:mt-1 first-letter:leading-[0.7]
                       first-letter:text-[#ff5e74] first-letter:[font-family:'UnifrakturCook',serif]
                       first-letter:[text-shadow:0_0_22px_rgba(255,94,116,0.8)]"
-                    style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '17px' }}>
+                    style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: 'clamp(14px, 4.2vw, 17px)', overflowWrap: 'break-word' }}>
                     <TypewriterText text={drawnChapter.text} speed={12}
                       onComplete={() => { if (voiceEnabled) voice.speak(drawnChapter.text); }}
                       className="italic" />
@@ -3804,7 +3836,7 @@ const App = () => {
                   {textEchoes.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2.5 justify-center">
                       {textEchoes.map((e, i) => (
-                        <span key={i} className="text-[10px]"
+                        <span key={i} className="text-[11px]"
                           style={{ color: '#ff8fa0', textShadow: '0 0 10px rgba(255,46,77,0.4)', fontFamily: 'JetBrains Mono, monospace' }}>
                           {e.word}={e.value}
                         </span>
@@ -3817,7 +3849,7 @@ const App = () => {
                 {/* Expandable Sections */}
                 <div className="space-y-0" style={{ animation: 'fadeInUp 1s ease-out 0.6s both' }}>
                   <ExpandableSection title="Commentary" icon="☥" defaultOpen={true} accentColor={accentColor}>
-                    <div className="pt-1 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16px' }}>{drawnChapter.commentary}</div>
+                    <div className="pt-1 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: 'clamp(13px, 4vw, 16px)', overflowWrap: 'break-word' }}>{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
                   <ExpandableSection title={isSpread ? "ORACLE OF THE ABYSS · TRIAD SYNTHESIS" : "ORACLE OF THE ABYSS"} icon="☉" defaultOpen={true} accentColor={accentColor}>
@@ -3861,7 +3893,8 @@ const App = () => {
                         <div className="space-y-3">
                           <div className="whitespace-pre-wrap leading-relaxed lux" style={{
                             fontFamily: "'IM Fell English', Georgia, serif",
-                            fontSize: '16.5px',
+                            fontSize: 'clamp(14px, 4vw, 16.5px)',
+                            overflowWrap: 'break-word',
                             ...(oracle.streaming ? {
                               textShadow: '0 0 1px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.9), 0 0 35px rgba(255,94,116,0.07)',
                             } : {}),
@@ -3893,7 +3926,7 @@ const App = () => {
                         const info = getSephiraInfo(drawnChapter.sephira);
                         return (
                           <>
-                            <div className="grid grid-cols-2 gap-2.5 text-[12px]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[12px]">
                               <div>
                                 <span className="lux-dim">Sephira:</span>{" "}
                                 <span className="lux">{drawnChapter.sephira}</span>
@@ -3960,7 +3993,7 @@ const App = () => {
                 )}
 
                 {/* Action Buttons — floating glowing links */}
-                <div className="flex items-center justify-center gap-8 mt-10 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mt-10 pb-8" style={{ animation: 'fadeInUp 1s ease-out 0.9s both' }}>
                   <button onClick={saveReading} disabled={saved}
                     className={`text-[12px] tracking-[0.18em] ${saved ? 'cursor-default lux-dim opacity-60' : 'btn-ritual lux-crimson hover:tracking-[0.28em]'}`}
                     style={{ fontFamily: 'Cinzel, serif' }}>
