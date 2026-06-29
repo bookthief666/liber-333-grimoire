@@ -962,6 +962,66 @@ const ENGLISH_QABALAH = {
   u:21, v:22, w:23, x:24, y:25, z:26
 };
 
+// Hebrew gematria: Unicode char → traditional value (finals use standard value)
+const HEBREW_VALUES = {
+  'א':1,   // א Aleph
+  'ב':2,   // ב Beth
+  'ג':3,   // ג Gimel
+  'ד':4,   // ד Daleth
+  'ה':5,   // ה He
+  'ו':6,   // ו Vav
+  'ז':7,   // ז Zayin
+  'ח':8,   // ח Cheth
+  'ט':9,   // ט Teth
+  'י':10,  // י Yod
+  'כ':20,  // כ Kaph
+  'ך':20,  // ך Kaph final
+  'ל':30,  // ל Lamed
+  'מ':40,  // מ Mem
+  'ם':40,  // ם Mem final
+  'נ':50,  // נ Nun
+  'ן':50,  // ן Nun final
+  'ס':60,  // ס Samekh
+  'ע':70,  // ע Ayin
+  'פ':80,  // פ Pe
+  'ף':80,  // ף Pe final
+  'צ':90,  // צ Tzaddi
+  'ץ':90,  // ץ Tzaddi final
+  'ק':100, // ק Qoph
+  'ר':200, // ר Resh
+  'ש':300, // ש Shin
+  'ת':400, // ת Tau
+};
+
+// Greek isopsephy: Unicode char → classical value
+const GREEK_VALUES = {
+  'α':1,   'Α':1,   // α/Α Alpha
+  'β':2,   'Β':2,   // β/Β Beta
+  'γ':3,   'Γ':3,   // γ/Γ Gamma
+  'δ':4,   'Δ':4,   // δ/Δ Delta
+  'ε':5,   'Ε':5,   // ε/Ε Epsilon
+  'ζ':7,   'Ζ':7,   // ζ/Ζ Zeta
+  'η':8,   'Η':8,   // η/Η Eta
+  'θ':9,   'Θ':9,   // θ/Θ Theta
+  'ι':10,  'Ι':10,  // ι/Ι Iota
+  'κ':20,  'Κ':20,  // κ/Κ Kappa
+  'λ':30,  'Λ':30,  // λ/Λ Lambda
+  'μ':40,  'Μ':40,  // μ/Μ Mu
+  'ν':50,  'Ν':50,  // ν/Ν Nu
+  'ξ':60,  'Ξ':60,  // ξ/Ξ Xi
+  'ο':70,  'Ο':70,  // ο/Ο Omicron
+  'π':80,  'Π':80,  // π/Π Pi
+  'ρ':100, 'Ρ':100, // ρ/Ρ Rho
+  'σ':200, 'Σ':200, // σ/Σ Sigma
+  'ς':200,               // ς Sigma final
+  'τ':300, 'Τ':300, // τ/Τ Tau
+  'υ':400, 'Υ':400, // υ/Υ Upsilon
+  'φ':500, 'Φ':500, // φ/Φ Phi
+  'χ':600, 'Χ':600, // χ/Χ Chi
+  'ψ':700, 'Ψ':700, // ψ/Ψ Psi
+  'ω':800, 'Ω':800, // ω/Ω Omega
+};
+
 const HEBREW_LETTERS = {
   "Aleph":   { letter: "א", value: 1,   meaning: "Ox",        element: "Air",         tarot: "The Fool" },
   "Beth":    { letter: "ב", value: 2,   meaning: "House",     element: "Mercury",     tarot: "The Magus" },
@@ -1153,14 +1213,29 @@ const ELEMENT_SYMBOLS = {
 //  GEMATRIA ENGINE — FUNCTIONS
 // ─────────────────────────────────────────────
 const calculateGematria = (text) => {
-  const clean = text.toLowerCase().replace(/[^a-z]/g, '');
-  if (clean.length === 0) return { simple: 0, reduced: 0, raw: 0 };
-  
-  let simple = 0;
-  for (const ch of clean) {
-    simple += ENGLISH_QABALAH[ch] || 0;
+  // English Qabalah
+  const englishClean = text.toLowerCase().replace(/[^a-z]/g, '');
+  let english = 0;
+  for (const ch of englishClean) english += ENGLISH_QABALAH[ch] || 0;
+
+  // Hebrew gematria (detect Hebrew Unicode block U+05D0-U+05EA)
+  let hebrew = 0, hasHebrew = false;
+  for (const ch of text) {
+    if (HEBREW_VALUES[ch] !== undefined) { hebrew += HEBREW_VALUES[ch]; hasHebrew = true; }
   }
-  
+
+  // Greek isopsephy (detect Greek Unicode block)
+  let greek = 0, hasGreek = false;
+  for (const ch of text) {
+    if (GREEK_VALUES[ch] !== undefined) { greek += GREEK_VALUES[ch]; hasGreek = true; }
+  }
+
+  // Primary value: Hebrew if present, else Greek if present, else English
+  const simple = hasHebrew ? hebrew : hasGreek ? greek : english;
+  if (simple === 0 && !hasHebrew && !hasGreek && englishClean.length === 0) {
+    return { simple: 0, reduced: 0, raw: 0, reductionSteps: [0], english: 0, hebrew: null, greek: null, hasHebrew: false, hasGreek: false };
+  }
+
   // Theosophic reduction (reduce to single digit)
   let reduced = simple;
   let reductionSteps = [simple];
@@ -1168,12 +1243,17 @@ const calculateGematria = (text) => {
     reduced = String(reduced).split('').reduce((a, b) => a + parseInt(b), 0);
     reductionSteps.push(reduced);
   }
-  
+
   return {
-    simple,           // Full sum (e.g. 93)
-    reduced,          // Single digit (e.g. 3)
-    raw: clean.length, // Number of letters
-    reductionSteps,   // [93, 12, 3] — for display
+    simple,              // Primary sum (Hebrew → Greek → English)
+    reduced,             // Single digit
+    raw: text.replace(/\s/g, '').length,
+    reductionSteps,
+    english,             // Always computed
+    hebrew: hasHebrew ? hebrew : null,
+    greek: hasGreek ? greek : null,
+    hasHebrew,
+    hasGreek,
   };
 };
 
@@ -1549,13 +1629,21 @@ const useVoice = () => {
 // ─────────────────────────────────────────────
 const useAIOracle = () => {
   const [oracleState, setOracleState] = useState({ loading: false, streaming: false, thinking: false, text: null, error: null });
+  const [dialogueTurns, setDialogueTurns] = useState([]);
+  const [dialogueLoading, setDialogueLoading] = useState(false);
+  const [arcState, setArcState] = useState({ loading: false, streaming: false, text: null, error: null });
   const abortRef = useRef(null);
+  const conversationRef = useRef([]);
+  const systemPromptRef = useRef('');
 
   const consultOracle = useCallback(async (question, chapter, gematria, correspondences, context = {}) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
+    conversationRef.current = [];
+    setDialogueTurns([]);
+    setDialogueLoading(false);
 
     const sephInfo = getSephiraInfo(chapter.sephira);
     const corrText = correspondences.length > 0
@@ -1619,6 +1707,8 @@ QABALISTIC POSITION:
 
 Deliver the Oracle's interpretation.`;
 
+    systemPromptRef.current = systemPrompt;
+
     try {
       let acc = "";
       const text = await streamOracleInterpretation({
@@ -1639,6 +1729,10 @@ Deliver the Oracle's interpretation.`;
 
       if (controller.signal.aborted) return;
       setOracleState({ loading: false, streaming: false, thinking: false, text, error: null });
+      conversationRef.current = [
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: text },
+      ];
     } catch (err) {
       if (err.name === 'AbortError') return;
       setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: err.message });
@@ -1651,6 +1745,9 @@ Deliver the Oracle's interpretation.`;
     const controller = new AbortController();
     abortRef.current = controller;
     setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
+    conversationRef.current = [];
+    setDialogueTurns([]);
+    setDialogueLoading(false);
 
     const positions = ["THESIS", "ANTITHESIS", "SYNTHESIS"];
     const corrText = correspondences.length > 0
@@ -1708,6 +1805,8 @@ ${cards}${journalContext}${cosmicContext}
 
 Deliver the Oracle's unified reading of the triad.`;
 
+    systemPromptRef.current = systemPrompt;
+
     try {
       let acc = "";
       const text = await streamOracleInterpretation({
@@ -1726,6 +1825,10 @@ Deliver the Oracle's unified reading of the triad.`;
       });
       if (controller.signal.aborted) return;
       setOracleState({ loading: false, streaming: false, thinking: false, text, error: null });
+      conversationRef.current = [
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: text },
+      ];
     } catch (err) {
       if (err.name === 'AbortError') return;
       setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: err.message });
@@ -1735,9 +1838,116 @@ Deliver the Oracle's unified reading of the triad.`;
   const resetOracle = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
     setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: null });
+    conversationRef.current = [];
+    setDialogueTurns([]);
+    setDialogueLoading(false);
   }, []);
 
-  return { ...oracleState, consultOracle, consultSpread, resetOracle };
+  const clearConversation = useCallback(() => {
+    conversationRef.current = [];
+    setDialogueTurns([]);
+    setDialogueLoading(false);
+  }, []);
+
+  const continueOracle = useCallback(async (followUp) => {
+    if (!followUp.trim()) return;
+    const prevConversation = conversationRef.current;
+    const sysPrompt = systemPromptRef.current;
+    if (prevConversation.length === 0) return;
+
+    setDialogueTurns(prev => [...prev, { role: 'user', content: followUp }]);
+    setDialogueLoading(true);
+
+    try {
+      let acc = '';
+      const text = await streamOracleInterpretation({
+        prompt: followUp,
+        systemPrompt: sysPrompt,
+        conversation: prevConversation,
+        onThinking: () => {},
+        onToken: (chunk) => {
+          acc += chunk;
+          setDialogueTurns(prev => {
+            const arr = [...prev];
+            const last = arr[arr.length - 1];
+            if (last && last.streaming) {
+              arr[arr.length - 1] = { role: 'assistant', content: acc, streaming: true };
+            } else {
+              arr.push({ role: 'assistant', content: acc, streaming: true });
+            }
+            return arr;
+          });
+        },
+      });
+      setDialogueTurns(prev => {
+        const arr = [...prev];
+        if (arr.length && arr[arr.length - 1].streaming) {
+          arr[arr.length - 1] = { role: 'assistant', content: text };
+        }
+        return arr;
+      });
+      conversationRef.current = [
+        ...prevConversation,
+        { role: 'user', content: followUp },
+        { role: 'assistant', content: text },
+      ];
+      setDialogueLoading(false);
+    } catch (err) {
+      setDialogueTurns(prev => [...prev, { role: 'error', content: err.message }]);
+      setDialogueLoading(false);
+    }
+  }, []);
+
+  const consultArc = useCallback(async (entries) => {
+    if (!entries || entries.length < 1) return;
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setArcState({ loading: true, streaming: false, text: null, error: null });
+
+    const entryList = entries.map(e =>
+      `- ${new Date(e.date).toLocaleDateString()}: "${e.question}" → Chapter ${formatChapterNumber(e.chapter)} (${e.title}) [${e.element || '?'}, ${e.sephira || '?'}]`
+    ).join('\n');
+
+    const arcSystemPrompt = `You are the Oracle of the Abyss reading across time and consultations. You have been given the complete record of a seeker's work with Liber CCCXXXIII — The Book of Lies.
+
+Your task: synthesize the arc of this seeker's spiritual journey. Identify recurring elements, sephiroth, themes, and patterns across their readings. Reveal what the Book has been consistently offering them. Find the hidden teaching that spans multiple consultations. Speak in the second person.
+
+Your voice: oracular, intimate, penetrating. Write 4-5 flowing paragraphs — not a list. Find the living thread connecting these readings. What does the seeker keep circling? What lesson returns again and again in different guises? What is transforming in them through this work?
+
+End with a single unforgettable line — the Oracle's summary judgment of this seeker's arc through the Book of Lies.
+
+Do not use markdown. Write in flowing prose.`;
+
+    const arcUserMsg = `THE SEEKER'S COMPLETE RECORD OF CONSULTATIONS:\n\n${entryList}\n\nReveal the arc of this seeker's journey through the Book of Lies.`;
+
+    try {
+      let acc = '';
+      const text = await streamOracleInterpretation({
+        prompt: arcUserMsg,
+        systemPrompt: arcSystemPrompt,
+        signal: controller.signal,
+        onThinking: () => {},
+        onToken: (chunk) => {
+          if (controller.signal.aborted) return;
+          acc += chunk;
+          setArcState(s => ({ ...s, loading: false, streaming: true, text: acc }));
+        },
+      });
+      if (controller.signal.aborted) return;
+      setArcState({ loading: false, streaming: false, text, error: null });
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      setArcState({ loading: false, streaming: false, text: null, error: err.message });
+    }
+  }, []);
+
+  return {
+    ...oracleState,
+    consultOracle, consultSpread, resetOracle,
+    dialogueTurns, dialogueLoading, continueOracle, clearConversation,
+    arcState, consultArc,
+  };
 };
 
 // ─────────────────────────────────────────────
@@ -2619,7 +2829,7 @@ const MilestoneOverlay = ({ number, onDismiss }) => {
 // ─────────────────────────────────────────────
 //  JOURNAL OVERLAY (Enhanced)
 // ─────────────────────────────────────────────
-const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, onSelect, accentColor = "#dc2626" }) => {
+const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, onSelect, onConsultArc, accentColor = "#dc2626" }) => {
   // Count recurrences
   const recurrenceMap = useMemo(() => {
     const map = {};
@@ -2642,6 +2852,13 @@ const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, on
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {entries.length >= 5 && onConsultArc && (
+              <button onClick={onConsultArc}
+                className="text-[10px] lux-crimson hover:opacity-80 transition-colors tracking-wider btn-ritual"
+                style={{ fontFamily: 'Cinzel, serif' }}>
+                ✦ Arc
+              </button>
+            )}
             {entries.length > 0 && (
               <button onClick={onClear} className="text-[10px] lux-dim hover:lux-crimson transition-colors"
                 style={{ fontFamily: 'JetBrains Mono, monospace' }}>CLEAR ALL</button>
@@ -3095,6 +3312,138 @@ const RitualMode = ({ onBack, accentColor = "#dc2626", playBell, audioEnabled, i
 };
 
 // ─────────────────────────────────────────────
+//  SHARE CARD — screenshot-ready reading summary
+// ─────────────────────────────────────────────
+const ShareCard = ({ chapter, oracleText, gematria, planetary, lunar, question, accentColor, onClose }) => {
+  const keyExcerpt = chapter.text.length > 160
+    ? chapter.text.slice(0, 160).replace(/\s\w+$/, '') + '…'
+    : chapter.text;
+  const oracleExcerpt = oracleText
+    ? (oracleText.split(/[.!?]/)[0] || '').trim() + '.'
+    : null;
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div className="fixed inset-0" style={{ zIndex: 80, background: 'radial-gradient(140% 100% at 50% -10%, #0c0922 0%, #05030f 55%, #020108 100%)' }}>
+      <div className="absolute top-4 left-0 right-0 text-center text-[9px] lux-dim tracking-[0.35em]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+        SCREENSHOT TO SHARE
+      </div>
+      <button onClick={onClose}
+        className="absolute top-3 right-4 text-2xl lux-dim hover:text-white transition-colors z-10">×</button>
+      <div className="absolute inset-0 flex items-center justify-center overflow-auto py-16 px-6">
+        <div className="w-full max-w-xs text-center space-y-4">
+          <div className="text-[9px] tracking-[0.4em] lux-dim" style={{ fontFamily: 'Cinzel, serif' }}>
+            LIBER CCCXXXIII · ORACLE OF THE ABYSS
+          </div>
+          <div className="relative inline-flex items-center justify-center">
+            <ZodiacRing size={160} accentColor="#ff2e4d" />
+            <AnimatedSigil input={question || chapter.title} size={80} spinning={true} glowing={true} accentColor={accentColor} />
+          </div>
+          <div>
+            <div className="text-6xl gilded" style={{ fontFamily: "'UnifrakturCook', serif", filter: `drop-shadow(0 0 30px ${accentColor}55)` }}>
+              {formatChapterNumber(chapter.chapter)}
+            </div>
+            <hr className="star-rule w-32 mx-auto my-2" />
+            <div className="text-xl lux" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif" }}>
+              {chapter.title}
+            </div>
+          </div>
+          <div className="italic lux text-left leading-relaxed px-2" style={{ fontFamily: "'IM Fell English', serif", fontSize: 'clamp(11px, 3.2vw, 13px)' }}>
+            "{keyExcerpt}"
+          </div>
+          {oracleExcerpt && oracleExcerpt.length > 4 && (
+            <>
+              <hr className="star-rule opacity-30" />
+              <div className="lux-dim italic px-2" style={{ fontFamily: "'IM Fell English', serif", fontSize: 'clamp(10px, 2.8vw, 12px)' }}>
+                {oracleExcerpt}
+              </div>
+            </>
+          )}
+          <div className="text-[10px] lux-dim tracking-wide" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            {gematria && <span>∑ {gematria.simple}</span>}
+            {planetary && <> · <span style={{ color: '#ff5e74' }}>{planetary.symbol}</span> {planetary.planet}</>}
+            {lunar && <> · {lunar.emoji}</>}
+            <span className="opacity-50"> · {dateStr}</span>
+          </div>
+          <div className="text-[8px] opacity-25 tracking-[0.4em]" style={{ fontFamily: 'Cinzel, serif' }}>
+            LIBER-333.VERCEL.APP
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+//  ARC OF THE ABYSS — pattern synthesis overlay
+// ─────────────────────────────────────────────
+const ArcReadingOverlay = ({ arcState, onClose, onConsult, entriesCount, accentColor = "#dc2626" }) => (
+  <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 70 }}>
+    <div className="absolute inset-0 backdrop-blur-md" style={{ background: 'rgba(5,3,15,0.92)' }} onClick={onClose} />
+    <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+      style={{ background: 'radial-gradient(120% 80% at 50% 0%, rgba(20,14,45,0.92), rgba(5,3,15,0.97))', borderRadius: '16px', boxShadow: '0 0 80px rgba(120,80,200,0.15)' }}>
+      <div className="flex items-center justify-between px-5 py-4">
+        <div>
+          <h2 className="text-2xl gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
+            ✦ Arc of the Abyss
+          </h2>
+          <div className="text-[10px] lux-dim mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+            Pattern synthesis · {entriesCount} reading{entriesCount !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <button onClick={onClose} className="lux-dim hover:text-white transition-colors text-2xl leading-none">×</button>
+      </div>
+      <hr className="star-rule opacity-50" />
+      <div className="flex-1 overflow-y-auto p-6">
+        {arcState.loading && !arcState.text ? (
+          <div className="py-12 text-center space-y-5">
+            <div className="flex items-center justify-center gap-4">
+              {['☽','☿','♀','☉','♂','♃','♄'].map((g, i) => (
+                <span key={i} style={{ fontSize: '18px', color: '#ff5e74', opacity: 0.3,
+                  animation: `ritualPulse ${1.3 + i * 0.22}s ease-in-out infinite`,
+                  animationDelay: `${i * 0.13}s`, textShadow: '0 0 18px rgba(255,94,116,0.9)' }}>{g}</span>
+              ))}
+            </div>
+            <div className="italic text-[13px] lux-crimson" style={{ fontFamily: "'IM Fell English', serif", animation: 'ritualPulse 2.5s ease-in-out infinite' }}>
+              The Oracle reads across time…
+            </div>
+          </div>
+        ) : arcState.error ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="text-[13px] lux"><span className="lux-crimson">The Abyss refuses:</span> {arcState.error}</div>
+            <button onClick={onConsult} className="text-[12px] lux-crimson hover:opacity-80 tracking-wider" style={{ fontFamily: 'Cinzel, serif' }}>
+              Retry
+            </button>
+          </div>
+        ) : arcState.text ? (
+          <div className="whitespace-pre-wrap leading-loose lux" style={{
+            fontFamily: "'IM Fell English', Georgia, serif",
+            fontSize: 'clamp(14px, 4vw, 16.5px)',
+            overflowWrap: 'break-word',
+          }}>
+            {arcState.text}
+            {arcState.streaming && <span style={{ color: '#ff5e74', animation: 'ritualPulse 0.9s ease-in-out infinite' }}>▌</span>}
+          </div>
+        ) : (
+          <div className="text-center py-12 space-y-4">
+            <div className="text-4xl opacity-20">☉</div>
+            <div className="lux-dim text-sm italic" style={{ fontFamily: "'IM Fell English', serif" }}>
+              The Oracle will read across all your recorded consultations
+              and reveal the hidden pattern of your spiritual work.
+            </div>
+            <button onClick={onConsult}
+              className="mt-4 text-[12px] tracking-[0.25em] lux-crimson btn-ritual hover:tracking-[0.38em]"
+              style={{ fontFamily: 'Cinzel, serif' }}>
+              ✦ Reveal the Arc ✦
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────
 //  GEMATRIA CALCULATOR MODE
 // ─────────────────────────────────────────────
 const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
@@ -3114,7 +3463,7 @@ const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
         Gematria Calculator
       </h2>
       <p className="text-center lux-dim text-[11px] mb-8" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-        English Qabalah · A=1 B=2 ... Z=26
+        English Qabalah · Hebrew Gematria · Greek Isopsephy
       </p>
 
       <div className="relative">
@@ -3135,8 +3484,32 @@ const GematriaMode = ({ onBack, accentColor = "#dc2626" }) => {
               {result.simple}
             </div>
             <div className="lux-dim text-[11px]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {result.reductionSteps.join(" → ")} · {result.raw} letter{result.raw !== 1 ? 's' : ''}
+              {result.reductionSteps.join(" → ")} · {result.raw} char{result.raw !== 1 ? 's' : ''}
             </div>
+            {/* Additional systems */}
+            {(result.hasHebrew || result.hasGreek) && (
+              <div className="flex items-center justify-center gap-5 mt-3">
+                {result.hasHebrew && (
+                  <div className="text-center">
+                    <div className="text-[10px] lux-dim mb-1 tracking-wider" style={{ fontFamily: 'JetBrains Mono, monospace' }}>HEBREW</div>
+                    <div className="text-2xl lux-crimson" style={{ fontFamily: "'UnifrakturCook', serif" }}>{result.hebrew}</div>
+                  </div>
+                )}
+                {result.hasHebrew && result.hasGreek && <div className="text-[10px] lux-dim">·</div>}
+                {result.hasGreek && (
+                  <div className="text-center">
+                    <div className="text-[10px] lux-dim mb-1 tracking-wider" style={{ fontFamily: 'JetBrains Mono, monospace' }}>GREEK</div>
+                    <div className="text-2xl lux-crimson" style={{ fontFamily: "'UnifrakturCook', serif" }}>{result.greek}</div>
+                  </div>
+                )}
+                {(result.hasHebrew || result.hasGreek) && (
+                  <div className="text-center">
+                    <div className="text-[10px] lux-dim mb-1 tracking-wider" style={{ fontFamily: 'JetBrains Mono, monospace' }}>ENGLISH</div>
+                    <div className="text-2xl lux-dim" style={{ fontFamily: "'UnifrakturCook', serif" }}>{result.english}</div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {corr.length > 0 && (
@@ -3230,6 +3603,9 @@ const App = () => {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [showArc, setShowArc] = useState(false);
+  const [dialogueInput, setDialogueInput] = useState('');
   const [idleTime, setIdleTime] = useState(0);
 
   // ── Oracle state ──
@@ -3415,6 +3791,7 @@ const App = () => {
     setSaved(false);
     setTextEchoes([]);
     setRevealIndex(0);
+    setDialogueInput('');
     oracle.resetOracle();
     voice.stop();
   }, [oracle, voice]);
@@ -3564,7 +3941,31 @@ const App = () => {
       {showJournal && (
         <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
           onClose={() => setShowJournal(false)} onDelete={journal.removeEntry}
-          onClear={journal.clearAll} onSelect={viewJournalEntry} accentColor={accentColor} />
+          onClear={journal.clearAll} onSelect={viewJournalEntry} accentColor={accentColor}
+          onConsultArc={() => { setShowJournal(false); setShowArc(true); oracle.consultArc(journal.entries); }} />
+      )}
+
+      {/* Arc of the Abyss Overlay */}
+      {showArc && (
+        <ArcReadingOverlay
+          arcState={oracle.arcState}
+          onClose={() => setShowArc(false)}
+          onConsult={() => oracle.consultArc(journal.entries)}
+          entriesCount={journal.entries.length}
+          accentColor={accentColor} />
+      )}
+
+      {/* Share Card Overlay */}
+      {showShareCard && drawnChapter && (
+        <ShareCard
+          chapter={drawnChapter}
+          oracleText={oracle.text}
+          gematria={gematriaResult}
+          planetary={planetary}
+          lunar={lunar}
+          question={question}
+          accentColor={accentColor}
+          onClose={() => setShowShareCard(false)} />
       )}
 
       {/* Milestone Overlay */}
@@ -3924,6 +4325,73 @@ const App = () => {
                               {voice.speaking ? "◼ STOP" : "▶ SPEAK"}
                             </button>
                           )}
+
+                          {/* ── Oracle Dialogue ── */}
+                          {!oracle.streaming && (
+                            <div className="mt-5">
+                              {oracle.dialogueTurns.length > 0 && (
+                                <div className="space-y-4 mb-4">
+                                  <hr className="star-rule opacity-20" />
+                                  {oracle.dialogueTurns.map((turn, i) => (
+                                    <div key={i}>
+                                      {turn.role === 'user' ? (
+                                        <div className="text-right">
+                                          <span className="italic lux-dim text-[12px]" style={{ fontFamily: "'IM Fell English', serif" }}>
+                                            "{turn.content}"
+                                          </span>
+                                        </div>
+                                      ) : turn.role === 'error' ? (
+                                        <div className="text-[12px] lux-crimson">The Abyss refuses: {turn.content}</div>
+                                      ) : (
+                                        <div className="whitespace-pre-wrap leading-relaxed lux" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: 'clamp(13px, 3.8vw, 16px)', overflowWrap: 'break-word' }}>
+                                          {turn.content}
+                                          {turn.streaming && <span style={{ color: '#ff5e74', animation: 'ritualPulse 0.9s ease-in-out infinite' }}>▌</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {oracle.dialogueLoading ? (
+                                <div className="flex items-center gap-3 py-1">
+                                  {['☽','☉','♄'].map((g, i) => (
+                                    <span key={i} style={{ fontSize: '14px', color: '#ff5e74', opacity: 0.5, animation: `ritualPulse ${1.2 + i * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }}>{g}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="text"
+                                    value={dialogueInput}
+                                    onChange={e => setDialogueInput(e.target.value)}
+                                    placeholder="Ask the Oracle further…"
+                                    className="flex-1 bg-transparent text-[13px] lux placeholder:text-[#5b608a] focus:outline-none py-2 min-w-0"
+                                    style={{ fontFamily: "'IM Fell English', serif", borderBottom: '1px solid rgba(150,160,230,0.15)' }}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter' && dialogueInput.trim()) {
+                                        oracle.continueOracle(dialogueInput.trim());
+                                        setDialogueInput('');
+                                      }
+                                    }}
+                                  />
+                                  {dialogueInput.trim() && (
+                                    <button
+                                      onClick={() => { oracle.continueOracle(dialogueInput.trim()); setDialogueInput(''); }}
+                                      className="text-[11px] lux-crimson tracking-wider flex-shrink-0 btn-ritual">
+                                      Ask →
+                                    </button>
+                                  )}
+                                  {oracle.dialogueTurns.length > 0 && !dialogueInput.trim() && (
+                                    <button onClick={oracle.clearConversation}
+                                      className="text-[10px] lux-dim hover:lux-crimson transition-colors flex-shrink-0"
+                                      style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                                      Seal ×
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <button onClick={consultNow} className="text-[12px] lux-crimson hover:opacity-80 transition-colors">
@@ -4011,6 +4479,11 @@ const App = () => {
                     className={`text-[12px] tracking-[0.18em] ${saved ? 'cursor-default lux-dim opacity-60' : 'btn-ritual lux-crimson hover:tracking-[0.28em]'}`}
                     style={{ fontFamily: 'Cinzel, serif' }}>
                     {saved ? "✓ Recorded" : "✦ Save to Grimoire"}
+                  </button>
+                  <button onClick={() => setShowShareCard(true)}
+                    className="btn-dim-hover text-[12px] tracking-[0.18em] lux-dim hover:lux-crimson hover:tracking-[0.28em]"
+                    style={{ fontFamily: 'Cinzel, serif' }}>
+                    ✦ Share Reading
                   </button>
                   <button onClick={resetToInput}
                     className="btn-dim-hover text-[12px] tracking-[0.18em] lux-dim hover:tracking-[0.28em]"

@@ -37,13 +37,14 @@ export async function streamOracleInterpretation({
   signal,
   onToken,
   onThinking,
+  conversation = null,
 }) {
   let response;
   try {
     response = await fetch('/api/oracle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, systemPrompt, stream: true }),
+      body: JSON.stringify({ prompt, systemPrompt, stream: true, conversation }),
       signal,
     });
   } catch (e) {

@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { prompt, systemPrompt, stream = false, thinking = true } = req.body || {};
+  const { prompt, systemPrompt, stream = false, thinking = true, conversation = null } = req.body || {};
 
   if (!prompt) {
     return res.status(400).json({ error: 'Missing prompt' });
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   // ── Streaming path (Anthropic only) ──────────────────────────────────
   if (stream && anthropicKey) {
     try {
-      return await streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey });
+      return await streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey, conversation });
     } catch (err) {
       console.error('Anthropic stream error:', err.message);
       // If we've already started writing the SSE body we can't fall back cleanly.
@@ -56,7 +56,7 @@ export default async function handler(req, res) {
   // ── Buffered Anthropic ───────────────────────────────────────────────
   if (anthropicKey) {
     try {
-      const text = await bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey });
+      const text = await bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey, conversation });
       return res.status(200).json({ text });
     } catch (err) {
       console.error('Anthropic error:', err.message);
@@ -102,12 +102,15 @@ export default async function handler(req, res) {
 //  Anthropic helpers
 // ─────────────────────────────────────────────────────────────────────
 
-function buildBody({ prompt, systemPrompt, thinking, stream }) {
+function buildBody({ prompt, systemPrompt, thinking, stream, conversation }) {
+  const messages = (conversation && conversation.length > 0)
+    ? [...conversation, { role: 'user', content: prompt }]
+    : [{ role: 'user', content: prompt }];
   const body = {
     model: ANTHROPIC_MODEL,
     max_tokens: MAX_TOKENS,
     system: systemPrompt || '',
-    messages: [{ role: 'user', content: prompt }],
+    messages,
   };
   if (thinking) {
     body.thinking = { type: 'adaptive' };
@@ -117,7 +120,7 @@ function buildBody({ prompt, systemPrompt, thinking, stream }) {
   return body;
 }
 
-async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey }) {
+async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey, conversation }) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -125,7 +128,7 @@ async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey 
       'x-api-key': anthropicKey,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify(buildBody({ prompt, systemPrompt, thinking, stream: false })),
+    body: JSON.stringify(buildBody({ prompt, systemPrompt, thinking, stream: false, conversation })),
   });
 
   if (!response.ok) {
@@ -142,7 +145,7 @@ async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey 
   return text;
 }
 
-async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey }) {
+async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey, conversation }) {
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -150,7 +153,7 @@ async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicK
       'x-api-key': anthropicKey,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify(buildBody({ prompt, systemPrompt, thinking, stream: true })),
+    body: JSON.stringify(buildBody({ prompt, systemPrompt, thinking, stream: true, conversation })),
   });
 
   if (!upstream.ok || !upstream.body) {
