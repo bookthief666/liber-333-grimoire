@@ -1,30 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Liber 333</title>
-  <desc id="desc">A crimson solar sigil within an indigo-black field.</desc>
+  <desc id="desc">A gold and crimson Crowley unicursal hexagram with a five-petaled rose within an indigo-black field.</desc>
   <defs>
-    <radialGradient id="bg" cx="50%" cy="42%" r="72%">
+    <radialGradient id="bg" cx="46%" cy="38%" r="78%">
       <stop offset="0" stop-color="#17102f"/>
-      <stop offset="0.58" stop-color="#070413"/>
+      <stop offset="0.56" stop-color="#070413"/>
       <stop offset="1" stop-color="#020108"/>
     </radialGradient>
     <linearGradient id="sigil" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff0c2"/>
-      <stop offset="0.36" stop-color="#ff6b83"/>
-      <stop offset="1" stop-color="#b80f35"/>
+      <stop offset="0" stop-color="#ffe7a8"/>
+      <stop offset="0.42" stop-color="#e5a45a"/>
+      <stop offset="0.72" stop-color="#d8475e"/>
+      <stop offset="1" stop-color="#8c0b2b"/>
     </linearGradient>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="10" result="blur"/>
+    <radialGradient id="rose" cx="50%" cy="42%" r="70%">
+      <stop offset="0" stop-color="#fff0c2"/>
+      <stop offset="0.55" stop-color="#ff6b83"/>
+      <stop offset="1" stop-color="#9f0d31"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
   <rect width="512" height="512" rx="104" fill="url(#bg)"/>
-  <circle cx="256" cy="256" r="178" fill="none" stroke="#7982bd" stroke-opacity=".28" stroke-width="4"/>
-  <circle cx="256" cy="256" r="142" fill="none" stroke="#d8dcf2" stroke-opacity=".18" stroke-width="2"/>
-  <g filter="url(#glow)" fill="none" stroke="url(#sigil)" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="256" cy="256" r="72" stroke-width="12"/>
-    <path d="M256 102v82M256 328v82M102 256h82M328 256h82" stroke-width="10"/>
-    <path d="M147 147l58 58M307 307l58 58M365 147l-58 58M205 307l-58 58" stroke-width="8"/>
-    <path d="M256 126l94 188H162z" stroke-width="7"/>
+  <circle cx="256" cy="256" r="195" fill="none" stroke="#7f86bd" stroke-opacity=".19" stroke-width="3"/>
+  <circle cx="256" cy="256" r="169" fill="none" stroke="#d8dcf2" stroke-opacity=".09" stroke-width="2"/>
+  <g transform="translate(76 58) scale(1.8)" filter="url(#glow)">
+    <path d="M100 4 L8 165 L192 55 L100 216 L8 55 L192 165 Z"
+      fill="none" stroke="url(#sigil)" stroke-width="13"
+      stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="12"/>
+    <defs>
+      <path id="petal" d="M100 111 C87 99 87 82 100 76 C113 82 113 99 100 111 Z"/>
+    </defs>
+    <g fill="url(#rose)">
+      <use href="#petal"/>
+      <use href="#petal" transform="rotate(72 100 110)"/>
+      <use href="#petal" transform="rotate(144 100 110)"/>
+      <use href="#petal" transform="rotate(216 100 110)"/>
+      <use href="#petal" transform="rotate(288 100 110)"/>
+    </g>
   </g>
-  <text x="256" y="286" text-anchor="middle" fill="#f4e7d2" font-family="Georgia,serif" font-size="82" font-weight="700">333</text>
 </svg>
