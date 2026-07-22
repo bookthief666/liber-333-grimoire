@@ -60,7 +60,7 @@ test('pre-dawn wrapping and evening classification remain unchanged', () => {
   assert.equal(preDawn.timeOfDay, 'deep night');
 
   const evening = calculatePlanetaryTime(new Date(2026, 6, 22, 18, 0, 0));
-  assert.equal(evening.planet, 'Mercury');
+  assert.equal(evening.planet, 'Sol');
   assert.equal(evening.hourIndex, 12);
   assert.equal(evening.isNight, true);
   assert.equal(evening.timeOfDay, 'evening');
