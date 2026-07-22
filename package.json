@@ -9,8 +9,9 @@
     "preview": "vite preview",
     "test:gematria": "node --test tests/gematriaEngine.test.mjs",
     "test:journal": "node --test tests/journalStorage.test.mjs",
-    "test:unit": "npm run test:gematria && npm run test:journal && npm run test:rites",
-    "test:rites": "node --test tests/ritualData.test.mjs"
+    "test:unit": "npm run test:gematria && npm run test:journal && npm run test:rites && npm run test:correspondences",
+    "test:rites": "node --test tests/ritualData.test.mjs",
+    "test:correspondences": "node --test tests/correspondences.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
