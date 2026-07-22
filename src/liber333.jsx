@@ -16,6 +16,7 @@ import { RITUALS } from './features/rites/ritualData.js';
 import { ELEMENT_SYMBOLS, HEBREW_LETTERS, formatChapterNumber, getSephiraColor, getSephiraInfo } from './data/correspondences.js';
 import { LIBER_333 } from './data/liber333.js';
 import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';
+import { TREE_NODE_ORDER, TREE_POS, deriveTreePaths, getVeilChapters, groupChaptersBySephira } from './features/tree/treeModel.js';
 
 // ─────────────────────────────────────────────
 //  GEMATRIA ENGINE — TABLES
@@ -1028,52 +1029,18 @@ const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, on
 //  Every chapter is seated on its Sephira or Path. Click a node or path
 //  to read the chapters that live there; click a chapter to consult it.
 // ─────────────────────────────────────────────
-const TREE_POS = {
-  "Kether":    { x: 50, y: 7 },
-  "Chokmah":   { x: 79, y: 19 },
-  "Binah":     { x: 21, y: 19 },
-  "Daath":     { x: 50, y: 31 },
-  "Chesed":    { x: 79, y: 43 },
-  "Geburah":   { x: 21, y: 43 },
-  "Tiphareth": { x: 50, y: 54 },
-  "Netzach":   { x: 79, y: 68 },
-  "Hod":       { x: 21, y: 68 },
-  "Yesod":     { x: 50, y: 80 },
-  "Malkuth":   { x: 50, y: 95 },
-};
-const TREE_NODE_ORDER = ["Kether","Chokmah","Binah","Daath","Chesed","Geburah","Tiphareth","Netzach","Hod","Yesod","Malkuth"];
-const VEIL_KEYS = ["Ain", "Ain Soph", "Ain Soph Aur"];
 
 const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
   const [selected, setSelected] = useState(null); // location key
   const [hover, setHover] = useState(null);
 
   // group every chapter by its sephira/path string
-  const groups = useMemo(() => {
-    const g = {};
-    for (const ch of LIBER_333) {
-      const key = ch.sephira || "—";
-      (g[key] = g[key] || []).push(ch);
-    }
-    return g;
-  }, []);
+  const groups = useMemo(() => groupChaptersBySephira(LIBER_333), []);
 
   // path keys = compound "A-B" sephira strings that resolve to two nodes
-  const paths = useMemo(() => {
-    return Object.keys(groups)
-      .filter(k => k.includes("-"))
-      .map(k => {
-        const [a, b] = k.split("-");
-        if (TREE_POS[a] && TREE_POS[b]) return { key: k, a, b };
-        return null;
-      })
-      .filter(Boolean);
-  }, [groups]);
+  const paths = useMemo(() => deriveTreePaths(groups), [groups]);
 
-  const veilChapters = useMemo(
-    () => VEIL_KEYS.flatMap(k => groups[k] || []),
-    [groups]
-  );
+  const veilChapters = useMemo(() => getVeilChapters(groups), [groups]);
 
   const selChapters = selected === "__veils__" ? veilChapters : (selected ? (groups[selected] || []) : []);
   const selInfo = selected && selected !== "__veils__" ? getSephiraInfo(selected) : null;
