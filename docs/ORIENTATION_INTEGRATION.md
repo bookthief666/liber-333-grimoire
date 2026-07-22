@@ -66,6 +66,12 @@ This layer augments rather than replaces:
 
 No existing animation component was removed or disabled in this correction.
 
+### Tailwind 4 control reset
+
+The Fold screenshots exposed browser-default gray button chrome around the navigation, sound control, spread selector, and return actions. The project uses Tailwind CSS 4 but was still importing the framework with the older directive syntax.
+
+`src/index.css` now uses `@import "tailwindcss";` and explicitly removes native button appearance. This restores the intended transparent floating controls and allows component-specific active and focus treatments to remain visible.
+
 ### PWA shortcuts
 
 `src/deepLinkBridge.js` resolves manifest shortcuts such as `?mode=gematria` after the React app mounts.
@@ -117,6 +123,7 @@ Confirm that:
 - settings remain visually secondary;
 - all original animated layers remain visible;
 - the additional star veil remains subtle and does not reduce text contrast;
+- native gray button backgrounds are absent;
 - settings persist after refresh;
 - dialog focus remains contained and Escape closes the dialog;
 - zoom remains available;
