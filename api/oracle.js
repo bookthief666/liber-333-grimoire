@@ -1,35 +1,92 @@
 // /api/oracle.js — Vercel Serverless Function
-// Proxies AI requests so the API key never touches the browser.
+// Proxies AI requests so provider keys never reach the browser.
 //
-// Supports two modes:
-//   • Streaming (stream: true)  — Server-Sent Events, token-by-token, with
-//     Claude Opus 4.8 extended thinking. The Oracle "speaks from the depths"
-//     as the text materializes live in the client.
-//   • Buffered (default)        — single JSON { text } response.
-//
-// Anthropic (Claude Opus 4.8) is preferred; Gemini is a non-streaming fallback.
+// Supports:
+//   • Streaming Anthropic responses over Server-Sent Events.
+//   • Buffered Anthropic responses.
+//   • Buffered Gemini fallback only when no Anthropic key is configured.
 
-const ANTHROPIC_MODEL = 'claude-opus-4-8';
-const MAX_TOKENS = 3200;        // ceiling for thinking + visible response
-const THINKING_BUDGET = 1600;   // private reasoning before the Oracle speaks
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-1-20250805';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const MAX_TOKENS = 3200;
+const THINKING_BUDGET = 1600;
+const MAX_PROMPT_CHARS = 24000;
+const MAX_SYSTEM_CHARS = 12000;
 
-export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function normalizeOrigin(value) {
+  if (!value) return null;
+  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  return withProtocol.replace(/\/+$/, '');
+}
+
+function allowedOrigins() {
+  return new Set(
+    [
+      process.env.PUBLIC_APP_ORIGIN,
+      process.env.VERCEL_PROJECT_PRODUCTION_URL,
+      process.env.VERCEL_URL,
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ]
+      .map(normalizeOrigin)
+      .filter(Boolean)
+  );
+}
+
+function applyResponseHeaders(req, res) {
+  const origin = normalizeOrigin(req.headers?.origin);
+  const allowed = allowedOrigins();
+
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { prompt, systemPrompt, stream = false, thinking = true } = req.body || {};
-
-  if (!prompt) {
-    return res.status(400).json({ error: 'Missing prompt' });
+  if (origin && allowed.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
   }
 
-  // Accept the canonical name first, then a few names this project has
-  // used in the wild so an existing Vercel variable still works.
+  return !origin || allowed.has(origin);
+}
+
+function validateRequestBody(body) {
+  const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+  const systemPrompt = typeof body?.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
+
+  if (!prompt) return { error: 'Missing prompt.' };
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    return { error: `Prompt exceeds the ${MAX_PROMPT_CHARS.toLocaleString()} character limit.` };
+  }
+  if (systemPrompt.length > MAX_SYSTEM_CHARS) {
+    return { error: `System prompt exceeds the ${MAX_SYSTEM_CHARS.toLocaleString()} character limit.` };
+  }
+
+  return {
+    prompt,
+    systemPrompt,
+    stream: body?.stream === true,
+    thinking: body?.thinking !== false,
+  };
+}
+
+export default async function handler(req, res) {
+  const originAllowed = applyResponseHeaders(req, res);
+
+  if (!originAllowed) {
+    return res.status(403).json({ error: 'Origin not allowed.' });
+  }
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+
+  const validated = validateRequestBody(req.body || {});
+  if (validated.error) return res.status(400).json({ error: validated.error });
+
+  const { prompt, systemPrompt, stream, thinking } = validated;
+
+  // Accept the canonical name first, then legacy names previously used by this project.
   const anthropicKey =
     process.env.ANTHROPIC_API_KEY ||
     process.env.Liber333Oracle ||
@@ -44,12 +101,11 @@ export default async function handler(req, res) {
       return await streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey });
     } catch (err) {
       console.error('Anthropic stream error:', err.message);
-      // If we've already started writing the SSE body we can't fall back cleanly.
       if (res.headersSent) {
         res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
         return res.end();
       }
-      // else fall through to buffered handling below
+      // If the stream failed before headers were sent, retry through the buffered path below.
     }
   }
 
@@ -57,20 +113,23 @@ export default async function handler(req, res) {
   if (anthropicKey) {
     try {
       const text = await bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey });
-      return res.status(200).json({ text });
+      return res.status(200).json({ text, provider: 'anthropic', model: ANTHROPIC_MODEL });
     } catch (err) {
       console.error('Anthropic error:', err.message);
-      // Do NOT mask the real Anthropic failure behind Gemini. Surface it.
-      return res.status(502).json({ error: `Anthropic: ${err.message}` });
+      return res.status(502).json({
+        error: `Anthropic: ${err.message}`,
+        provider: 'anthropic',
+        model: ANTHROPIC_MODEL,
+      });
     }
   }
 
-  // ── Buffered Gemini — only when NO Anthropic key is configured ───────
+  // ── Buffered Gemini — only when no Anthropic key is configured ──────
   if (geminiKey) {
     try {
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${geminiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -86,20 +145,24 @@ export default async function handler(req, res) {
       }
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'The Abyss returns silence.';
-      return res.status(200).json({ text });
+      return res.status(200).json({ text, provider: 'gemini', model: GEMINI_MODEL });
     } catch (err) {
       console.error('Gemini error:', err.message);
-      return res.status(500).json({ error: err.message });
+      return res.status(502).json({
+        error: `Gemini: ${err.message}`,
+        provider: 'gemini',
+        model: GEMINI_MODEL,
+      });
     }
   }
 
-  return res.status(500).json({
-    error: 'No Anthropic key found. In Vercel → Settings → Environment Variables, set ANTHROPIC_API_KEY to your secret value (it begins with "sk-ant-"), scope it to Production, then redeploy.',
+  return res.status(503).json({
+    error: 'No Oracle provider is configured. Add ANTHROPIC_API_KEY or GEMINI_API_KEY in the deployment environment, then redeploy.',
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────
-//  Anthropic helpers
+// Anthropic helpers
 // ─────────────────────────────────────────────────────────────────────
 
 function buildBody({ prompt, systemPrompt, thinking, stream }) {
@@ -133,12 +196,11 @@ async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey 
   }
 
   const data = await response.json();
-  // Only surface visible text blocks; thinking blocks stay in the Abyss.
-  const text = data.content
-    ?.filter(b => b.type === 'text')
-    .map(b => b.text)
+  // Only surface visible text blocks; thinking blocks remain private.
+  return data.content
+    ?.filter((block) => block.type === 'text')
+    .map((block) => block.text)
     .join('\n') || 'The Abyss returns silence.';
-  return text;
 }
 
 async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey }) {
@@ -157,7 +219,6 @@ async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicK
     throw new Error(err.error?.message || `Anthropic API error: ${upstream.status}`);
   }
 
-  // Open our own SSE channel to the browser.
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
@@ -182,36 +243,38 @@ async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicK
     buffer = events.pop() || '';
 
     for (const block of events) {
-      const dataLine = block.split('\n').find(l => l.startsWith('data:'));
+      const dataLine = block.split('\n').find((line) => line.startsWith('data:'));
       if (!dataLine) continue;
       const json = dataLine.slice(5).trim();
       if (!json || json === '[DONE]') continue;
 
-      let evt;
-      try { evt = JSON.parse(json); } catch { continue; }
+      let event;
+      try {
+        event = JSON.parse(json);
+      } catch {
+        continue;
+      }
 
-      if (evt.type === 'content_block_start') {
-        inThinking = evt.content_block?.type === 'thinking';
+      if (event.type === 'content_block_start') {
+        inThinking = event.content_block?.type === 'thinking';
         if (inThinking) send('thinking', { active: true });
-      } else if (evt.type === 'content_block_delta') {
-        const d = evt.delta || {};
-        if (d.type === 'text_delta' && d.text) {
+      } else if (event.type === 'content_block_delta') {
+        const delta = event.delta || {};
+        if (delta.type === 'text_delta' && delta.text) {
           emitted = true;
-          send('token', { text: d.text });
+          send('token', { text: delta.text });
         }
-        // thinking_delta / signature_delta intentionally ignored (stays private)
-      } else if (evt.type === 'content_block_stop') {
+        // thinking_delta and signature_delta are intentionally ignored.
+      } else if (event.type === 'content_block_stop') {
         if (inThinking) send('thinking', { active: false });
         inThinking = false;
-      } else if (evt.type === 'message_stop') {
-        // handled after loop
-      } else if (evt.type === 'error') {
-        send('error', { error: evt.error?.message || 'stream error' });
+      } else if (event.type === 'error') {
+        send('error', { error: event.error?.message || 'Oracle stream error.' });
       }
     }
   }
 
   if (!emitted) send('token', { text: 'The Abyss returns silence.' });
-  send('done', { ok: true });
+  send('done', { ok: true, provider: 'anthropic', model: ANTHROPIC_MODEL });
   return res.end();
 }
