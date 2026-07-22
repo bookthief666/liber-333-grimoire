@@ -4,12 +4,14 @@ import './index.css';
 import './productShell.css';
 import App from './liber333.jsx';
 import ProductShell from './ProductShell.jsx';
+import LandingIchorPortal from './LandingIchorPortal.jsx';
 import { applyInitialDeepLink } from './deepLinkBridge.js';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ProductShell>
       <App />
+      <LandingIchorPortal />
     </ProductShell>
   </React.StrictMode>,
 );
