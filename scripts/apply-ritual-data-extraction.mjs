@@ -59,7 +59,7 @@ test('the three established guided rites remain available by chapter', () => {
 
 test('station ordering and exact step counts remain unchanged', () => {
   assert.equal(RITUALS[25].steps.length, 9);
-  assert.equal(RITUALS[36].steps.length, 7);
+  assert.equal(RITUALS[36].steps.length, 8);
   assert.equal(RITUALS[44].steps.length, 8);
 
   for (const rite of Object.values(RITUALS)) {
