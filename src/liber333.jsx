@@ -6,6 +6,8 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "react";
 import { fetchOracleInterpretation, streamOracleInterpretation } from './api.js';
+import { useGrimoireNavigation } from './contexts/GrimoireNavigationContext.jsx';
+import LandingCenterpiece from './LandingCenterpiece.jsx';
 
 // ─────────────────────────────────────────────
 //  COMPLETE CHAPTER DATA (94 entries)
@@ -3189,14 +3191,21 @@ const EchoText = ({ text, echoes = [], accentColor = "#dc2626" }) => {
 //  MAIN APP
 // ─────────────────────────────────────────────
 const App = () => {
+  const {
+    surfaceMode,
+    journalOpen,
+    navigationRequest,
+    navigate,
+    openJournal,
+    closeJournal,
+  } = useGrimoireNavigation();
+
   // ── Phase: init | input | ritual | revelation ──
   const [phase, setPhase] = useState("init");
-  const [mode, setMode] = useState("oracle"); // oracle | ritual | tree | gematria
   const [ritualChapter, setRitualChapter] = useState(null); // deep-link into a rite
   const [spreadType, setSpreadType] = useState("single"); // single | spread
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [showJournal, setShowJournal] = useState(false);
   const [idleTime, setIdleTime] = useState(0);
 
   // ── Oracle state ──
@@ -3227,6 +3236,20 @@ const App = () => {
   const drawnChapter = drawnChapters[revealIndex] || drawnChapters[0] || null;
   const isSpread = spreadType === "spread" && drawnChapters.length === 3;
   const evolutionRings = Math.min(Math.floor(journal.totalReadings / 5), 4);
+
+  useEffect(() => {
+    if (!navigationRequest) return;
+
+    if (navigationRequest.type === 'oracle-input') {
+      setQuestion(navigationRequest.question || '');
+      setPhase("input");
+      return;
+    }
+
+    if (navigationRequest.type === 'rite') {
+      setRitualChapter(navigationRequest.chapter || null);
+    }
+  }, [navigationRequest]);
 
 
   // ── Idle detection for ambient mode ──
@@ -3398,7 +3421,7 @@ const App = () => {
   // ── View a chapter chosen from the Tree of Life (study, no divination) ──
   const viewChapterFromTree = useCallback((ch) => {
     const gem = calculateGematria(ch.title);
-    setMode("oracle");
+    navigate("oracle");
     setQuestion(`Contemplating Chapter ${formatChapterNumber(ch.chapter)} — ${ch.title}`);
     setDrawnChapters([ch]);
     setRevealIndex(0);
@@ -3410,7 +3433,7 @@ const App = () => {
     setSpreadType("single");
     setSaved(false);
     oracle.resetOracle();
-  }, [oracle]);
+  }, [oracle, navigate]);
 
   // ── Unified (re)consultation for retry / manual-invoke buttons ──
   const consultNow = useCallback(() => {
@@ -3495,9 +3518,9 @@ const App = () => {
         {/* Row 2 — floating mode glyphs (horizontally scrollable, never clipped) */}
         <div className="nav-rail flex items-center gap-5 px-4 pb-2 overflow-x-auto">
           {[["oracle", "ORACLE"], ["ritual", "RITES"], ["tree", "TREE"], ["gematria", "GEMATRIA"]].map(([m, label]) => {
-            const on = mode === m;
+            const on = surfaceMode === m;
             return (
-              <button key={m} onClick={() => { setMode(m); if (m === "ritual") setRitualChapter(null); }}
+              <button key={m} onClick={() => { navigate(m); if (m === "ritual") setRitualChapter(null); }}
                 className={`relative text-[12px] tracking-[0.22em] whitespace-nowrap transition-all duration-300 ${on ? 'lux-crimson' : 'lux-dim hover:text-[#cfd3ee]'}`}
                 style={{ fontFamily: 'Cinzel, serif' }}>
                 {on && <span className="absolute -left-3 top-1/2 -translate-y-1/2 text-[9px]" style={{ color: '#ff5e74' }}>✦</span>}
@@ -3505,7 +3528,7 @@ const App = () => {
               </button>
             );
           })}
-          <button onClick={() => setShowJournal(true)}
+          <button onClick={() => openJournal()}
             className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300"
             style={{ fontFamily: 'Cinzel, serif' }}>
             GRIMOIRE
@@ -3519,9 +3542,9 @@ const App = () => {
       </nav>
 
       {/* Journal Overlay */}
-      {showJournal && (
+      {journalOpen && (
         <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
-          onClose={() => setShowJournal(false)} onDelete={journal.removeEntry}
+          onClose={closeJournal} onDelete={journal.removeEntry}
           onClear={journal.clearAll} onSelect={viewJournalEntry} accentColor={accentColor} />
       )}
 
@@ -3534,32 +3557,28 @@ const App = () => {
       <main className="relative min-h-screen flex flex-col items-center justify-center px-4" style={{ zIndex: 2, paddingTop: 'calc(var(--safe-top) + 104px)', paddingBottom: 'calc(var(--safe-bottom) + 32px)' }}>
 
         {/* ── GEMATRIA MODE ── */}
-        {mode === "gematria" && (
-          <GematriaMode onBack={() => setMode("oracle")} accentColor={accentColor} />
+        {surfaceMode === "gematria" && (
+          <GematriaMode onBack={() => navigate("oracle")} accentColor={accentColor} />
         )}
 
         {/* ── GUIDED RITUAL MODE ── */}
-        {mode === "ritual" && (
-          <RitualMode onBack={() => setMode("oracle")} accentColor={accentColor}
+        {surfaceMode === "ritual" && (
+          <RitualMode onBack={() => navigate("oracle")} accentColor={accentColor}
             playBell={playBell} audioEnabled={audioEnabled} initialChapter={ritualChapter} />
         )}
 
         {/* ── TREE OF LIFE MODE ── */}
-        {mode === "tree" && (
-          <TreeOfLife onBack={() => setMode("oracle")} onSelectChapter={viewChapterFromTree} accentColor={accentColor} />
+        {surfaceMode === "tree" && (
+          <TreeOfLife onBack={() => navigate("oracle")} onSelectChapter={viewChapterFromTree} accentColor={accentColor} />
         )}
 
         {/* ── ORACLE MODE ── */}
-        {mode === "oracle" && (
+        {surfaceMode === "oracle" && (
           <>
             {/* ═══ INIT PHASE ═══ */}
             {phase === "init" && (
               <div className="text-center max-w-lg mx-auto" style={{ animation: 'fadeIn 2s ease-out' }}>
-                <div className="mb-6 relative inline-flex items-center justify-center" style={{ animation: isAmbient ? 'breathe 8s ease-in-out infinite' : 'none' }}>
-                  <ZodiacRing size={300} accentColor="#ff2e4d" />
-                  <AnimatedSigil input="LIBER CCCXXXIII" size={180} spinning={true} glowing={true}
-                    evolutionRings={evolutionRings} accentColor={accentColor} />
-                </div>
+                <LandingCenterpiece />
                 {evolutionRings > 0 && (
                   <div className="text-[9px] text-amber-700/60 tracking-widest mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
                     YOUR SIGIL · {journal.totalReadings} READING{journal.totalReadings !== 1 ? 'S' : ''} · {evolutionRings} RING{evolutionRings !== 1 ? 'S' : ''} EVOLVED
@@ -3907,7 +3926,7 @@ const App = () => {
                 {/* Perform-this-rite (only for the three ritual chapters) */}
                 {RITUALS[drawnChapter.chapter] && (
                   <div className="flex justify-center mt-8" style={{ animation: 'fadeInUp 1s ease-out 0.85s both' }}>
-                    <button onClick={() => { setRitualChapter(drawnChapter.chapter); setMode("ritual"); }}
+                    <button onClick={() => { setRitualChapter(drawnChapter.chapter); navigate("ritual"); }}
                       className="text-[12px] tracking-[0.22em] lux-crimson transition-all duration-500 hover:tracking-[0.34em]"
                       style={{ fontFamily: 'Cinzel, serif' }}>
                       ☉ Perform this Rite — {RITUALS[drawnChapter.chapter].title}
