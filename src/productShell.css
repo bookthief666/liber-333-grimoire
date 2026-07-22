@@ -1,0 +1,608 @@
+:root {
+  --liber-shell-bg: rgba(5, 3, 15, 0.96);
+  --liber-shell-panel: rgba(12, 8, 29, 0.94);
+  --liber-shell-panel-strong: rgba(18, 11, 39, 0.98);
+  --liber-shell-text: #e5e8f8;
+  --liber-shell-dim: #a7accb;
+  --liber-shell-crimson: #ff5e74;
+  --liber-shell-gold: #f0b75e;
+  --liber-shell-line: rgba(205, 212, 245, 0.2);
+  --liber-shell-focus: #fff3c4;
+}
+
+html[data-liber-text-scale='90'] {
+  font-size: 90%;
+}
+
+html[data-liber-text-scale='100'] {
+  font-size: 100%;
+}
+
+html[data-liber-text-scale='115'] {
+  font-size: 115%;
+}
+
+html[data-liber-text-scale='130'] {
+  font-size: 130%;
+}
+
+html[data-liber-effects='balanced'] #root canvas {
+  opacity: 0.58 !important;
+}
+
+html[data-liber-effects='low'] #root canvas {
+  display: none !important;
+}
+
+html[data-liber-effects='low'] #root {
+  background:
+    radial-gradient(circle at 50% 10%, rgba(56, 33, 96, 0.22), transparent 38%),
+    linear-gradient(180deg, #080514, #030108 72%);
+}
+
+html.liber-force-reduced-motion *,
+html.liber-force-reduced-motion *::before,
+html.liber-force-reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.liber-force-full-motion) *,
+  html:not(.liber-force-full-motion) *::before,
+  html:not(.liber-force-full-motion) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.liber-utility-rail {
+  position: fixed;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: max(0.75rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  z-index: 85;
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+  padding: 0.42rem;
+  border: 1px solid rgba(216, 220, 242, 0.12);
+  border-radius: 999px;
+  background: rgba(6, 4, 17, 0.76);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48), inset 0 0 24px rgba(132, 104, 210, 0.05);
+  backdrop-filter: blur(16px);
+}
+
+.liber-utility-rail button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.08rem;
+  padding: 0.35rem 0.56rem;
+  border: 0;
+  border-radius: 999px;
+  color: var(--liber-shell-dim);
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.liber-utility-rail button:hover,
+.liber-utility-rail button:focus-visible {
+  color: var(--liber-shell-text);
+  background: rgba(255, 94, 116, 0.1);
+  transform: translateY(-1px);
+}
+
+.liber-utility-rail button > span {
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--liber-shell-crimson);
+  text-shadow: 0 0 14px rgba(255, 94, 116, 0.5);
+}
+
+.liber-utility-rail small {
+  font-size: 0.44rem;
+  letter-spacing: 0.12em;
+}
+
+.liber-shell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  overflow: auto;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(73, 44, 124, 0.2), transparent 38%),
+    rgba(1, 0, 6, 0.86);
+  backdrop-filter: blur(18px) saturate(0.85);
+}
+
+.liber-shell-dismiss-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.liber-shell-dialog {
+  position: relative;
+  width: min(100%, 39rem);
+  max-height: min(90vh, 62rem);
+  overflow: auto;
+  color: var(--liber-shell-text);
+  border: 1px solid rgba(216, 220, 242, 0.16);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(22, 14, 47, 0.96), rgba(7, 4, 18, 0.98)),
+    var(--liber-shell-panel);
+  box-shadow:
+    0 40px 110px rgba(0, 0, 0, 0.72),
+    0 0 80px rgba(124, 86, 196, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  animation: liberShellEnter 280ms ease-out both;
+}
+
+.liber-shell-dialog--wide {
+  width: min(100%, 76rem);
+}
+
+.liber-shell-dialog--medium {
+  width: min(100%, 50rem);
+}
+
+@keyframes liberShellEnter {
+  from {
+    opacity: 0;
+    transform: translateY(0.8rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.liber-shell-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.35rem 1.35rem 1rem;
+  background: linear-gradient(180deg, rgba(11, 7, 27, 0.99), rgba(11, 7, 27, 0.93) 78%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.liber-shell-kicker {
+  margin: 0 0 0.32rem;
+  color: var(--liber-shell-crimson);
+  font: 600 0.58rem/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.3em;
+}
+
+.liber-shell-dialog-header h2 {
+  margin: 0;
+  color: transparent;
+  background: linear-gradient(100deg, #ff5e74, #ffd27a 45%, #fff3c4 50%, #ffd27a 56%, #ff5e74);
+  background-clip: text;
+  -webkit-background-clip: text;
+  font: 400 clamp(1.8rem, 5vw, 3rem)/1.05 'UnifrakturCook', 'Pirata One', serif;
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+
+.liber-shell-dialog-header p:not(.liber-shell-kicker) {
+  max-width: 48rem;
+  margin: 0.65rem 0 0;
+  color: var(--liber-shell-dim);
+  font: 400 0.88rem/1.55 'IM Fell English', Georgia, serif;
+}
+
+.liber-shell-close {
+  flex: 0 0 auto;
+  width: 2.55rem;
+  height: 2.55rem;
+  border: 1px solid rgba(216, 220, 242, 0.12);
+  border-radius: 50%;
+  color: var(--liber-shell-dim);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.liber-shell-close:hover,
+.liber-shell-close:focus-visible {
+  color: white;
+  border-color: rgba(255, 94, 116, 0.5);
+  background: rgba(255, 94, 116, 0.08);
+}
+
+.liber-path-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.4rem 1.35rem 1.25rem;
+}
+
+.liber-path-card {
+  position: relative;
+  min-height: 22rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.1rem;
+  overflow: hidden;
+  text-align: left;
+  border: 1px solid rgba(216, 220, 242, 0.1);
+  border-radius: 1rem;
+  color: var(--liber-shell-text);
+  background:
+    radial-gradient(circle at 50% -10%, rgba(255, 94, 116, 0.13), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.008));
+  cursor: pointer;
+  transition: transform 220ms ease, border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+
+.liber-path-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 94, 116, 0.8), rgba(240, 183, 94, 0.7), transparent);
+  opacity: 0.35;
+}
+
+.liber-path-card:hover,
+.liber-path-card:focus-visible {
+  transform: translateY(-0.25rem);
+  border-color: rgba(255, 94, 116, 0.4);
+  background:
+    radial-gradient(circle at 50% -10%, rgba(255, 94, 116, 0.22), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3), 0 0 34px rgba(255, 94, 116, 0.07);
+}
+
+.liber-path-glyph {
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(255, 94, 116, 0.22);
+  border-radius: 50%;
+  color: var(--liber-shell-crimson);
+  background: rgba(255, 94, 116, 0.05);
+  font-size: 1.35rem;
+  text-shadow: 0 0 18px rgba(255, 94, 116, 0.55);
+}
+
+.liber-path-eyebrow {
+  margin-bottom: 0.4rem;
+  color: var(--liber-shell-gold);
+  font: 600 0.55rem/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.24em;
+}
+
+.liber-path-card strong {
+  margin-bottom: 0.7rem;
+  color: var(--liber-shell-text);
+  font: 400 1.35rem/1.08 'Pirata One', 'Cinzel', serif;
+}
+
+.liber-path-description,
+.liber-path-best {
+  color: var(--liber-shell-dim);
+  font: 400 0.83rem/1.52 'IM Fell English', Georgia, serif;
+}
+
+.liber-path-best {
+  margin-top: 1rem;
+  color: #c8cce1;
+}
+
+.liber-path-best b {
+  color: var(--liber-shell-crimson);
+  font-weight: 400;
+}
+
+.liber-path-action {
+  margin-top: auto;
+  padding-top: 1.2rem;
+  color: var(--liber-shell-crimson);
+  font: 600 0.62rem/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.liber-shell-note {
+  margin: 0 1.35rem 1rem;
+  padding: 0.9rem 1rem;
+  border-left: 2px solid rgba(255, 94, 116, 0.55);
+  color: var(--liber-shell-dim);
+  background: rgba(255, 94, 116, 0.035);
+  font: 400 0.78rem/1.5 'IM Fell English', Georgia, serif;
+}
+
+.liber-shell-note strong {
+  color: var(--liber-shell-text);
+  font-weight: 400;
+}
+
+.liber-shell-text-action,
+.liber-shell-secondary-action {
+  display: block;
+  margin: 0 auto 1.35rem;
+  padding: 0.6rem 0.8rem;
+  border: 0;
+  color: var(--liber-shell-dim);
+  background: transparent;
+  font: 600 0.62rem/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.liber-shell-text-action:hover,
+.liber-shell-text-action:focus-visible,
+.liber-shell-secondary-action:hover,
+.liber-shell-secondary-action:focus-visible {
+  color: var(--liber-shell-crimson);
+}
+
+.liber-help-glyph {
+  display: grid;
+  place-items: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  margin: 0.4rem auto 0.5rem;
+  color: var(--liber-shell-crimson);
+  font-size: 2.2rem;
+  text-shadow: 0 0 30px rgba(255, 94, 116, 0.7);
+}
+
+.liber-help-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 0.4rem 1.35rem 1rem;
+}
+
+.liber-help-sections section {
+  padding: 1rem;
+  border-top: 1px solid var(--liber-shell-line);
+}
+
+.liber-help-sections section:nth-child(odd) {
+  border-right: 1px solid var(--liber-shell-line);
+}
+
+.liber-help-sections h3,
+.liber-privacy-card h3 {
+  margin: 0 0 0.45rem;
+  color: var(--liber-shell-crimson);
+  font: 400 0.9rem/1.2 'Cinzel', serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.liber-help-sections p,
+.liber-privacy-card p {
+  margin: 0;
+  color: var(--liber-shell-dim);
+  font: 400 0.88rem/1.58 'IM Fell English', Georgia, serif;
+}
+
+.liber-help-sections .liber-help-next {
+  grid-column: 1 / -1;
+  border-right: 0;
+  background: linear-gradient(90deg, rgba(255, 94, 116, 0.035), transparent);
+}
+
+.liber-shell-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 0 1.35rem 1.35rem;
+}
+
+.liber-shell-actions button {
+  min-height: 2.75rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(255, 94, 116, 0.24);
+  border-radius: 999px;
+  color: var(--liber-shell-text);
+  background: rgba(255, 94, 116, 0.055);
+  font: 600 0.62rem/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.liber-shell-actions button:hover,
+.liber-shell-actions button:focus-visible {
+  color: white;
+  border-color: rgba(255, 94, 116, 0.55);
+  background: rgba(255, 94, 116, 0.12);
+}
+
+.liber-settings-stack {
+  display: grid;
+  gap: 1.3rem;
+  padding: 0.7rem 1.35rem 1.35rem;
+}
+
+.liber-setting-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.liber-setting-group legend {
+  margin-bottom: 0.55rem;
+  color: var(--liber-shell-text);
+  font: 400 0.95rem/1.2 'Cinzel', serif;
+  letter-spacing: 0.06em;
+}
+
+.liber-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 0.25rem;
+  border: 1px solid rgba(216, 220, 242, 0.12);
+  border-radius: 0.8rem;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.liber-segmented button {
+  min-height: 2.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 0.6rem;
+  color: var(--liber-shell-dim);
+  background: transparent;
+  font: 600 0.64rem/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.07em;
+  cursor: pointer;
+}
+
+.liber-segmented button.is-active {
+  color: white;
+  background: linear-gradient(180deg, rgba(255, 94, 116, 0.2), rgba(255, 94, 116, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(255, 94, 116, 0.25), 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.liber-setting-explainer {
+  margin: -0.85rem 0 0;
+  color: var(--liber-shell-dim);
+  font: 400 0.76rem/1.5 'IM Fell English', Georgia, serif;
+}
+
+.liber-privacy-card {
+  padding: 1rem;
+  border: 1px solid rgba(240, 183, 94, 0.16);
+  border-radius: 0.85rem;
+  background: rgba(240, 183, 94, 0.035);
+}
+
+.liber-shell-secondary-action {
+  width: 100%;
+  margin: 0;
+  border: 1px solid rgba(216, 220, 242, 0.12);
+  border-radius: 0.75rem;
+}
+
+.liber-product-shell button:focus-visible,
+.liber-shell-backdrop button:focus-visible,
+.liber-utility-rail button:focus-visible {
+  outline: 2px solid var(--liber-shell-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 72rem) {
+  .liber-path-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liber-path-card {
+    min-height: 17rem;
+  }
+}
+
+@media (max-width: 42rem) {
+  .liber-shell-backdrop {
+    place-items: start center;
+    padding: max(0.5rem, env(safe-area-inset-top)) 0.5rem max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .liber-shell-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 1rem);
+    border-radius: 1rem;
+  }
+
+  .liber-shell-dialog-header {
+    padding: 1rem 1rem 0.85rem;
+  }
+
+  .liber-path-grid {
+    grid-template-columns: 1fr;
+    padding: 0.25rem 0.85rem 1rem;
+  }
+
+  .liber-path-card {
+    min-height: auto;
+  }
+
+  .liber-shell-note {
+    margin-inline: 0.85rem;
+  }
+
+  .liber-help-sections {
+    grid-template-columns: 1fr;
+    padding-inline: 0.85rem;
+  }
+
+  .liber-help-sections section:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .liber-help-sections .liber-help-next {
+    grid-column: auto;
+  }
+
+  .liber-shell-actions,
+  .liber-settings-stack {
+    padding-inline: 0.85rem;
+  }
+
+  .liber-utility-rail {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+
+  .liber-utility-rail button {
+    min-width: 3.1rem;
+  }
+
+  .liber-segmented {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 23rem) {
+  .liber-utility-rail small {
+    display: none;
+  }
+
+  .liber-utility-rail button {
+    min-width: 2.65rem;
+  }
+
+  .liber-shell-dialog-header h2 {
+    font-size: 1.7rem;
+  }
+}
