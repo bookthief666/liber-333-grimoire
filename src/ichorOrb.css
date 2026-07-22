@@ -5,8 +5,8 @@
 .liber-ichor-host {
   position: relative;
   z-index: 4;
-  width: min(78vw, 21rem);
-  margin: 0 auto 1.5rem;
+  width: clamp(15rem, 78vw, 21.75rem);
+  margin: 0 auto 1.4rem;
 }
 
 .ichor-orb-stage {
@@ -16,7 +16,7 @@
   display: grid;
   place-items: center;
   isolation: isolate;
-  animation: ichorStageBreathe 8s ease-in-out infinite;
+  animation: ichorStageBreathe 9s ease-in-out infinite;
 }
 
 .ichor-orb {
@@ -28,15 +28,16 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  overflow: visible;
+  overflow: hidden;
   color: inherit;
   background: transparent;
   cursor: crosshair;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   filter:
-    drop-shadow(0 0 1.25rem rgba(15, 102, 102, 0.18))
-    drop-shadow(0 0 2.9rem rgba(138, 17, 55, 0.12));
+    drop-shadow(0 0 1.15rem rgba(12, 82, 83, 0.14))
+    drop-shadow(0 0 2.6rem rgba(116, 12, 42, 0.09));
+  transition: transform 180ms ease, filter 600ms ease;
 }
 
 .ichor-orb::before,
@@ -49,34 +50,103 @@
 
 .ichor-orb::before {
   inset: 8.1%;
-  z-index: 3;
-  border: 1px solid rgba(201, 218, 238, 0.065);
+  z-index: 5;
+  border: 1px solid rgba(201, 218, 238, 0.045);
   box-shadow:
-    inset 0 0 1.8rem rgba(130, 196, 198, 0.035),
-    0 0 1.5rem rgba(255, 94, 116, 0.035);
+    inset 0 0 2.15rem rgba(82, 149, 153, 0.025),
+    inset -1.7rem -2rem 2.7rem rgba(0, 0, 0, 0.16),
+    0 0 1.25rem rgba(255, 94, 116, 0.022);
 }
 
 .ichor-orb::after {
   inset: 13%;
-  z-index: 4;
-  opacity: 0.22;
+  z-index: 6;
+  opacity: 0.10;
   background: linear-gradient(
     132deg,
-    rgba(255, 255, 255, 0.12) 0%,
-    rgba(255, 255, 255, 0.018) 21%,
-    transparent 39%,
+    rgba(210, 227, 247, 0.15) 0%,
+    rgba(183, 209, 236, 0.038) 18%,
+    transparent 36%,
     transparent 100%
   );
-  mask-image: radial-gradient(circle, black, transparent 70%);
+  filter: blur(0.28rem);
+  mask-image: radial-gradient(circle, black 0 55%, transparent 75%);
 }
 
 .ichor-orb canvas {
   position: absolute;
   inset: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
   display: block;
   border-radius: 50%;
+}
+
+.ichor-orb-sigil {
+  position: absolute;
+  z-index: 3;
+  inset: 18% 20%;
+  pointer-events: none;
+  opacity: 0.145;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 229, 172, 0.84) 0 10%, rgba(218, 155, 72, 0.63) 19%, rgba(169, 91, 37, 0.40) 47%, rgba(98, 46, 29, 0.16) 78%, transparent 100%);
+  -webkit-mask-image: var(--ichor-sigil-mask);
+  mask-image: var(--ichor-sigil-mask);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  mix-blend-mode: screen;
+  filter:
+    blur(0.055rem)
+    drop-shadow(0 0 0.38rem rgba(195, 116, 46, 0.18));
+  transform: scale(0.985) translateY(0.2%);
+  transition:
+    opacity 1.05s ease,
+    filter 1.05s ease,
+    transform 1.2s cubic-bezier(0.2, 0.75, 0.22, 1);
+}
+
+.ichor-orb-surface {
+  position: absolute;
+  z-index: 4;
+  inset: 8.3%;
+  pointer-events: none;
+  border-radius: 50%;
+  opacity: 0.43;
+  background:
+    radial-gradient(ellipse at 64% 58%, rgba(0, 0, 0, 0.54), transparent 47%),
+    radial-gradient(ellipse at 31% 68%, rgba(0, 0, 0, 0.44), transparent 42%),
+    conic-gradient(
+      from 18deg at 48% 52%,
+      rgba(0, 0, 0, 0.42),
+      transparent 16%,
+      rgba(0, 0, 0, 0.30) 31%,
+      transparent 49%,
+      rgba(0, 0, 0, 0.36) 69%,
+      transparent 84%,
+      rgba(0, 0, 0, 0.42)
+    );
+  mix-blend-mode: multiply;
+  filter: blur(0.45rem);
+  animation: ichorSurfaceDrift 17s ease-in-out infinite alternate;
+}
+
+.ichor-orb.is-awakened {
+  filter:
+    drop-shadow(0 0 1.35rem rgba(20, 115, 112, 0.19))
+    drop-shadow(0 0 3.1rem rgba(146, 16, 50, 0.13));
+}
+
+.ichor-orb.is-awakened .ichor-orb-sigil {
+  animation: ichorSigilAwaken 2.4s cubic-bezier(0.16, 0.76, 0.22, 1) both;
+}
+
+.ichor-orb.is-awakened .ichor-orb-surface {
+  animation: ichorSurfacePart 2.4s ease-out both;
 }
 
 .ichor-orb:focus-visible {
@@ -93,21 +163,21 @@
   z-index: 0;
   inset: 6%;
   border-radius: 50%;
-  opacity: 0.62;
+  opacity: 0.52;
   background:
-    radial-gradient(circle at 50% 48%, rgba(9, 94, 92, 0.10), transparent 55%),
+    radial-gradient(circle at 50% 48%, rgba(9, 79, 78, 0.075), transparent 56%),
     conic-gradient(
       from 32deg,
       transparent,
-      rgba(81, 196, 190, 0.06),
+      rgba(72, 166, 162, 0.042),
       transparent 26%,
-      rgba(255, 94, 116, 0.065),
+      rgba(255, 94, 116, 0.047),
       transparent 58%,
-      rgba(240, 183, 94, 0.045),
+      rgba(211, 151, 64, 0.028),
       transparent
     );
-  filter: blur(1.2rem);
-  animation: ichorAuraTurn 34s linear infinite, ichorAuraPulse 7s ease-in-out infinite;
+  filter: blur(1.35rem);
+  animation: ichorAuraTurn 42s linear infinite, ichorAuraPulse 8s ease-in-out infinite;
 }
 
 .ichor-orb-shadow {
@@ -118,54 +188,63 @@
   bottom: 2.5%;
   height: 9%;
   border-radius: 50%;
-  opacity: 0.62;
-  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.84), transparent 72%);
-  filter: blur(0.42rem);
+  opacity: 0.64;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.88), transparent 72%);
+  filter: blur(0.46rem);
   transform: scaleX(1.25);
 }
 
 .ichor-orb-fallback {
   position: absolute;
   inset: 12%;
+  z-index: 2;
   display: none;
   place-items: center;
   border-radius: 50%;
-  color: rgba(218, 232, 235, 0.72);
   background:
-    radial-gradient(circle at 34% 28%, rgba(191, 225, 225, 0.16), transparent 17%),
-    radial-gradient(circle at 50% 50%, rgba(12, 77, 74, 0.22), rgba(5, 4, 19, 0.76) 52%, #010106 76%);
+    radial-gradient(circle at 34% 28%, rgba(178, 211, 220, 0.10), transparent 19%),
+    radial-gradient(circle at 50% 50%, rgba(8, 55, 57, 0.16), rgba(4, 3, 15, 0.84) 54%, #010105 78%);
   box-shadow:
-    inset -1.4rem -1.8rem 2.4rem rgba(0, 0, 0, 0.82),
-    inset 0.5rem 0.4rem 1.5rem rgba(120, 187, 188, 0.08),
-    0 0 2.5rem rgba(255, 94, 116, 0.10);
+    inset -1.5rem -1.9rem 2.5rem rgba(0, 0, 0, 0.86),
+    inset 0.45rem 0.35rem 1.45rem rgba(103, 166, 175, 0.055),
+    0 0 2.2rem rgba(255, 94, 116, 0.075);
 }
 
 .ichor-orb-fallback::before,
 .ichor-orb-fallback::after {
   content: '';
   position: absolute;
-  inset: 16%;
-  border: 1px solid rgba(74, 194, 187, 0.24);
+  inset: 15%;
+  border: 1px solid rgba(65, 161, 157, 0.15);
   border-radius: 50%;
-  animation: ichorFallbackPulse 4.8s ease-in-out infinite;
+  animation: ichorFallbackPulse 5.6s ease-in-out infinite;
 }
 
 .ichor-orb-fallback::after {
-  inset: 30%;
-  border-color: rgba(255, 94, 116, 0.18);
-  animation-delay: -2.2s;
+  inset: 29%;
+  border-color: rgba(255, 94, 116, 0.11);
+  animation-delay: -2.6s;
 }
 
-.ichor-orb-fallback > span {
-  position: relative;
-  z-index: 2;
-  font-size: clamp(2.3rem, 11vw, 4.1rem);
-  text-shadow:
-    0 0 0.85rem rgba(96, 213, 204, 0.32),
-    0 0 1.8rem rgba(255, 94, 116, 0.24);
+.ichor-orb-fallback-sigil {
+  position: absolute;
+  inset: 20% 22%;
+  opacity: 0.48;
+  background: radial-gradient(circle, #f0bd72 0 12%, #b56c35 30%, #6e302a 75%);
+  -webkit-mask-image: var(--ichor-sigil-mask);
+  mask-image: var(--ichor-sigil-mask);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  filter: blur(0.04rem) drop-shadow(0 0 0.7rem rgba(190, 105, 43, 0.24));
 }
 
-.ichor-orb.is-fallback canvas {
+.ichor-orb.is-fallback canvas,
+.ichor-orb.is-fallback > .ichor-orb-sigil,
+.ichor-orb.is-fallback > .ichor-orb-surface {
   display: none;
 }
 
@@ -173,9 +252,13 @@
   display: grid;
 }
 
+.ichor-orb.is-fallback.is-awakened .ichor-orb-fallback-sigil {
+  animation: ichorFallbackSigilAwaken 2.4s ease-out both;
+}
+
 @keyframes ichorStageBreathe {
   0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-0.3rem) scale(1.008); }
+  50% { transform: translateY(-0.26rem) scale(1.006); }
 }
 
 @keyframes ichorAuraTurn {
@@ -183,44 +266,107 @@
 }
 
 @keyframes ichorAuraPulse {
-  0%, 100% { opacity: 0.42; filter: blur(1.25rem) scale(0.97); }
-  50% { opacity: 0.72; filter: blur(1.5rem) scale(1.04); }
+  0%, 100% { opacity: 0.34; filter: blur(1.35rem) scale(0.98); }
+  50% { opacity: 0.58; filter: blur(1.55rem) scale(1.035); }
+}
+
+@keyframes ichorSurfaceDrift {
+  from { transform: rotate(-3deg) scale(1.02); opacity: 0.37; }
+  to { transform: rotate(4deg) scale(1.055); opacity: 0.48; }
+}
+
+@keyframes ichorSigilAwaken {
+  0% {
+    opacity: 0.145;
+    filter: blur(0.055rem) drop-shadow(0 0 0.38rem rgba(195, 116, 46, 0.18));
+    transform: scale(0.985) translateY(0.2%);
+  }
+  18% {
+    opacity: 0.68;
+    filter:
+      blur(0.012rem)
+      brightness(1.16)
+      drop-shadow(0 0 0.62rem rgba(240, 176, 87, 0.46))
+      drop-shadow(0 0 1.25rem rgba(142, 35, 45, 0.22));
+    transform: scale(1.018) translateY(0);
+  }
+  52% {
+    opacity: 0.47;
+    filter:
+      blur(0.026rem)
+      brightness(1.04)
+      drop-shadow(0 0 0.48rem rgba(226, 145, 66, 0.31));
+    transform: scale(1.004) translateY(0.1%);
+  }
+  100% {
+    opacity: 0.145;
+    filter: blur(0.055rem) drop-shadow(0 0 0.38rem rgba(195, 116, 46, 0.18));
+    transform: scale(0.985) translateY(0.2%);
+  }
+}
+
+@keyframes ichorSurfacePart {
+  0% { opacity: 0.43; transform: scale(1); }
+  16% { opacity: 0.21; transform: scale(1.035) rotate(1.5deg); }
+  55% { opacity: 0.33; transform: scale(1.018) rotate(-0.8deg); }
+  100% { opacity: 0.43; transform: scale(1); }
 }
 
 @keyframes ichorFallbackPulse {
-  0%, 100% { opacity: 0.28; transform: scale(0.92); }
-  50% { opacity: 0.72; transform: scale(1.06); }
+  0%, 100% { opacity: 0.22; transform: scale(0.94); }
+  50% { opacity: 0.54; transform: scale(1.045); }
+}
+
+@keyframes ichorFallbackSigilAwaken {
+  0%, 100% { opacity: 0.48; filter: blur(0.04rem) drop-shadow(0 0 0.7rem rgba(190, 105, 43, 0.24)); }
+  18% { opacity: 0.82; filter: blur(0) brightness(1.12) drop-shadow(0 0 1rem rgba(237, 168, 80, 0.42)); }
 }
 
 @media (max-width: 42rem) {
   .liber-ichor-host {
-    width: min(76vw, 17.75rem);
-    margin-bottom: 1.15rem;
+    width: clamp(15rem, 76vw, 18.6rem);
+    margin-bottom: 1.1rem;
   }
 
   .ichor-orb-stage {
-    animation-duration: 9.5s;
+    animation-duration: 10s;
+  }
+
+  .ichor-orb-sigil {
+    inset: 18.5% 20.5%;
   }
 }
 
 @media (min-width: 50rem) {
   .liber-ichor-host {
-    width: min(38vw, 21.5rem);
+    width: min(40vw, 22.5rem);
   }
 }
 
 html.liber-force-reduced-motion .ichor-orb-stage,
 html.liber-force-reduced-motion .ichor-orb-aura,
+html.liber-force-reduced-motion .ichor-orb-surface,
 html.liber-force-reduced-motion .ichor-orb-fallback::before,
 html.liber-force-reduced-motion .ichor-orb-fallback::after {
   animation: none !important;
 }
 
+html.liber-force-reduced-motion .ichor-orb.is-awakened .ichor-orb-sigil,
+html.liber-force-reduced-motion .ichor-orb.is-fallback.is-awakened .ichor-orb-fallback-sigil {
+  animation-duration: 0.9s !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html:not(.liber-force-full-motion) .ichor-orb-stage,
   html:not(.liber-force-full-motion) .ichor-orb-aura,
+  html:not(.liber-force-full-motion) .ichor-orb-surface,
   html:not(.liber-force-full-motion) .ichor-orb-fallback::before,
   html:not(.liber-force-full-motion) .ichor-orb-fallback::after {
     animation: none !important;
+  }
+
+  html:not(.liber-force-full-motion) .ichor-orb.is-awakened .ichor-orb-sigil,
+  html:not(.liber-force-full-motion) .ichor-orb.is-fallback.is-awakened .ichor-orb-fallback-sigil {
+    animation-duration: 0.9s !important;
   }
 }
