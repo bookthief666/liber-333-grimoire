@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Crowley unicursal hexagram geometry, normalized as a local monochrome mask.
+  Reference: Wikimedia Commons, File:Crowley unicursal hexagram.svg.
+  The referenced source was released into the public domain by its author.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" role="img" aria-labelledby="title desc">
+  <title id="title">Crowley unicursal hexagram</title>
+  <desc id="desc">An elongated unicursal hexagram with a five-petaled flower, one petal pointing upward.</desc>
+  <path
+    d="M100 4 L8 165 L192 55 L100 216 L8 55 L192 165 Z"
+    fill="none"
+    stroke="#000"
+    stroke-width="18"
+    stroke-linecap="butt"
+    stroke-linejoin="miter"
+    stroke-miterlimit="12"
+  />
+  <defs>
+    <path id="petal" d="M100 111 C87 99 87 82 100 76 C113 82 113 99 100 111 Z" />
+  </defs>
+  <g fill="#000">
+    <use href="#petal" />
+    <use href="#petal" transform="rotate(72 100 110)" />
+    <use href="#petal" transform="rotate(144 100 110)" />
+    <use href="#petal" transform="rotate(216 100 110)" />
+    <use href="#petal" transform="rotate(288 100 110)" />
+  </g>
+</svg>
