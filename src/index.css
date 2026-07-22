@@ -1,4 +1,17 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
+/* Keep native form controls from reintroducing browser-default chrome into
+   the floating Astral Void interface. Individual components provide their
+   own deliberate focus and active states. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
