@@ -34,6 +34,39 @@ It should not read as:
 
 The intended relationship is one of mood and material sensation: alien, liquid, divine, and dangerous, while remaining native to the Astral Void identity.
 
+## Verified Thelemic emblem
+
+The orb now uses a local vector mask at:
+
+```text
+src/assets/crowley-unicursal-hexagram.svg
+```
+
+Its geometry is based on the public-domain Wikimedia Commons file **Crowley unicursal hexagram.svg**, described there as Aleister Crowley's unicursal hexagram. The Commons file history also records the corrected orientation: the central flower has one petal pointing upward.
+
+The local asset preserves:
+
+- the elongated Crowley form;
+- one continuous six-point path rather than two equilateral triangles;
+- the unequal vertical and lateral proportions;
+- the central five-petaled flower;
+- one upward-pointing petal;
+- enough view-box padding to preserve the sharp outer points when used as a mask.
+
+The vector is stored locally and is not fetched from Wikimedia at runtime.
+
+## Submerged rendering
+
+The emblem is not displayed as a crisp image above the orb.
+
+It is used as a CSS mask over an antique-gold radial field and placed between:
+
+1. the WebGL liquid body;
+2. a moving dark surface-absorption veil;
+3. the softened external reflection layer.
+
+At rest, the effective visibility remains low and portions of the symbol are obscured by the dark surface veil. On touch, the veil briefly parts and the five-petaled center and continuous hexagram become more legible before sinking back into the ichor.
+
 ## Interaction
 
 Touching or clicking the orb:
@@ -41,9 +74,11 @@ Touching or clicking the orb:
 1. places the disturbance at the actual contact point;
 2. sends a decaying wave across the apparent liquid surface;
 3. briefly increases the internal crimson current;
-4. reveals the submerged circular/hexagram sigil more strongly;
+4. reveals the submerged unicursal hexagram more strongly;
 5. creates a small light core at the point of contact;
 6. requests a restrained haptic pulse when supported.
+
+The emblem reveal lasts approximately 2.4 seconds and then returns to its low idle visibility.
 
 The orb does not begin an Oracle consultation. The existing `BEGIN CONSULTATION` action remains the explicit functional command.
 
@@ -64,13 +99,29 @@ Reasons:
 
 The shader includes:
 
-- procedural FBM currents;
+- domain-warped FBM currents;
 - spherical normal approximation;
-- Fresnel edge light;
-- broad and sharp liquid highlights;
+- restrained Fresnel edge light;
+- softened, noise-broken liquid highlights;
 - local touch ripples;
-- a submerged ring-and-hexagram construction;
-- a transparent halo outside the sphere.
+- a transparent halo outside the sphere;
+- predominantly black/indigo material with narrow teal and sanguine ribbons.
+
+The previous shader-drawn ring and ordinary overlapping triangles were removed.
+
+## Performance and resilience
+
+The implementation retains:
+
+- WebGL 1 compatibility;
+- a component-sized canvas;
+- device-pixel-ratio ceiling of 1.5;
+- ResizeObserver resizing with window-resize fallback;
+- transparent framebuffer clearing every frame;
+- requestAnimationFrame cleanup;
+- reduced-motion behavior;
+- a local CSS fallback using the same unicursal vector mask;
+- graceful fallback if the WebGL context is lost.
 
 ## Integration boundary
 
@@ -106,8 +157,13 @@ Verify on Fold closed, Fold open, desktop, and a reduced-motion setting:
 
 - the old large spinning geometry is absent only on the initial Book screen;
 - the orb remains centered and does not crowd the title;
+- the internal symbol is unmistakably the unicursal hexagram;
+- the symbol does not resemble a normal Star of David;
+- the flower has one petal pointing upward;
+- the symbol remains subdued at rest and emerges after touch;
 - black remains the dominant material color;
-- internal motion is visible but slow;
+- the highlight feels wet and soft rather than plastic;
+- internal movement appears ribbon-like rather than blocky;
 - touch ripples originate at the actual tap position;
 - taps do not trigger consultation;
 - the original `BEGIN CONSULTATION` button remains visible and functional;
