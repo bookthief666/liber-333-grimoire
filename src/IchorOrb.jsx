@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import unicursalHexagramUrl from './assets/crowley-unicursal-hexagram.svg';
 import './ichorOrb.css';
 
 const VERTEX_SHADER = `
@@ -15,7 +16,6 @@ const FRAGMENT_SHADER = `
   precision highp float;
 
   varying vec2 v_uv;
-  uniform vec2 u_resolution;
   uniform vec2 u_touch;
   uniform float u_time;
   uniform float u_ripple_age;
@@ -47,33 +47,21 @@ const FRAGMENT_SHADER = `
     mat2 turn = mat2(0.80, -0.60, 0.60, 0.80);
     for (int i = 0; i < 5; i++) {
       value += amplitude * noise2(p);
-      p = turn * p * 2.03 + 13.7;
+      p = turn * p * 2.01 + 13.7;
       amplitude *= 0.5;
     }
     return value;
   }
 
-  float segmentDistance(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a;
-    vec2 ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
-  }
-
-  mat2 rotate2d(float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
-    return mat2(c, -s, s, c);
-  }
-
   void main() {
     vec2 centered = (v_uv - 0.5) * 2.0;
     float radius = length(centered);
-    float time = u_time * mix(1.0, 0.08, u_reduced_motion);
+    float motionRate = mix(1.0, 0.055, u_reduced_motion);
+    float time = u_time * motionRate;
 
-    float sphere = 1.0 - smoothstep(0.835, 0.895, radius);
-    float nearSphere = 1.0 - smoothstep(0.90, 1.16, radius);
-    float halo = nearSphere * (1.0 - sphere) * 0.42;
+    float sphere = 1.0 - smoothstep(0.838, 0.896, radius);
+    float nearSphere = 1.0 - smoothstep(0.90, 1.14, radius);
+    float halo = nearSphere * (1.0 - sphere) * 0.30;
 
     if (sphere <= 0.001 && halo <= 0.001) {
       gl_FragColor = vec4(0.0);
@@ -84,88 +72,65 @@ const FRAGMENT_SHADER = `
     vec3 normal = normalize(vec3(centered, z));
 
     float touchDistance = distance(v_uv, u_touch);
-    float wave = sin(touchDistance * 66.0 - u_ripple_age * 15.0)
-      * exp(-touchDistance * 7.2)
-      * exp(-u_ripple_age * 1.35)
+    float wave = sin(touchDistance * 64.0 - u_ripple_age * 14.0)
+      * exp(-touchDistance * 7.8)
+      * exp(-u_ripple_age * 1.46)
       * u_energy;
 
     vec2 refracted = centered;
-    refracted += normal.xy * wave * 0.055;
+    refracted += normal.xy * wave * 0.052;
     refracted += vec2(
-      sin(time * 0.37 + centered.y * 4.0),
-      cos(time * 0.29 + centered.x * 4.5)
-    ) * 0.012;
+      sin(time * 0.25 + centered.y * 3.6),
+      cos(time * 0.21 + centered.x * 3.9)
+    ) * 0.008;
 
-    float currentA = fbm(refracted * 2.5 + vec2(time * 0.055, -time * 0.038));
-    float currentB = fbm(refracted.yx * 4.2 + vec2(-time * 0.075, time * 0.045));
-    float currentC = fbm(refracted * 8.0 + currentA * 2.4 - time * 0.025);
+    vec2 warp = vec2(
+      fbm(refracted * 1.52 + vec2(time * 0.030, -time * 0.020)),
+      fbm(refracted * 1.52 + vec2(7.3, -4.8) + vec2(-time * 0.024, time * 0.028))
+    ) - 0.5;
 
-    float veins = smoothstep(0.52, 0.83, currentA * 0.78 + currentB * 0.42);
-    float fineVeins = smoothstep(0.60, 0.88, currentC + currentA * 0.18);
-    float abyssDepth = clamp(0.28 + currentA * 0.58 - radius * 0.16, 0.0, 1.0);
+    vec2 flowUv = refracted + warp * 0.46;
+    float currentA = fbm(flowUv * 2.05 + vec2(time * 0.024, -time * 0.016));
+    float currentB = fbm(flowUv * 3.75 + vec2(-time * 0.035, time * 0.023));
+    float currentC = fbm(flowUv * 7.1 + warp * 1.35 - time * 0.018);
 
-    vec3 voidBlack = vec3(0.0015, 0.0025, 0.009);
-    vec3 deepIndigo = vec3(0.014, 0.010, 0.052);
-    vec3 ichorTeal = vec3(0.028, 0.32, 0.27);
-    vec3 sanguine = vec3(0.58, 0.018, 0.075);
-    vec3 paleGold = vec3(0.92, 0.55, 0.20);
+    float ribbon = 1.0 - smoothstep(0.07, 0.20, abs(currentA - (0.53 + currentB * 0.065)));
+    float fineRibbon = 1.0 - smoothstep(0.035, 0.11, abs(currentC - (0.57 + currentA * 0.045)));
+    float abyssDepth = clamp(0.13 + currentA * 0.39 + currentB * 0.09 - radius * 0.11, 0.0, 1.0);
 
-    vec3 color = mix(voidBlack, deepIndigo, abyssDepth * 0.72);
-    color += ichorTeal * veins * 0.34;
-    color += sanguine * fineVeins * (0.10 + u_energy * 0.16);
+    vec3 voidBlack = vec3(0.0010, 0.0017, 0.0060);
+    vec3 deepIndigo = vec3(0.012, 0.009, 0.041);
+    vec3 ichorTeal = vec3(0.022, 0.245, 0.215);
+    vec3 sanguine = vec3(0.47, 0.012, 0.052);
+
+    vec3 color = mix(voidBlack, deepIndigo, abyssDepth * 0.50);
+    color += ichorTeal * ribbon * (0.095 + currentB * 0.035);
+    color += sanguine * fineRibbon * (0.030 + u_energy * 0.085);
 
     float viewFacing = max(normal.z, 0.0);
-    float fresnel = pow(1.0 - viewFacing, 3.2);
-    vec3 lightDirection = normalize(vec3(-0.46, 0.58, 0.78));
-    float liquidHighlight = pow(max(dot(normal, lightDirection), 0.0), 34.0);
-    float broadHighlight = pow(max(dot(normal, lightDirection), 0.0), 5.0);
+    float fresnel = pow(1.0 - viewFacing, 3.45);
+    vec3 lightDirection = normalize(vec3(-0.48, 0.60, 0.76));
+    float lightFacing = max(dot(normal, lightDirection), 0.0);
+    float brokenHighlight = 0.74 + (currentC - 0.5) * 0.34;
+    float liquidHighlight = pow(lightFacing, 38.0) * brokenHighlight;
+    float broadHighlight = pow(lightFacing, 5.4);
 
-    color += vec3(0.62, 0.72, 0.92) * liquidHighlight * 0.85;
-    color += vec3(0.10, 0.18, 0.27) * broadHighlight * 0.22;
-    color += mix(ichorTeal, sanguine, 0.48) * fresnel * 0.58;
+    color += vec3(0.48, 0.61, 0.78) * liquidHighlight * 0.48;
+    color += vec3(0.070, 0.12, 0.19) * broadHighlight * 0.14;
+    color += mix(ichorTeal, sanguine, 0.42) * fresnel * 0.31;
 
-    vec2 sigilPoint = rotate2d(time * 0.035) * refracted;
-    float outerRing = abs(length(sigilPoint) - 0.42);
-    float innerRing = abs(length(sigilPoint) - 0.205);
-    float centerRing = abs(length(sigilPoint) - 0.072);
+    float touchCore = exp(-touchDistance * touchDistance * 155.0) * u_energy;
+    color += vec3(0.72, 0.84, 0.95) * touchCore * 0.56;
+    color += sanguine * abs(wave) * 0.17;
 
-    vec2 a = vec2(0.0, 0.34);
-    vec2 b = vec2(-0.295, -0.17);
-    vec2 c = vec2(0.295, -0.17);
-    float triangle = min(
-      segmentDistance(sigilPoint, a, b),
-      min(segmentDistance(sigilPoint, b, c), segmentDistance(sigilPoint, c, a))
-    );
-
-    vec2 inversePoint = rotate2d(3.14159265) * sigilPoint;
-    float inverseTriangle = min(
-      segmentDistance(inversePoint, a * 0.72, b * 0.72),
-      min(
-        segmentDistance(inversePoint, b * 0.72, c * 0.72),
-        segmentDistance(inversePoint, c * 0.72, a * 0.72)
-      )
-    );
-
-    float sigilDistance = min(
-      min(outerRing, innerRing),
-      min(centerRing, min(triangle, inverseTriangle))
-    );
-    float sigil = 1.0 - smoothstep(0.006, 0.020, sigilDistance);
-    float sigilReveal = 0.09 + u_energy * 0.74 + (0.5 + 0.5 * sin(time * 0.43)) * 0.035;
-    color += mix(ichorTeal, paleGold, u_energy * 0.72) * sigil * sigilReveal * sphere;
-
-    float touchCore = exp(-touchDistance * touchDistance * 150.0) * u_energy;
-    color += vec3(0.88, 0.95, 1.0) * touchCore * 0.75;
-    color += sanguine * abs(wave) * 0.26;
-
-    float lowerShadow = smoothstep(-0.78, 0.36, centered.y);
-    color *= mix(0.56, 1.0, lowerShadow);
+    float lowerShadow = smoothstep(-0.80, 0.30, centered.y);
+    color *= mix(0.48, 1.0, lowerShadow);
     color *= sphere;
 
-    vec3 haloColor = mix(vec3(0.04, 0.17, 0.19), sanguine, 0.34 + u_energy * 0.28);
+    vec3 haloColor = mix(vec3(0.025, 0.10, 0.11), sanguine, 0.28 + u_energy * 0.22);
     color += haloColor * halo;
 
-    float alpha = clamp(sphere + halo * 0.76, 0.0, 1.0);
+    float alpha = clamp(sphere + halo * 0.62, 0.0, 1.0);
     gl_FragColor = vec4(color, alpha);
   }
 `;
@@ -185,7 +150,9 @@ function compileShader(gl, type, source) {
 export default function IchorOrb() {
   const canvasRef = useRef(null);
   const rippleRef = useRef({ x: 0.5, y: 0.5, startedAt: -10000 });
+  const awakenTimerRef = useRef(null);
   const [fallback, setFallback] = useState(false);
+  const [awakened, setAwakened] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -207,6 +174,16 @@ export default function IchorOrb() {
     let program;
     let frame = 0;
     let resizeObserver;
+    let contextLost = false;
+
+    const onContextLost = (event) => {
+      event.preventDefault();
+      contextLost = true;
+      cancelAnimationFrame(frame);
+      setFallback(true);
+    };
+
+    canvas.addEventListener('webglcontextlost', onContextLost, false);
 
     try {
       const vertex = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
@@ -223,6 +200,7 @@ export default function IchorOrb() {
       }
     } catch (error) {
       console.warn('Ichor Orb WebGL fallback:', error);
+      canvas.removeEventListener('webglcontextlost', onContextLost, false);
       setFallback(true);
       return undefined;
     }
@@ -241,7 +219,6 @@ export default function IchorOrb() {
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
     const uniforms = {
-      resolution: gl.getUniformLocation(program, 'u_resolution'),
       touch: gl.getUniformLocation(program, 'u_touch'),
       time: gl.getUniformLocation(program, 'u_time'),
       rippleAge: gl.getUniformLocation(program, 'u_ripple_age'),
@@ -265,12 +242,17 @@ export default function IchorOrb() {
       }
     };
 
-    resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(canvas);
+    if ('ResizeObserver' in window) {
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(canvas);
+    } else {
+      window.addEventListener('resize', resize);
+    }
     resize();
 
     const startedAt = performance.now();
     const render = (now) => {
+      if (contextLost) return;
       resize();
       const ripple = rippleRef.current;
       const rippleAge = Math.max(0, (now - ripple.startedAt) / 1000);
@@ -282,7 +264,6 @@ export default function IchorOrb() {
 
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
-      gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
       gl.uniform2f(uniforms.touch, ripple.x, ripple.y);
       gl.uniform1f(uniforms.time, (now - startedAt) / 1000);
       gl.uniform1f(uniforms.rippleAge, rippleAge);
@@ -297,11 +278,20 @@ export default function IchorOrb() {
     return () => {
       cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
+      window.removeEventListener('resize', resize);
+      canvas.removeEventListener('webglcontextlost', onContextLost, false);
       gl.deleteBuffer(positionBuffer);
       gl.deleteProgram(program);
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      if (awakenTimerRef.current) window.clearTimeout(awakenTimerRef.current);
+    },
+    [],
+  );
 
   const disturb = (event) => {
     const canvas = canvasRef.current;
@@ -314,6 +304,11 @@ export default function IchorOrb() {
       y: Math.min(1, Math.max(0, 1 - (clientY - rect.top) / rect.height)),
       startedAt: performance.now(),
     };
+
+    setAwakened(true);
+    if (awakenTimerRef.current) window.clearTimeout(awakenTimerRef.current);
+    awakenTimerRef.current = window.setTimeout(() => setAwakened(false), 2400);
+
     try {
       navigator.vibrate?.(18);
     } catch {
@@ -327,20 +322,27 @@ export default function IchorOrb() {
     disturb({});
   };
 
+  const sigilStyle = {
+    '--ichor-sigil-mask': `url("${unicursalHexagramUrl}")`,
+  };
+
   return (
     <div className="ichor-orb-stage">
       <div className="ichor-orb-aura" aria-hidden="true" />
       <button
         type="button"
-        className={`ichor-orb ${fallback ? 'is-fallback' : ''}`}
+        className={`ichor-orb ${fallback ? 'is-fallback' : ''} ${awakened ? 'is-awakened' : ''}`}
         onPointerDown={disturb}
         onKeyDown={onKeyDown}
-        aria-label="Living Ichor Orb. Touch the surface to disturb it."
-        title="Disturb the Ichor"
+        aria-label="Living Ichor Orb. Touch the surface to awaken the unicursal hexagram."
+        title="Awaken the Ichor"
+        style={sigilStyle}
       >
         <canvas ref={canvasRef} aria-hidden="true" />
+        <span className="ichor-orb-sigil" aria-hidden="true" />
+        <span className="ichor-orb-surface" aria-hidden="true" />
         <span className="ichor-orb-fallback" aria-hidden="true">
-          <span>☉</span>
+          <span className="ichor-orb-fallback-sigil" />
         </span>
       </button>
       <div className="ichor-orb-shadow" aria-hidden="true" />
