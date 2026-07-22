@@ -2,11 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0000" />
-    <meta name="description" content="Digital grimoire and gematric oracle for Aleister Crowley's Liber 333" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#05030f" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Digital study grimoire, gematria tool, ritual guide, journal, and AI-assisted oracle for Aleister Crowley's Liber CCCXXXIII." />
+    <meta name="application-name" content="Liber 333" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Liber 333" />
     <title>Liber CCCXXXIII — The Book of Lies</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☉</text></svg>" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/liber-333-icon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@700;900&family=JetBrains+Mono:wght@300;400;500;600&family=UnifrakturCook:wght@700&family=Pirata+One&family=MedievalSharp&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet" />
@@ -125,17 +131,27 @@
       }
       /* ── Astral palette ── */
       :root {
+        color-scheme: dark;
         --safe-top: env(safe-area-inset-top, 0px);
         --safe-bottom: env(safe-area-inset-bottom, 0px);
         --void: #05030f;
         --void-2: #0a0718;
-        --lux: #d8dcf2;      /* luminous silver text */
-        --lux-dim: #9aa0c4;  /* secondary silver */
-        --crimson: #ff2e4d;  /* reserved accent */
+        --lux: #d8dcf2;
+        --lux-dim: #9aa0c4;
+        --crimson: #ff2e4d;
       }
-      html, body { background: radial-gradient(140% 100% at 50% -10%, #0c0922 0%, #05030f 55%, #020108 100%); -webkit-text-size-adjust: 100%; }
-      /* Floating luminous text — a dark halo for legibility over any ground + a faint glow.
-         This is the core "floating, never-too-dark" treatment. */
+      html, body {
+        min-height: 100%;
+        background: radial-gradient(140% 100% at 50% -10%, #0c0922 0%, #05030f 55%, #020108 100%);
+        -webkit-text-size-adjust: 100%;
+      }
+      body { margin: 0; }
+      button, input, textarea, select { font: inherit; }
+      button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+        outline: 2px solid rgba(255,94,116,0.9);
+        outline-offset: 4px;
+      }
+      /* Floating luminous text — a dark halo for legibility over any ground + a faint glow. */
       .lux {
         color: var(--lux);
         text-shadow: 0 0 1px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.9), 0 0 22px rgba(150,160,230,0.20);
@@ -153,10 +169,19 @@
       /* hide horizontal scrollbar on the nav rail but keep it scrollable */
       .nav-rail { scrollbar-width: none; -ms-overflow-style: none; }
       .nav-rail::-webkit-scrollbar { display: none; }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body class="bg-black">
     <div id="root"></div>
+    <noscript>Liber 333 requires JavaScript to operate.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
