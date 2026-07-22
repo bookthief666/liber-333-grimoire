@@ -10,6 +10,7 @@ import { useGrimoireNavigation } from './contexts/GrimoireNavigationContext.jsx'
 import LandingCenterpiece from './LandingCenterpiece.jsx';
 import { NOTABLE_NUMBERS } from './features/gematria/gematriaData.js';
 import { calculateGematria, findCorrespondences, stringToHash } from './features/gematria/gematriaEngine.js';
+import { useJournal } from './features/journal/useJournal.js';
 
 // ─────────────────────────────────────────────
 //  COMPLETE CHAPTER DATA (94 entries)
@@ -1546,11 +1547,6 @@ Deliver the Oracle's unified reading of the triad.`;
   return { ...oracleState, consultOracle, consultSpread, resetOracle };
 };
 
-// ─────────────────────────────────────────────
-//  JOURNAL (Enhanced with recurrence + milestones)
-// ─────────────────────────────────────────────
-const MAX_JOURNAL = 50;
-const MILESTONES = [33, 66, 93, 333];
 
 // ─────────────────────────────────────────────
 //  GUIDED RITUALS — the three performable rites of Liber 333
@@ -1614,70 +1610,6 @@ const RITUALS = {
       { station: "THE SEALING", direction: "Strike eleven times upon the Bell. Cry the Word, and go forth.", words: "ABRAHADABRA. / I entered in with woe; with mirth / I now go forth, and with thanksgiving, / to do my pleasure on the earth / among the legions of the living.", translit: "", meaning: "", bell: true, final: true },
     ],
   },
-};
-
-const useJournal = () => {
-  const [entries, setEntries] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-  const [totalReadings, setTotalReadings] = useState(0);
-  const [milestone, setMilestone] = useState(null);
-
-  const load = useCallback(async () => {
-    try {
-      const raw = localStorage.getItem("liber333_journal");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setEntries(Array.isArray(parsed) ? parsed : []);
-      }
-    } catch(e) { setEntries([]); }
-    try {
-      const countRaw = localStorage.getItem("liber333_total");
-      if (countRaw) setTotalReadings(parseInt(countRaw) || 0);
-    } catch(e) {}
-    setLoaded(true);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const save = useCallback(async (newEntries) => {
-    try { localStorage.setItem("liber333_journal", JSON.stringify(newEntries)); } catch(e) {}
-  }, []);
-
-  const addEntry = useCallback(async (entry) => {
-    const newEntries = [entry, ...entries].slice(0, MAX_JOURNAL);
-    setEntries(newEntries);
-    await save(newEntries);
-    const newTotal = totalReadings + 1;
-    setTotalReadings(newTotal);
-    try { localStorage.setItem("liber333_total", String(newTotal)); } catch(e) {}
-    if (MILESTONES.includes(newTotal)) {
-      setMilestone(newTotal);
-    }
-  }, [entries, save, totalReadings]);
-
-  const removeEntry = useCallback(async (id) => {
-    const newEntries = entries.filter(e => e.id !== id);
-    setEntries(newEntries);
-    await save(newEntries);
-  }, [entries, save]);
-
-  const clearAll = useCallback(async () => {
-    setEntries([]);
-    try { localStorage.removeItem("liber333_journal"); } catch(e) {}
-  }, []);
-
-  const getRecurrenceCount = useCallback((chapterNum) => {
-    return entries.filter(e => e.chapter === chapterNum).length;
-  }, [entries]);
-
-  const getRecentReadings = useCallback((n = 5) => {
-    return entries.slice(0, n);
-  }, [entries]);
-
-  const dismissMilestone = useCallback(() => setMilestone(null), []);
-
-  return { entries, loaded, totalReadings, milestone, dismissMilestone,
-           addEntry, removeEntry, clearAll, getRecurrenceCount, getRecentReadings };
 };
 
 // ─────────────────────────────────────────────
