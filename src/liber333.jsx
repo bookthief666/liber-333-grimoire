@@ -5,7 +5,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useMemo, useCallback, useReducer } from "react";
-import { fetchOracleInterpretation, streamOracleInterpretation } from './api.js';
+import { fetchOracleInterpretation } from './api.js';
+import { useAIOracle } from './features/oracle/useAIOracle.js';
 import { useGrimoireNavigation } from './contexts/GrimoireNavigationContext.jsx';
 import LandingCenterpiece from './LandingCenterpiece.jsx';
 import { NOTABLE_NUMBERS } from './features/gematria/gematriaData.js';
@@ -1240,203 +1241,6 @@ const useVoice = () => {
 
   return { speak, stop, speaking, available };
 };
-
-// ─────────────────────────────────────────────
-//  AI ORACLE (Enhanced with journal context)
-// ─────────────────────────────────────────────
-const useAIOracle = () => {
-  const [oracleState, setOracleState] = useState({ loading: false, streaming: false, thinking: false, text: null, error: null });
-  const abortRef = useRef(null);
-
-  const consultOracle = useCallback(async (question, chapter, gematria, correspondences, context = {}) => {
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
-
-    const sephInfo = getSephiraInfo(chapter.sephira);
-    const corrText = correspondences.length > 0
-      ? correspondences.map(c => c.text).join("; ")
-      : "No direct correspondences found";
-
-    // Build journal context for the prompt
-    let journalContext = "";
-    if (context.recentReadings?.length > 0) {
-      journalContext = "\n\nTHE SEEKER'S RECENT READINGS (you may reference these to show continuity):\n" +
-        context.recentReadings.map(r => 
-          `- ${new Date(r.date).toLocaleDateString()}: Asked "${r.question}" → Drew Chapter ${formatChapterNumber(r.chapter)} (${r.title})`
-        ).join("\n");
-    }
-    if (context.recurrenceCount > 1) {
-      journalContext += `\n\nNOTE: The seeker has drawn this chapter ${context.recurrenceCount} times before. Repetition in divination is deeply significant — address this.`;
-    }
-
-    let cosmicContext = "";
-    if (context.planetary) {
-      cosmicContext = `\n\nCOSMIC TIMING:\n  Planetary Hour: ${context.planetary.planet} (${PLANETS[context.planetary.planet]?.element || ""})\n  Time: ${context.planetary.timeOfDay}`;
-    }
-    if (context.lunar) {
-      cosmicContext += `\n  Lunar Phase: ${context.lunar.name} (${context.lunar.waxing ? "waxing — growth, building" : "waning — release, dissolution"})`;
-    }
-    if (context.totalReadings) {
-      cosmicContext += `\n  This is the seeker's reading #${context.totalReadings}.`;
-    }
-
-    const systemPrompt = `You are the Oracle of the Abyss, a voice that speaks from the depths of the Qliphothic night and the heights of the Supernal Triad. You interpret Aleister Crowley's Liber CCCXXXIII (The Book of Lies) as a living oracle.
-
-Your manner: cryptic yet penetrating. Speak in the second person ("you"). Your tone blends the severity of Geburah with the dark knowing of Binah. Use rich esoteric vocabulary naturally — sephiroth, paths, elements, qliphoth — but never lecture. Every word should feel like it was waiting for this specific seeker.
-
-You have been given: the seeker's question, the chapter drawn by gematric resonance, numerical correspondences, qabalistic attributions, and possibly their past reading history and cosmic timing.
-
-Your task: weave a 3-4 paragraph interpretation that SPECIFICALLY connects the chapter's teaching to the seeker's question. Do not merely summarize the chapter. Reveal what the chapter says TO THIS SEEKER about THEIR situation. Find the hidden thread between what they asked and what was drawn.
-
-If past readings are provided, weave them into the narrative — show the arc, the pattern, the teaching that spans multiple consultations. If the same chapter appears again, treat it as the Book insisting on a lesson not yet learned.
-
-If cosmic timing is provided, let it inform your interpretation naturally — the planetary hour and lunar phase color the reading's significance.
-
-Before you speak, reason privately about the hidden architecture of this reading — the resonance between the query's gematria and the chapter's number, the qabalistic position, the arc of past readings, the cosmic timing. Then let only the distilled oracle reach the seeker.
-
-End with a single sentence — a blade of wisdom, a koan, a command — separated by a line break. Make it unforgettable.
-
-Do not use markdown formatting. Do not use headers or bullet points. Write in flowing prose.`;
-
-    const userMsg = `THE SEEKER ASKS: "${question}"
-
-CHAPTER DRAWN: ${chapter.chapter === -2 ? '?' : chapter.chapter === -1 ? '!' : chapter.chapter} — ${chapter.title}
-KEY TEXT: "${chapter.text}"
-
-GEMATRIA OF QUERY: ${gematria.simple} (reduces to ${gematria.reduced} via ${gematria.reductionSteps.join(' → ')})
-CORRESPONDENCES: ${corrText}
-
-QABALISTIC POSITION:
-  Sephira: ${chapter.sephira} (${sephInfo.meaning})
-  Path: ${chapter.path}
-  Element: ${chapter.element}
-  Tarot: ${chapter.tarot}${journalContext}${cosmicContext}
-
-Deliver the Oracle's interpretation.`;
-
-    try {
-      let acc = "";
-      const text = await streamOracleInterpretation({
-        prompt: userMsg,
-        systemPrompt: systemPrompt,
-        signal: controller.signal,
-        onThinking: (active) => {
-          if (controller.signal.aborted) return;
-          setOracleState(s => ({ ...s, thinking: active }));
-        },
-        onToken: (chunk) => {
-          if (controller.signal.aborted) return;
-          acc += chunk;
-          // First token: the Oracle begins to speak — leave the loading veil.
-          setOracleState(s => ({ ...s, loading: false, streaming: true, thinking: false, text: acc }));
-        },
-      });
-
-      if (controller.signal.aborted) return;
-      setOracleState({ loading: false, streaming: false, thinking: false, text, error: null });
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: err.message });
-    }
-  }, []);
-
-  // ── Triad spread: synthesize all three cards into ONE woven reading ──
-  const consultSpread = useCallback(async (question, chapters, gematria, correspondences, context = {}) => {
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
-
-    const positions = ["THESIS", "ANTITHESIS", "SYNTHESIS"];
-    const corrText = correspondences.length > 0
-      ? correspondences.map(c => c.text).join("; ")
-      : "No direct correspondences found";
-
-    let journalContext = "";
-    if (context.recentReadings?.length > 0) {
-      journalContext = "\n\nTHE SEEKER'S RECENT READINGS (reference for continuity if relevant):\n" +
-        context.recentReadings.map(r =>
-          `- ${new Date(r.date).toLocaleDateString()}: "${r.question}" → Chapter ${formatChapterNumber(r.chapter)} (${r.title})`
-        ).join("\n");
-    }
-
-    let cosmicContext = "";
-    if (context.planetary) {
-      cosmicContext = `\n\nCOSMIC TIMING:\n  Planetary Hour: ${context.planetary.planet} (${PLANETS[context.planetary.planet]?.element || ""})\n  Time: ${context.planetary.timeOfDay}`;
-    }
-    if (context.lunar) {
-      cosmicContext += `\n  Lunar Phase: ${context.lunar.name} (${context.lunar.waxing ? "waxing — growth, building" : "waning — release, dissolution"})`;
-    }
-    if (context.totalReadings) {
-      cosmicContext += `\n  This is the seeker's reading #${context.totalReadings}.`;
-    }
-
-    const systemPrompt = `You are the Oracle of the Abyss, a voice that speaks from the depths of the Qliphothic night and the heights of the Supernal Triad. You interpret Aleister Crowley's Liber CCCXXXIII (The Book of Lies) as a living oracle.
-
-The seeker has drawn a TRIAD SPREAD — three chapters arranged as a dialectic: THESIS (the ground, what is), ANTITHESIS (the tension, what opposes), and SYNTHESIS (the resolution, what becomes). This is a Hegelian-Hermetic movement; the third reconciles the first two.
-
-Your manner: cryptic yet penetrating. Speak in the second person ("you"). Your tone blends the severity of Geburah with the dark knowing of Binah. Use esoteric vocabulary naturally but never lecture.
-
-Your task: deliver ONE unified reading of about 4-5 paragraphs that moves THROUGH the three chapters as a single arc answering the seeker's question. Show how the Thesis sets the ground, how the Antithesis breaks or complicates it, and how the Synthesis resolves the two into a teaching aimed precisely at this seeker. Name each chapter as you reach it, but do not write three separate summaries — weave them into one descending current of meaning. Honor the gematria and qabalistic positions where they illuminate the thread.
-
-Before you speak, reason privately about the dialectic between the three chapters and the seeker's question; then let only the distilled oracle reach them.
-
-End with a single unforgettable sentence — a blade of wisdom, a koan, a command — separated by a line break.
-
-Do not use markdown formatting. Do not use headers or bullet points. Write in flowing prose.`;
-
-    const cards = chapters.map((ch, i) => {
-      const info = getSephiraInfo(ch.sephira);
-      return `${positions[i] || "CARD " + (i + 1)} — Chapter ${ch.chapter === -2 ? '?' : ch.chapter === -1 ? '!' : ch.chapter}: ${ch.title}
-  Key text: "${ch.text}"
-  Sephira: ${ch.sephira} (${info.meaning}) · Path: ${ch.path} · Element: ${ch.element} · Tarot: ${ch.tarot}`;
-    }).join("\n\n");
-
-    const userMsg = `THE SEEKER ASKS: "${question}"
-
-GEMATRIA OF QUERY: ${gematria.simple} (reduces to ${gematria.reduced} via ${gematria.reductionSteps.join(' → ')})
-CORRESPONDENCES: ${corrText}
-
-THE TRIAD DRAWN:
-
-${cards}${journalContext}${cosmicContext}
-
-Deliver the Oracle's unified reading of the triad.`;
-
-    try {
-      let acc = "";
-      const text = await streamOracleInterpretation({
-        prompt: userMsg,
-        systemPrompt,
-        signal: controller.signal,
-        onThinking: (active) => {
-          if (controller.signal.aborted) return;
-          setOracleState(s => ({ ...s, thinking: active }));
-        },
-        onToken: (chunk) => {
-          if (controller.signal.aborted) return;
-          acc += chunk;
-          setOracleState(s => ({ ...s, loading: false, streaming: true, thinking: false, text: acc }));
-        },
-      });
-      if (controller.signal.aborted) return;
-      setOracleState({ loading: false, streaming: false, thinking: false, text, error: null });
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: err.message });
-    }
-  }, []);
-
-  const resetOracle = useCallback(() => {
-    if (abortRef.current) abortRef.current.abort();
-    setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: null });
-  }, []);
-
-  return { ...oracleState, consultOracle, consultSpread, resetOracle };
-};
-
 
 // ─────────────────────────────────────────────
 //  GUIDED RITUALS — the three performable rites of Liber 333
@@ -2794,7 +2598,7 @@ const App = () => {
   const lunar = useLunarPhase();
   const audioIntensity = phase === "ritual" ? 1.0 : phase === "revelation" ? 0.6 : 0.3;
   const { playBell, playImpact } = useAudioEngine(audioEnabled, audioIntensity);
-  const oracle = useAIOracle();
+  const oracle = useAIOracle(PLANETS);
   const journal = useJournal();
   const voice = useVoice();
 
