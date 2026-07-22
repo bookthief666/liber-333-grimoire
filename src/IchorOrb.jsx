@@ -196,7 +196,7 @@ export default function IchorOrb() {
       antialias: false,
       depth: false,
       powerPreference: 'high-performance',
-      premultipliedAlpha: true,
+      premultipliedAlpha: false,
     });
 
     if (!gl) {
@@ -250,7 +250,8 @@ export default function IchorOrb() {
     };
 
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.clearColor(0, 0, 0, 0);
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -279,6 +280,7 @@ export default function IchorOrb() {
         (window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
           !document.documentElement.classList.contains('liber-force-full-motion'));
 
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
       gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
       gl.uniform2f(uniforms.touch, ripple.x, ripple.y);
