@@ -19,25 +19,5 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
-  ],
-  "shortcuts": [
-    {
-      "name": "Consult the Oracle",
-      "short_name": "Oracle",
-      "description": "Begin a Liber 333 consultation.",
-      "url": "/?mode=oracle"
-    },
-    {
-      "name": "Gematria Calculator",
-      "short_name": "Gematria",
-      "description": "Open the gematria calculator.",
-      "url": "/?mode=gematria"
-    },
-    {
-      "name": "Guided Rites",
-      "short_name": "Rites",
-      "description": "Open the guided ritual tools.",
-      "url": "/?mode=ritual"
-    }
   ]
 }
