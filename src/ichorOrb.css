@@ -1,0 +1,226 @@
+.liber-legacy-menu-sigil {
+  display: none !important;
+}
+
+.liber-ichor-host {
+  position: relative;
+  z-index: 4;
+  width: min(78vw, 21rem);
+  margin: 0 auto 1.5rem;
+}
+
+.ichor-orb-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  animation: ichorStageBreathe 8s ease-in-out infinite;
+}
+
+.ichor-orb {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  overflow: visible;
+  color: inherit;
+  background: transparent;
+  cursor: crosshair;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  filter:
+    drop-shadow(0 0 1.25rem rgba(15, 102, 102, 0.18))
+    drop-shadow(0 0 2.9rem rgba(138, 17, 55, 0.12));
+}
+
+.ichor-orb::before,
+.ichor-orb::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.ichor-orb::before {
+  inset: 8.1%;
+  z-index: 3;
+  border: 1px solid rgba(201, 218, 238, 0.065);
+  box-shadow:
+    inset 0 0 1.8rem rgba(130, 196, 198, 0.035),
+    0 0 1.5rem rgba(255, 94, 116, 0.035);
+}
+
+.ichor-orb::after {
+  inset: 13%;
+  z-index: 4;
+  opacity: 0.22;
+  background: linear-gradient(
+    132deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.018) 21%,
+    transparent 39%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(circle, black, transparent 70%);
+}
+
+.ichor-orb canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 50%;
+}
+
+.ichor-orb:focus-visible {
+  outline: 1px solid rgba(255, 238, 194, 0.84);
+  outline-offset: 0.45rem;
+}
+
+.ichor-orb:active {
+  transform: scale(0.992);
+}
+
+.ichor-orb-aura {
+  position: absolute;
+  z-index: 0;
+  inset: 6%;
+  border-radius: 50%;
+  opacity: 0.62;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(9, 94, 92, 0.10), transparent 55%),
+    conic-gradient(
+      from 32deg,
+      transparent,
+      rgba(81, 196, 190, 0.06),
+      transparent 26%,
+      rgba(255, 94, 116, 0.065),
+      transparent 58%,
+      rgba(240, 183, 94, 0.045),
+      transparent
+    );
+  filter: blur(1.2rem);
+  animation: ichorAuraTurn 34s linear infinite, ichorAuraPulse 7s ease-in-out infinite;
+}
+
+.ichor-orb-shadow {
+  position: absolute;
+  z-index: 0;
+  left: 19%;
+  right: 19%;
+  bottom: 2.5%;
+  height: 9%;
+  border-radius: 50%;
+  opacity: 0.62;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.84), transparent 72%);
+  filter: blur(0.42rem);
+  transform: scaleX(1.25);
+}
+
+.ichor-orb-fallback {
+  position: absolute;
+  inset: 12%;
+  display: none;
+  place-items: center;
+  border-radius: 50%;
+  color: rgba(218, 232, 235, 0.72);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(191, 225, 225, 0.16), transparent 17%),
+    radial-gradient(circle at 50% 50%, rgba(12, 77, 74, 0.22), rgba(5, 4, 19, 0.76) 52%, #010106 76%);
+  box-shadow:
+    inset -1.4rem -1.8rem 2.4rem rgba(0, 0, 0, 0.82),
+    inset 0.5rem 0.4rem 1.5rem rgba(120, 187, 188, 0.08),
+    0 0 2.5rem rgba(255, 94, 116, 0.10);
+}
+
+.ichor-orb-fallback::before,
+.ichor-orb-fallback::after {
+  content: '';
+  position: absolute;
+  inset: 16%;
+  border: 1px solid rgba(74, 194, 187, 0.24);
+  border-radius: 50%;
+  animation: ichorFallbackPulse 4.8s ease-in-out infinite;
+}
+
+.ichor-orb-fallback::after {
+  inset: 30%;
+  border-color: rgba(255, 94, 116, 0.18);
+  animation-delay: -2.2s;
+}
+
+.ichor-orb-fallback > span {
+  position: relative;
+  z-index: 2;
+  font-size: clamp(2.3rem, 11vw, 4.1rem);
+  text-shadow:
+    0 0 0.85rem rgba(96, 213, 204, 0.32),
+    0 0 1.8rem rgba(255, 94, 116, 0.24);
+}
+
+.ichor-orb.is-fallback canvas {
+  display: none;
+}
+
+.ichor-orb.is-fallback .ichor-orb-fallback {
+  display: grid;
+}
+
+@keyframes ichorStageBreathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-0.3rem) scale(1.008); }
+}
+
+@keyframes ichorAuraTurn {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ichorAuraPulse {
+  0%, 100% { opacity: 0.42; filter: blur(1.25rem) scale(0.97); }
+  50% { opacity: 0.72; filter: blur(1.5rem) scale(1.04); }
+}
+
+@keyframes ichorFallbackPulse {
+  0%, 100% { opacity: 0.28; transform: scale(0.92); }
+  50% { opacity: 0.72; transform: scale(1.06); }
+}
+
+@media (max-width: 42rem) {
+  .liber-ichor-host {
+    width: min(76vw, 17.75rem);
+    margin-bottom: 1.15rem;
+  }
+
+  .ichor-orb-stage {
+    animation-duration: 9.5s;
+  }
+}
+
+@media (min-width: 50rem) {
+  .liber-ichor-host {
+    width: min(38vw, 21.5rem);
+  }
+}
+
+html.liber-force-reduced-motion .ichor-orb-stage,
+html.liber-force-reduced-motion .ichor-orb-aura,
+html.liber-force-reduced-motion .ichor-orb-fallback::before,
+html.liber-force-reduced-motion .ichor-orb-fallback::after {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.liber-force-full-motion) .ichor-orb-stage,
+  html:not(.liber-force-full-motion) .ichor-orb-aura,
+  html:not(.liber-force-full-motion) .ichor-orb-fallback::before,
+  html:not(.liber-force-full-motion) .ichor-orb-fallback::after {
+    animation: none !important;
+  }
+}
