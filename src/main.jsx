@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import './productShell.css';
+import './ichorOrbResponsive.css';
 import App from './liber333.jsx';
 import ProductShell from './ProductShell.jsx';
 import LandingIchorPortal from './LandingIchorPortal.jsx';
