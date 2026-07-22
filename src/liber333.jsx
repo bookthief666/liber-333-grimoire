@@ -10,7 +10,8 @@ import { useAIOracle } from './features/oracle/useAIOracle.js';
 import { useGrimoireNavigation } from './contexts/GrimoireNavigationContext.jsx';
 import LandingCenterpiece from './LandingCenterpiece.jsx';
 import { NOTABLE_NUMBERS } from './features/gematria/gematriaData.js';
-import { calculateGematria, findCorrespondences, stringToHash } from './features/gematria/gematriaEngine.js';
+import { calculateGematria, findCorrespondences } from './features/gematria/gematriaEngine.js';
+import { selectReadingChapters } from './features/oracle/divinationSelection.js';
 import { useJournal } from './features/journal/useJournal.js';
 import { RITUALS } from './features/rites/ritualData.js';
 import { ELEMENT_SYMBOLS, HEBREW_LETTERS, formatChapterNumber, getSephiraColor, getSephiraInfo } from './data/correspondences.js';
@@ -1593,21 +1594,12 @@ const App = () => {
     setCorrespondences(corr);
 
     // Select chapters
-    let chapters;
-    if (spreadType === "spread") {
-      // Past: simple value, Present: reduced, Future: hash
-      const idx1 = gem.simple % LIBER_333.length;
-      const idx2 = gem.reduced % LIBER_333.length;
-      const idx3 = stringToHash(question) % LIBER_333.length;
-      // Ensure no duplicates
-      const set = new Set([idx1]);
-      let i2 = idx2; while (set.has(i2)) i2 = (i2 + 1) % LIBER_333.length; set.add(i2);
-      let i3 = idx3; while (set.has(i3)) i3 = (i3 + 1) % LIBER_333.length;
-      chapters = [LIBER_333[idx1], LIBER_333[i2], LIBER_333[i3]];
-    } else {
-      const idx = gem.simple % LIBER_333.length;
-      chapters = [LIBER_333[idx]];
-    }
+    const chapters = selectReadingChapters({
+      chapters: LIBER_333,
+      gematria: gem,
+      question,
+      spreadType,
+    });
 
     setDrawnChapters(chapters);
     setRevealIndex(0);
