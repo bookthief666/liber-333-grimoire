@@ -1,0 +1,43 @@
+{
+  "id": "/",
+  "name": "Liber CCCXXXIII — Digital Grimoire",
+  "short_name": "Liber 333",
+  "description": "A digital study grimoire, gematria tool, ritual guide, journal, and AI-assisted oracle for Aleister Crowley's Liber CCCXXXIII.",
+  "lang": "en-US",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#05030f",
+  "theme_color": "#05030f",
+  "categories": ["books", "education", "lifestyle", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/liber-333-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Consult the Oracle",
+      "short_name": "Oracle",
+      "description": "Begin a Liber 333 consultation.",
+      "url": "/?mode=oracle"
+    },
+    {
+      "name": "Gematria Calculator",
+      "short_name": "Gematria",
+      "description": "Open the gematria calculator.",
+      "url": "/?mode=gematria"
+    },
+    {
+      "name": "Guided Rites",
+      "short_name": "Rites",
+      "description": "Open the guided ritual tools.",
+      "url": "/?mode=ritual"
+    }
+  ]
+}
