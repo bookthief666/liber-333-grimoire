@@ -1,0 +1,53 @@
+name: Apply chapter corpus extraction
+
+on:
+  push:
+    branches:
+      - agent/liber333-chapter-data
+  pull_request:
+    branches:
+      - agent/liber333-oracle-extraction
+
+permissions:
+  contents: write
+
+jobs:
+  transform-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/liber333-chapter-data
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply idempotent chapter extraction
+        run: node scripts/apply-chapter-data-extraction.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run accumulated unit regressions
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit generated extraction
+        shell: bash
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "Chapter corpus extraction is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "4189826+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: extract complete Liber 333 chapter corpus"
+          git push origin HEAD:${GITHUB_REF_NAME}
