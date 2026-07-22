@@ -1,5 +1,17 @@
-const CACHE_NAME = 'liber-333-shell-v1';
-const APP_SHELL = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/icons/liber-333-icon.svg'];
+const CACHE_NAME = 'liber-333-shell-v2';
+const APP_SHELL = [
+  '/',
+  '/index.html',
+  '/offline.html',
+  '/manifest.webmanifest',
+  '/privacy.html',
+  '/terms.html',
+  '/support.html',
+  '/legal.css',
+  '/icons/liber-333-icon.svg',
+  '/icons/liber-333-icon-192.png',
+  '/icons/liber-333-icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
