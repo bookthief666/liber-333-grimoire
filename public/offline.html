@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05030f" />
+    <title>Liber 333 — Offline</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        color: #d8dcf2;
+        background: radial-gradient(120% 100% at 50% -10%, #17102f 0%, #05030f 58%, #020108 100%);
+        font-family: Georgia, serif;
+        text-align: center;
+      }
+      main { max-width: 34rem; }
+      .sigil { color: #ff5e74; font-size: 4rem; text-shadow: 0 0 30px rgba(255,94,116,.55); }
+      h1 { margin: 1rem 0 .75rem; font-size: clamp(2rem, 8vw, 3.5rem); }
+      p { color: #aeb4d4; line-height: 1.65; }
+      button {
+        margin-top: 1.25rem;
+        border: 0;
+        background: transparent;
+        color: #ff7188;
+        font: inherit;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="sigil" aria-hidden="true">☉</div>
+      <h1>The Oracle is beyond the veil.</h1>
+      <p>The network is unavailable. Previously cached parts of the grimoire may still open after you return. AI interpretations always require an active connection.</p>
+      <button type="button" onclick="location.reload()">Attempt Return</button>
+    </main>
+  </body>
+</html>
