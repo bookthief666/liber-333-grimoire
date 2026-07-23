@@ -11,6 +11,7 @@ import LandingCenterpiece from './LandingCenterpiece.jsx';
 import { NOTABLE_NUMBERS } from './features/gematria/gematriaData.js';
 import { calculateGematria, findCorrespondences, stringToHash } from './features/gematria/gematriaEngine.js';
 import { useJournal } from './features/journal/useJournal.js';
+import { RITUALS } from './features/rites/ritualData.js';
 
 // ─────────────────────────────────────────────
 //  COMPLETE CHAPTER DATA (94 entries)
@@ -1554,64 +1555,6 @@ Deliver the Oracle's unified reading of the triad.`;
 //  as a guided recitation/visualization; physical implements are optional
 //  and the rites may be performed symbolically.
 // ─────────────────────────────────────────────
-const RITUALS = {
-  25: {
-    chapter: 25,
-    title: "The Star Ruby",
-    subtitle: "The Banishing Ritual of the Pentagram",
-    element: "Fire",
-    duration: "≈ 5 minutes",
-    intro: "The premier daily banishing of Thelemic magick. You purify your sphere, seal the four quarters with the Pentagram, and stand at the centre of the cross of the elements. Face EAST to begin. Each quarter is taken widdershins (anticlockwise).",
-    steps: [
-      { station: "CENTRE · Facing East", direction: "Draw a deep, deep, deep breath, closing your mouth with your right forefinger pressed to your lower lip. Then dash the hand down with a great sweep, back and out, expelling the breath forcibly.", words: "ΑΠΟ ΠΑΝΤΟΣ ΚΑΚΟΔΑΙΜΟΝΟΣ", translit: "Apo Pantos Kakodaimonos", meaning: "Away, every evil spirit!", bell: true },
-      { station: "THE CROSS · Centre", direction: "With the same forefinger touch your forehead, your member (or root), your right shoulder, your left shoulder; then clasp your hands, locking the fingers, over the heart.", words: "ΣΟΙ · Ω ΦΑΛΛΕ · ΙΣΧΥΡΟΣ · ΕΥΧΑΡΙΣΤΟΣ · ΙΑΩ", translit: "Soi · O Phalle · Ischuros · Eucharistos — IAO", meaning: "Thine · O Phallus · the Mighty · the Beneficent — IAÔ", bell: false },
-      { station: "EAST", direction: "Advance to the East. Imagine strongly a Pentagram in your forehead. Draw the hands to the eyes, fling it forth with the Sign of the Enterer, and roar.", words: "ΘΗΡΙΟΝ", translit: "THERION", meaning: "The Beast", bell: true },
-      { station: "NORTH", direction: "Turn widdershins to the North. Fling the Pentagram forth with the Sign of the Enterer, and cry.", words: "ΝΥΙΤ", translit: "NUIT", meaning: "Infinite Space, the Star-Goddess", bell: true },
-      { station: "WEST", direction: "Turn to the West. Fling the Pentagram forth, and whisper.", words: "ΒΑΒΑΛΩΝ", translit: "BABALON", meaning: "The Scarlet Woman, the Gateway", bell: true },
-      { station: "SOUTH", direction: "Turn to the South. Fling the Pentagram forth, and bellow.", words: "ΑΔΙΤ", translit: "HADIT", meaning: "The infinite point, the secret flame", bell: true },
-      { station: "CENTRE · The Paian", direction: "Complete the circle widdershins back to the centre. Make the signs of N.O.X. and raise your voice in the Paian.", words: "ΙΩ ΠΑΝ", translit: "IO PAN", meaning: "Hail, All! Hail to the All-God Pan!", bell: false },
-      { station: "THE TAU · Centre", direction: "Extend the arms in the form of a Tau (a cross). Say, low but clear, naming the powers that surround you.", words: "Before me the Iynges; behind me the Teletarchai; on my right hand the Synoches; on my left hand the Daimones. For about me flames the Star of Five, and in the column stands the Star of Six.", translit: "", meaning: "The guardians of the four quarters and the columns of the temple.", bell: false },
-      { station: "SEAL · Centre", direction: "Repeat the Cross of light as you did at the beginning, and so end as you began. Stand a moment in the cleared and silent sphere.", words: "The rite is sealed.", translit: "", meaning: "", bell: true, final: true },
-    ],
-  },
-  36: {
-    chapter: 36,
-    title: "The Star Sapphire",
-    subtitle: "The Invoking Ritual of the Hexagram",
-    element: "Air",
-    duration: "≈ 6 minutes",
-    intro: "The counterpart to the Star Ruby: where the Pentagram banishes the microcosm, the Hexagram invokes the macrocosm. The Adept unites the Above with the Below. Be armed with your Magick Rood. Begin at the CENTRE.",
-    steps: [
-      { station: "CENTRE", direction: "Stand at the centre. Give the L.V.X. signs (the signs of the cross of light) — or, if you know them, will them, dare them, and can keep silent, the signs of N.O.X.: Puer, Vir, Puella, Mulier.", words: "L · V · X", translit: "Lux", meaning: "Light — the Light of the Cross", bell: true },
-      { station: "EAST", direction: "Advance to the East and make the Holy Hexagram — the two interlocking triangles. Then declare.", words: "PATER ET MATER UNUS DEUS ARARITA", translit: "", meaning: "Father and Mother, one God, ARARITA", bell: true },
-      { station: "SOUTH", direction: "Go round to the South. Make the Holy Hexagram. Then declare.", words: "MATER ET FILIUS UNUS DEUS ARARITA", translit: "", meaning: "Mother and Son, one God, ARARITA", bell: true },
-      { station: "WEST", direction: "Go round to the West. Make the Holy Hexagram. Then declare.", words: "FILIUS ET FILIA UNUS DEUS ARARITA", translit: "", meaning: "Son and Daughter, one God, ARARITA", bell: true },
-      { station: "NORTH", direction: "Go round to the North. Make the Holy Hexagram. Then declare.", words: "FILIA ET PATER UNUS DEUS ARARITA", translit: "", meaning: "Daughter and Father, one God, ARARITA", bell: true },
-      { station: "CENTRE OF ALL", direction: "Return to the centre, and so to the Centre of All. Make the Rosy Cross as you may know how. Drink of the Sacrament, and communicate the same.", words: "ARARITA · ARARITA · ARARITA", translit: "", meaning: "The sevenfold unity of God, thrice affirmed", bell: true },
-      { station: "THE DECLARATION", direction: "Speak the great reconciliation of all number into the One, and the One into Nothing.", words: "OMNIA IN DUOS · DUO IN UNUM · UNUS IN NIHIL. Glory to the Father and the Mother and the Son and the Daughter and the Holy Spirit without and the Holy Spirit within — as it was, is, and shall be. Six in One by the name of Seven in One — ARARITA.", translit: "", meaning: "All in Two; Two in One; One in Naught.", bell: false },
-      { station: "SEAL · Centre", direction: "Repeat the signs of L.V.X. — but not the signs of N.O.X. For it is not you that shall arise in the Sign of Isis Rejoicing. Stand in the consecrated sphere.", words: "The rite is sealed.", translit: "", meaning: "", bell: true, final: true },
-    ],
-  },
-  44: {
-    chapter: 44,
-    title: "The Mass of the Phoenix",
-    subtitle: "The Daily Eucharist of the Thelemite",
-    element: "Fire",
-    duration: "≈ 5 minutes",
-    intro: "A daily sacrament in which the Magician is both priest and god — the Phoenix that consumes itself and is reborn. Traditionally performed bare-breasted before an altar bearing the Burin, Bell, Thurible, and two Cakes of Light. The blood-sign may be made symbolically — trace it, do not cut. Do what thou wilt.",
-    steps: [
-      { station: "INVOCATION", direction: "Stand before the altar. In the Sign of the Enterer, reach West across the altar and cry.", words: "Hail Ra, that goest in Thy bark / Into the Caverns of the Dark!", translit: "", meaning: "Salute the Sun descending into night.", bell: false },
-      { station: "THE LIGHT & THE BELL", direction: "Give the Sign of Silence. Take the Bell and the Fire in your hands.", words: "East of the altar see me stand / With light and music in mine hand!", translit: "", meaning: "", bell: true },
-      { station: "THE FLAME", direction: "Strike eleven times upon the Bell — 3-3-3-1-1-1 — and set the Fire in the Thurible. Then utter the Word.", words: "I strike the Bell: I light the Flame; / I utter the mysterious Name. — ABRAHADABRA", translit: "ABRAHADABRA", meaning: "The Word of the Aeon, uniting 5 and 6.", bell: true },
-      { station: "THE PRAYER", direction: "Begin to pray to the Crowned and Conquering Child.", words: "Thou Child, holy thy name and undefiled! / Thy reign is come; thy will is done. / Here is the Bread; here is the Blood. / Bring me through midnight to the Sun! / Save me from Evil and from Good! / That thy one crown of all the Ten / even now and here be mine. AMEN.", translit: "", meaning: "", bell: false },
-      { station: "THE FIRST CAKE", direction: "Put the first Cake of Light on the Fire of the Thurible. Proclaim the adoration.", words: "I burn the Incense-cake, proclaim / These adorations of Thy name.", translit: "", meaning: "", bell: false },
-      { station: "THE BLOOD-SIGN", direction: "Take the Burin and trace the Sign of the Beast upon your breast (symbolically — do not cut). Take up the second Cake.", words: "Behold this bleeding breast of mine / Gashed with the sacramental sign!", translit: "", meaning: "The mark of the Sun, not of the adversary.", bell: false },
-      { station: "THE SACRAMENT", direction: "Press the Cake to the sign, then eat it.", words: "I stanch the Blood; the wafer soaks / It up, and the high priest invokes! / This Bread I eat. This Oath I swear / as I enflame myself with prayer: / There is no grace: there is no guilt: / This is the Law: DO WHAT THOU WILT!", translit: "", meaning: "", bell: false },
-      { station: "THE SEALING", direction: "Strike eleven times upon the Bell. Cry the Word, and go forth.", words: "ABRAHADABRA. / I entered in with woe; with mirth / I now go forth, and with thanksgiving, / to do my pleasure on the earth / among the legions of the living.", translit: "", meaning: "", bell: true, final: true },
-    ],
-  },
-};
-
 // ─────────────────────────────────────────────
 //  GEMATRIA ECHOES (highlight notable words)
 // ─────────────────────────────────────────────
