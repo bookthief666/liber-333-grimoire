@@ -1,13 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import './productShell.css';
 import App from './liber333.jsx';
+import ProductShell from './ProductShell.jsx';
+import { applyInitialDeepLink } from './deepLinkBridge.js';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
-  </React.StrictMode>
+    <ProductShell>
+      <App />
+    </ProductShell>
+  </React.StrictMode>,
 );
+
+applyInitialDeepLink();
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
