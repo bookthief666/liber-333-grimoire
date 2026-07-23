@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { MODE_LABELS, useGrimoireNavigation } from './contexts/GrimoireNavigationContext.jsx';
 
 const PREFERENCES_KEY = 'liber333_shell_preferences_v2';
 
 const DEFAULT_PREFERENCES = {
   motion: 'system',
   textScale: '100',
-};
-
-const MODE_LABELS = {
-  oracle: 'ORACLE',
-  ritual: 'RITES',
-  tree: 'TREE',
-  gematria: 'GEMATRIA',
-  grimoire: 'GRIMOIRE',
 };
 
 const MODE_HELP = {
@@ -124,18 +117,6 @@ function readStoredPreferences() {
   }
 }
 
-function findButton(label) {
-  const target = normalizeText(label);
-  return Array.from(document.querySelectorAll('button')).find((button) => {
-    const text = normalizeText(button.textContent || '');
-    return text === target || (target === 'GRIMOIRE' && text.startsWith('GRIMOIRE'));
-  });
-}
-
-function navigateLegacyApp(mode) {
-  window.dispatchEvent(new CustomEvent('liber333:navigate', { detail: { mode } }));
-  window.setTimeout(() => findButton(MODE_LABELS[mode])?.click(), 80);
-}
 
 function Modal({ title, onClose, children }) {
   const dialogRef = useRef(null);
@@ -311,7 +292,7 @@ function SettingsPanel({ preferences, onChange, onClose, installAvailable, onIns
 
 export default function ProductShell({ children }) {
   const [activePanel, setActivePanel] = useState(null);
-  const [activeMode, setActiveMode] = useState('oracle');
+  const { mode: activeMode, navigate } = useGrimoireNavigation();
   const [preferences, setPreferences] = useState(readStoredPreferences);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || false);
@@ -330,20 +311,6 @@ export default function ProductShell({ children }) {
     }
   }, [preferences]);
 
-  useEffect(() => {
-    const trackMode = (event) => {
-      const button = event.target.closest?.('button');
-      if (!button) return;
-      const text = normalizeText(button.textContent || '');
-      const matched = Object.entries(MODE_LABELS).find(([, label]) => {
-        const normalizedLabel = normalizeText(label);
-        return text === normalizedLabel || (label === 'GRIMOIRE' && text.startsWith(normalizedLabel));
-      });
-      if (matched) setActiveMode(matched[0]);
-    };
-    document.addEventListener('click', trackMode, true);
-    return () => document.removeEventListener('click', trackMode, true);
-  }, []);
 
   useEffect(() => {
     const beforeInstall = (event) => {
@@ -362,10 +329,9 @@ export default function ProductShell({ children }) {
     };
   }, []);
 
-  const navigate = (mode) => {
+  const navigateFromHelp = (nextMode) => {
     setActivePanel(null);
-    setActiveMode(mode);
-    navigateLegacyApp(mode);
+    navigate(nextMode);
   };
 
   const install = async () => {
@@ -400,7 +366,7 @@ export default function ProductShell({ children }) {
         </button>
       </div>
 
-      {activePanel === 'help' ? <HelpPanel mode={activeMode} onClose={() => setActivePanel(null)} onNavigate={navigate} /> : null}
+      {activePanel === 'help' ? <HelpPanel mode={activeMode} onClose={() => setActivePanel(null)} onNavigate={navigateFromHelp} /> : null}
       {activePanel === 'settings' ? (
         <SettingsPanel
           preferences={preferences}

@@ -5,19 +5,18 @@ import './productShell.css';
 import './ichorOrbResponsive.css';
 import App from './liber333.jsx';
 import ProductShell from './ProductShell.jsx';
-import LandingIchorPortal from './LandingIchorPortal.jsx';
-import { applyInitialDeepLink } from './deepLinkBridge.js';
+import { GrimoireNavigationProvider } from './contexts/GrimoireNavigationContext.jsx';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <ProductShell>
-      <App />
-      <LandingIchorPortal />
-    </ProductShell>
+    <GrimoireNavigationProvider>
+      <ProductShell>
+        <App />
+      </ProductShell>
+    </GrimoireNavigationProvider>
   </React.StrictMode>,
 );
 
-applyInitialDeepLink();
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
