@@ -19,7 +19,8 @@
     "test:selection": "node --test tests/divinationSelection.test.mjs",
     "test:unit": "npm run test:gematria && npm run test:journal && npm run test:rites && npm run test:correspondences && npm run test:oracle && npm run test:chapters && npm run test:cosmic && npm run test:tree && npm run test:selection",
     "validate:release": "node scripts/validate-release.mjs",
-    "check": "npm run test:unit && npm run build && npm run validate:release"
+    "smoke:dist": "node scripts/smoke-dist.mjs",
+    "check": "npm run test:unit && npm run build && npm run validate:release && npm run smoke:dist"
   },
   "dependencies": {
     "react": "^18.3.1",
