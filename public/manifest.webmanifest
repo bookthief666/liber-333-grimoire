@@ -17,7 +17,24 @@
       "src": "/icons/liber-333-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/liber-333-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/liber-333-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    { "name": "Ask the Oracle", "short_name": "Oracle", "url": "/?mode=oracle" },
+    { "name": "Perform a Rite", "short_name": "Rites", "url": "/?mode=ritual" },
+    { "name": "Calculate Gematria", "short_name": "Gematria", "url": "/?mode=gematria" }
   ]
 }
