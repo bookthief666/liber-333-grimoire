@@ -15,22 +15,33 @@ npm run check
 
 1. all nine accumulated unit suites;
 2. the production Vite build;
-3. release-file validation.
+3. source-tree release validation;
+4. an HTTP smoke test against the generated `dist` directory.
 
-The release validator checks:
+The source-tree release validator checks:
 
 - manifest structure;
 - policy and support pages;
 - offline fallback and service worker;
 - SVG, 192×192 PNG, and 512×512 PNG icons;
-- actual PNG dimensions;
+- actual PNG signatures and dimensions;
 - maskable icon declaration;
 - Apple touch icon wiring;
 - service-worker shell entries;
 - required package scripts;
 - known wildcard-CORS patterns in provider routes that exist in the repository.
 
-A green build does not prove that an external AI provider, browser permission, or device-specific API works. Manual verification remains mandatory.
+The built-output smoke test starts a local HTTP server over `dist` and verifies:
+
+- the application shell;
+- Privacy, Terms, Support, and offline pages;
+- service-worker delivery;
+- manifest delivery and JSON parsing;
+- every manifest-declared icon and its MIME type;
+- manifest shortcut URLs;
+- raster favicon and Apple touch icon metadata in the built HTML.
+
+A green automated gate does not prove that an external AI provider, browser permission, service-worker lifecycle, or device-specific API works. Manual verification remains mandatory.
 
 ## Required manual verification
 
