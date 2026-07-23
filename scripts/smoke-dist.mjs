@@ -94,7 +94,7 @@ try {
   await expectResource('/privacy.html', 'text/html', 'Privacy Policy');
   await expectResource('/terms.html', 'text/html', 'Terms of Use');
   await expectResource('/support.html', 'text/html', 'Support');
-  await expectResource('/offline.html', 'text/html', 'The Grimoire Is Offline');
+  await expectResource('/offline.html', 'text/html', 'The Oracle is beyond the veil.');
   await expectResource('/sw.js', 'text/javascript', 'liber-333-shell-v2');
   await expectResource('/icons/liber-333-icon.svg', 'image/svg+xml');
   await expectResource('/icons/liber-333-icon-192.png', 'image/png');
