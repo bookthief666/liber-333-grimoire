@@ -1,0 +1,35 @@
+.liber-ichor-host {
+  width: clamp(13.75rem, 62vw, 19rem);
+  margin-bottom: clamp(0.9rem, 1.8vw, 1.2rem);
+}
+
+@media (max-width: 30rem) {
+  .liber-ichor-host {
+    width: clamp(13.25rem, 67vw, 15.75rem);
+  }
+}
+
+@media (min-width: 30.01rem) and (max-width: 49.99rem) {
+  .liber-ichor-host {
+    width: clamp(14.5rem, 48vw, 17rem);
+  }
+}
+
+@media (min-width: 50rem) and (max-width: 74.99rem) {
+  .liber-ichor-host {
+    width: clamp(15.75rem, 28vw, 18rem);
+  }
+}
+
+@media (min-width: 75rem) {
+  .liber-ichor-host {
+    width: min(24vw, 19rem);
+  }
+}
+
+@media (max-height: 46rem) and (orientation: landscape) {
+  .liber-ichor-host {
+    width: clamp(12.5rem, 31vh, 15rem);
+    margin-bottom: 0.7rem;
+  }
+}
