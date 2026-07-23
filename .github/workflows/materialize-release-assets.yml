@@ -1,0 +1,86 @@
+name: Materialize release assets
+
+on:
+  push:
+    branches:
+      - agent/liber333-release-consolidation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-liber-333-release-assets
+  cancel-in-progress: true
+
+jobs:
+  materialize-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/liber333-release-consolidation
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Materialize PNG icons from verified Git blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p public/icons
+          fetch_blob() {
+            local sha="$1"
+            local target="$2"
+            curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/blobs/${sha}" \
+              | jq -r '.content' | tr -d '\n' | base64 --decode > "${target}"
+          }
+          fetch_blob "93d146d167d557d429a600400f93fb7748c20119" "public/icons/liber-333-icon-192.png"
+          fetch_blob "04ea6aa246abfa2fecc7c46771d79f3cfa9e7ff7" "public/icons/liber-333-icon-512.png"
+
+      - name: Add raster and Apple icon metadata
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          html = path.read_text()
+          svg = '    <link rel="icon" href="/icons/liber-333-icon.svg" type="image/svg+xml" />'
+          raster = '    <link rel="icon" href="/icons/liber-333-icon-192.png" type="image/png" sizes="192x192" />'
+          apple = '    <link rel="apple-touch-icon" href="/icons/liber-333-icon-192.png" />'
+
+          if apple not in html:
+              if svg not in html:
+                  raise SystemExit('Could not find the SVG icon link in index.html')
+              html = html.replace(svg, '\n'.join([svg, raster, apple]), 1)
+              path.write_text(html)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run complete release gate
+        run: npm run check
+
+      - name: Commit validated release assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html public/icons/liber-333-icon-192.png public/icons/liber-333-icon-512.png
+          if git diff --cached --quiet; then
+            echo "Release assets are already current."
+            exit 0
+          fi
+          git commit -m "pwa: add validated raster application icons"
+          git push origin HEAD:agent/liber333-release-consolidation
