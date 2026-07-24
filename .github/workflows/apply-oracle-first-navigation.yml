@@ -1,0 +1,161 @@
+name: Apply Oracle First Navigation
+
+on:
+  push:
+    branches:
+      - feature/settings-accessibility-performance
+    paths:
+      - .github/workflows/apply-oracle-first-navigation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/settings-accessibility-performance
+          fetch-depth: 0
+
+      - name: Apply guarded navigation changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return text.replace(old, new, 1)
+
+          shell_path = Path('src/ProductShell.jsx')
+          shell = shell_path.read_text()
+          shell = replace_once(
+              shell,
+              'Choose an intention rather than a feature. This guidance can be reopened or reset from Reading Environment settings.',
+              'Choose an intention rather than a feature. Open this guide anytime from WAYS in the top navigation or from Reading Environment settings.',
+              'orientation intro',
+          )
+          shell = replace_once(
+              shell,
+              'function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall, onResetOrientation }) {',
+              'function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall, onOpenOrientation }) {',
+              'settings panel prop',
+          )
+          shell = replace_once(
+              shell,
+              '<button className="liber-reset-orientation" onClick={onResetOrientation}>Reset orientation guidance</button>',
+              '<button className="liber-reset-orientation" onClick={onOpenOrientation}>Open Ways of Working</button>',
+              'settings guide action',
+          )
+          shell = replace_once(
+              shell,
+              "  const [activePanel, setActivePanel] = useState(() => (initialSettings.orientationSeen ? null : 'orientation'));",
+              '  const [activePanel, setActivePanel] = useState(null);',
+              'oracle-first panel state',
+          )
+          shell = replace_once(
+              shell,
+              '  useEffect(() => runtime?.subscribe?.(setSettings), [runtime]);\n',
+              "  useEffect(() => runtime?.subscribe?.(setSettings), [runtime]);\n\n  useEffect(() => {\n    const openOrientation = () => setActivePanel('orientation');\n    window.addEventListener('liber333:open-orientation', openOrientation);\n    return () => window.removeEventListener('liber333:open-orientation', openOrientation);\n  }, []);\n",
+              'orientation event listener',
+          )
+          shell = replace_once(
+              shell,
+              "  const resetOrientation = () => {\n    runtime?.resetOrientation?.();\n    setActivePanel('orientation');\n  };",
+              "  const openOrientation = () => setActivePanel('orientation');",
+              'explicit orientation opener',
+          )
+          shell = replace_once(
+              shell,
+              '          onResetOrientation={resetOrientation}',
+              '          onOpenOrientation={openOrientation}',
+              'settings orientation wiring',
+          )
+          shell_path.write_text(shell)
+
+          app_path = Path('src/liber333.jsx')
+          app = app_path.read_text()
+          nav_anchor = '''          })}
+          <button onClick={() => openJournal()}
+            className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300"
+            style={{ fontFamily: 'Cinzel, serif' }}>
+'''
+          nav_replacement = '''          })}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('liber333:open-orientation'))}
+            className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300"
+            style={{ fontFamily: 'Cinzel, serif' }}
+            aria-haspopup="dialog"
+            aria-label="Open Ways of Working guide"
+            title="Ways of Working"
+          >
+            WAYS
+          </button>
+          <button onClick={() => openJournal()}
+            className="relative text-[12px] tracking-[0.22em] whitespace-nowrap lux-dim hover:text-[#cfd3ee] transition-all duration-300"
+            style={{ fontFamily: 'Cinzel, serif' }}>
+'''
+          app = replace_once(app, nav_anchor, nav_replacement, 'top navigation guide control')
+          app_path.write_text(app)
+
+          css_path = Path('src/experienceSettings.css')
+          css = css_path.read_text()
+          marker = '/* Compact, discoverable horizontal mode rail for narrow Fold screens. */'
+          if marker not in css:
+              css = css.rstrip() + f'''\n\n{marker}\n.nav-rail {{\n  scrollbar-width: none;\n  -ms-overflow-style: none;\n  scroll-padding-inline: 1rem;\n  overscroll-behavior-x: contain;\n  -webkit-overflow-scrolling: touch;\n}}\n\n.nav-rail::-webkit-scrollbar {{\n  display: none;\n}}\n\n@media (max-width: 480px) {{\n  .nav-rail {{\n    gap: 1rem !important;\n    padding-right: 3.5rem !important;\n  }}\n\n  .nav-rail > button {{\n    font-size: 0.64rem !important;\n    letter-spacing: 0.16em !important;\n  }}\n}}\n'''
+          css_path.write_text(css)
+
+          test_path = Path('tests/experienceSettings.test.mjs')
+          tests = test_path.read_text()
+          tests = replace_once(tests, 'assert.match(source, /Reset orientation guidance/);', 'assert.match(source, /Open Ways of Working/);', 'guide settings test')
+          tests = replace_once(
+              tests,
+              "  assert.match(source, /event\\.key === 'Escape'/);\n});",
+              "  assert.match(source, /event\\.key === 'Escape'/);\n  assert.match(source, /useState\\(null\\)/);\n  assert.match(source, /liber333:open-orientation/);\n  assert.doesNotMatch(source, /initialSettings\\.orientationSeen \\? null : 'orientation'/);\n});",
+              'oracle-first source contract',
+          )
+          addition = '''\n\ntest('top navigation exposes Ways of Working without replacing the Oracle landing surface', async () => {\n  const source = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');\n  assert.match(source, /aria-label="Open Ways of Working guide"/);\n  assert.match(source, />\\s*WAYS\\s*<\\/button>/);\n  assert.match(source, /new CustomEvent\\('liber333:open-orientation'\\)/);\n  assert.match(source, /const mode = requested && VALID_MODES\\.has\\(requested\\) \\? requested : 'oracle'/);\n});\n'''
+          if "top navigation exposes Ways of Working" not in tests:
+              tests = tests.rstrip() + addition
+          test_path.write_text(tests)
+
+          docs_path = Path('docs/SETTINGS_ACCESSIBILITY.md')
+          docs = docs_path.read_text()
+          docs = replace_once(
+              docs,
+              'The first local launch opens a compact Ways of Working panel. Its completion state is local and can be reset from Reading Environment settings. Resetting guidance does not clear journal entries, reading totals, backups, or any other settings.',
+              'The Oracle is always the default landing surface. Ways of Working is an optional dialog opened from WAYS in the top navigation or from Reading Environment settings; it never interrupts startup. Its legacy completion state remains compatible with existing local settings but no longer controls first render.',
+              'orientation documentation',
+          )
+          docs = replace_once(
+              docs,
+              '11. Reset orientation guidance without journal or settings loss.',
+              '11. Open Ways of Working from the top navigation and Settings without changing the current mode or local data.',
+              'orientation review matrix',
+          )
+          docs_path.write_text(docs)
+
+          Path('.github/workflows/apply-oracle-first-navigation.yml').unlink()
+          PY
+
+      - name: Run complete release gate
+        run: |
+          npm ci
+          npm run check
+
+      - name: Commit navigation repair and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ProductShell.jsx src/liber333.jsx src/experienceSettings.css tests/experienceSettings.test.mjs docs/SETTINGS_ACCESSIBILITY.md .github/workflows/apply-oracle-first-navigation.yml
+          git commit -m "Make Oracle the default and move guidance into navigation"
+          git push origin HEAD:feature/settings-accessibility-performance
