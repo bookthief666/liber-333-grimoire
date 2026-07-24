@@ -175,6 +175,25 @@ html[data-liber-effective-motion='reduced'] .liber-orientation-card:focus-visibl
   transform: none;
 }
 
+/* The mode rail remains touch-scrollable after adding the optional WAYS guide. */
+.nav-rail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-padding-inline: 1rem;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nav-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.liber-ways-nav.is-active,
+.liber-ways-nav[aria-pressed='true'] {
+  color: #ff5e74;
+  text-shadow: 0 0 14px rgba(255, 46, 77, 0.72);
+}
+
 @media (max-width: 42rem) {
   .liber-settings-grid,
   .liber-orientation-grid {
@@ -188,6 +207,19 @@ html[data-liber-effective-motion='reduced'] .liber-orientation-card:focus-visibl
 
   html[data-liber-text-size='large'] .liber-context-tools {
     top: calc(env(safe-area-inset-top, 0px) + 7rem);
+  }
+}
+
+@media (max-width: 30rem) {
+  .nav-rail {
+    gap: 1rem !important;
+    padding-right: 3.5rem !important;
+  }
+
+  .nav-rail > button,
+  .nav-rail > .liber-ways-nav {
+    font-size: 0.64rem !important;
+    letter-spacing: 0.16em !important;
   }
 }
 
