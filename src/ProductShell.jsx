@@ -216,7 +216,7 @@ function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall
           <SegmentedControl label="Ceremony" value={settings.ceremony} onChange={(ceremony) => onPatch({ ceremony })}
             options={[{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }]}
             description="Reduced ceremony shortens nonessential reveal pacing without changing the selected chapters or text." />
-          <SegmentedControl label="Motion" value={settings.motion} onChange={(motion) => onPatch({ motion })}
+          <SegmentedControl label="Motion" value={settings.motionExplicit ? settings.motion : settings.effectiveMotion} onChange={(motion) => onPatch({ motion })}
             options={[{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }]}
             description={settings.motionExplicit ? `Your explicit preference is active.` : `System preference is currently applied as ${settings.effectiveMotion}.`} />
           <SegmentedControl label="Visual effects" value={settings.effects} onChange={(effects) => onPatch({ effects })}

@@ -216,7 +216,11 @@ function installSensoryGuards(windowObject, navigatorObject, getSettings) {
     };
     const createGain = function controlledCreateGain(...args) {
       contexts.add(this);
-      return originalCreateGain.apply(this, args);
+      const node = originalCreateGain.apply(this, args);
+      if (!getSettings().sound && this?.state !== 'closed') {
+        queueMicrotask(() => this?.suspend?.().catch?.(() => {}));
+      }
+      return node;
     };
 
     try {
