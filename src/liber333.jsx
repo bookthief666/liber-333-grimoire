@@ -1689,7 +1689,7 @@ const App = () => {
     // Act 3: Receiving (4.5-6s) — contraction
     // Act 4: Silence (6-6.5s) — brief darkness
     // Act 5: Reveal (6.5s) — SLAM
-    const duration = 7000;
+    const duration = window.__LIBER333_EXPERIENCE__?.ceremonyDuration?.(7000) ?? 7000;
     const start = Date.now();
     const tick = () => {
       const elapsed = Date.now() - start;
