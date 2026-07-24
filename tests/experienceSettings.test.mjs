@@ -245,9 +245,29 @@ test('settings UI preserves accessible labels and visible active state contracts
   }
   assert.match(source, /aria-pressed=\{value === option\.value\}/);
   assert.match(source, /aria-expanded=\{activePanel === 'settings'\}/);
-  assert.match(source, /Reset orientation guidance/);
+  assert.match(source, /Open Ways of Working/);
   assert.match(source, /role="dialog"/);
   assert.match(source, /event\.key === 'Escape'/);
+});
+
+test('Oracle is the uninterrupted default and Ways is an optional top-rail dialog', async () => {
+  const source = await readFile(new URL('../src/ProductShell.jsx', import.meta.url), 'utf8');
+  assert.match(source, /const \[activePanel, setActivePanel\] = useState\(null\)/);
+  assert.doesNotMatch(source, /initialSettings\.orientationSeen \? null : 'orientation'/);
+  assert.match(source, /document\.querySelector\('\.nav-rail'\)/);
+  assert.match(source, /createPortal\(/);
+  assert.match(source, /aria-label="Open Ways of Working guide"/);
+  assert.match(source, /aria-haspopup="dialog"/);
+  assert.match(source, />\s*WAYS\s*<\/button>/);
+});
+
+test('narrow navigation remains touch-scrollable after adding Ways', async () => {
+  const css = await readFile(new URL('../src/experienceSettings.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nav-rail/);
+  assert.match(css, /scrollbar-width: none/);
+  assert.match(css, /overscroll-behavior-x: contain/);
+  assert.match(css, /-webkit-overflow-scrolling: touch/);
+  assert.match(css, /padding-right: 3\.5rem/);
 });
 
 test('low-effects stylesheet targets atmosphere, canvas, whispers, blur, and glow', async () => {
