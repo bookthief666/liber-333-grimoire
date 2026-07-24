@@ -6,12 +6,14 @@ import {
   EXPERIENCE_SETTINGS_KEY,
   LEGACY_SHELL_PREFERENCES_KEY,
   applyExperienceRootState,
+  createExperienceSettingsRuntime,
   getExperienceRootState,
   normalizeExperienceSettings,
   persistExperienceSettings,
   readExperienceSettings,
   resolveEffectiveMotion,
   scaleCeremonyDuration,
+  shouldReduceAnimationWork,
 } from '../src/features/settings/experienceSettings.js';
 
 function memoryStorage(initial = {}) {
@@ -90,6 +92,13 @@ test('prefers-reduced-motion is honored until the user makes an explicit choice'
   assert.equal(resolveEffectiveMotion({ motion: 'reduced', motionExplicit: true }, false), 'reduced');
 });
 
+test('animation work is reduced for Low Effects or effective Reduced Motion', () => {
+  assert.equal(shouldReduceAnimationWork({ effects: 'high', motion: 'full', motionExplicit: true }, false), false);
+  assert.equal(shouldReduceAnimationWork({ effects: 'low', motion: 'full', motionExplicit: true }, false), true);
+  assert.equal(shouldReduceAnimationWork({ effects: 'high', motion: 'reduced', motionExplicit: true }, false), true);
+  assert.equal(shouldReduceAnimationWork({ effects: 'high', motion: 'full', motionExplicit: false }, true), true);
+});
+
 test('reduced ceremony shortens long presentation intervals but preserves immediate actions', () => {
   assert.equal(scaleCeremonyDuration(7000, { ceremony: 'full' }), 7000);
   assert.equal(scaleCeremonyDuration(7000, { ceremony: 'reduced' }), 900);
@@ -118,15 +127,115 @@ test('root state exposes all settings and applies active classes', () => {
     liberVoice: 'off',
     liberHaptics: 'off',
     liberTextSize: 'large',
+    liberAnimationBudget: 'reduced',
   });
 
   const root = { dataset: {}, classList: classListStub() };
   applyExperienceRootState(root, settings, false);
   assert.equal(root.dataset.liberEffects, 'low');
+  assert.equal(root.dataset.liberAnimationBudget, 'reduced');
   assert.equal(root.classList.has('liber-force-reduced-motion'), true);
   assert.equal(root.classList.has('liber-low-effects'), true);
   assert.equal(root.classList.has('liber-reduced-ceremony'), true);
   assert.equal(root.classList.has('liber-large-text'), true);
+});
+
+test('runtime survives blocked access to the localStorage property', () => {
+  const runtime = createExperienceSettingsRuntime({
+    windowObject: {
+      get localStorage() { throw new Error('SecurityError'); },
+      dispatchEvent() {},
+    },
+    documentObject: null,
+    navigatorObject: null,
+  });
+  assert.equal(runtime.getSnapshot().effects, 'high');
+  assert.equal(runtime.getSnapshot().sound, true);
+  runtime.destroy();
+});
+
+test('Sound Off suspends known contexts and Sound On resumes eligible contexts', async () => {
+  let resumes = 0;
+  let suspends = 0;
+  class FakeAudioContext {
+    constructor() { this.state = 'running'; }
+    createGain() { return {}; }
+    suspend() { suspends += 1; this.state = 'suspended'; return Promise.resolve(); }
+    resume() { resumes += 1; this.state = 'running'; return Promise.resolve(); }
+  }
+  const runtime = createExperienceSettingsRuntime({
+    windowObject: { AudioContext: FakeAudioContext, dispatchEvent() {} },
+    documentObject: null,
+    navigatorObject: null,
+    storage: memoryStorage(),
+  });
+  const context = new FakeAudioContext();
+  context.createGain();
+  runtime.setSettings({ sound: false });
+  await Promise.resolve();
+  assert.equal(context.state, 'suspended');
+  runtime.setSettings({ sound: true });
+  await Promise.resolve();
+  assert.equal(context.state, 'running');
+  assert.ok(suspends > 0);
+  assert.ok(resumes > 0);
+  runtime.destroy();
+});
+
+test('blocked speech schedules an utterance error so speaking state can settle', async () => {
+  let cancelled = 0;
+  let errorEvents = 0;
+  const speechSynthesis = {
+    speak() {},
+    cancel() { cancelled += 1; },
+  };
+  const runtime = createExperienceSettingsRuntime({
+    windowObject: { speechSynthesis, dispatchEvent() {} },
+    documentObject: null,
+    navigatorObject: null,
+    storage: memoryStorage(),
+  });
+  runtime.setSettings({ voice: false });
+  speechSynthesis.speak({ onerror() { errorEvents += 1; } });
+  await Promise.resolve();
+  assert.ok(cancelled > 0);
+  assert.equal(errorEvents, 1);
+  runtime.destroy();
+});
+
+test('reduced animation budget throttles repeated requestAnimationFrame callbacks', () => {
+  let nextNativeId = 1;
+  const callbacks = new Map();
+  const windowObject = {
+    requestAnimationFrame(callback) {
+      const id = nextNativeId;
+      nextNativeId += 1;
+      callbacks.set(id, callback);
+      return id;
+    },
+    cancelAnimationFrame(id) { callbacks.delete(id); },
+    dispatchEvent() {},
+  };
+  const runtime = createExperienceSettingsRuntime({
+    windowObject,
+    documentObject: null,
+    navigatorObject: null,
+    storage: memoryStorage(),
+  });
+  runtime.setSettings({ effects: 'low' });
+
+  let calls = 0;
+  const callback = () => { calls += 1; };
+  windowObject.requestAnimationFrame(callback);
+  const first = callbacks.values().next().value;
+  callbacks.clear();
+  first(10);
+  assert.equal(calls, 0);
+  const retry = callbacks.values().next().value;
+  callbacks.clear();
+  retry(120);
+  assert.equal(calls, 1);
+  runtime.destroy();
 });
 
 test('settings UI preserves accessible labels and visible active state contracts', async () => {
@@ -161,4 +270,3 @@ test('reduced ceremony scales every ritual act threshold while preserving the fu
   assert.doesNotMatch(source, /if \(elapsed < 2500\) setRitualAct/);
   assert.doesNotMatch(source, /else if \(elapsed < 6500\) setRitualAct/);
 });
-
