@@ -61,6 +61,7 @@ A local-device journal that stores readings, recurrence counts, timing context, 
 - Lucide React
 - Vercel serverless functions
 - Anthropic Messages API or Gemini API for optional Oracle interpretation
+- optional Upstash Redis REST counters for durable public allowances
 
 ## Development
 
@@ -86,7 +87,7 @@ npm run check
 
 ## Environment variables
 
-Configure provider keys only in the server/deployment environment. Never expose them through `VITE_` variables or client code.
+Configure credentials and control values only in the server/deployment environment. Never expose them through `VITE_` variables or client code.
 
 ```text
 ANTHROPIC_API_KEY=...
@@ -98,21 +99,41 @@ GEMINI_MODEL=gemini-3.6-flash
 
 # Canonical public origin used by the Oracle CORS policy
 PUBLIC_APP_ORIGIN=https://your-domain.example
+
+# Emergency public-Oracle switch
+ORACLE_PUBLIC_ENABLED=true
+
+# Short and daily public allowances
+ORACLE_RATE_LIMIT_SHORT_MAX=8
+ORACLE_RATE_LIMIT_SHORT_SECONDS=600
+ORACLE_RATE_LIMIT_DAILY_MAX=40
+ORACLE_RATE_LIMIT_DAILY_SECONDS=86400
+
+# Secret used before the client identifier becomes a counter key
+ORACLE_RATE_LIMIT_SALT=...
+
+# Durable production counters
+UPSTASH_REDIS_REST_URL=https://<database>.upstash.io
+UPSTASH_REDIS_REST_TOKEN=...
+ORACLE_REQUIRE_DURABLE_RATE_LIMIT=true
 ```
 
 Legacy Oracle key names are temporarily accepted for backward compatibility, but new deployments should use `ANTHROPIC_API_KEY`.
 
-## Public-release warning
+## Public-release controls
 
 The Oracle endpoint accepts only versioned, typed Liber 333 reading requests. Chapter text, Gematria, correspondences, and provider prompts are reconstructed on the server; browser-supplied provider prompts and system instructions are rejected.
 
-Before broad public promotion, still add durable rate limiting, bot protection, usage budgets, and privacy-preserving monitoring. Typed requests close the general-purpose proxy surface but do not prevent automated consumption of the allowed Oracle operation.
+Valid consultations pass through an emergency switch plus short-window and daily allowances. Upstash Redis REST provides shared durable counters when configured. A clearly labeled in-memory fallback supports development and previews, while `ORACLE_REQUIRE_DURABLE_RATE_LIMIT=true` makes production fail closed when the durable store is missing or unavailable.
+
+Before broad promotion, also enable Vercel Bot Protection, configure provider-side usage ceilings, and monitor operational status without retaining private question text.
 
 The privacy policy explains that:
 
 - questions and reading context may be sent to an external model provider;
 - the local Grimoire journal is stored on the user's device;
-- Oracle interpretations are optional and distinct from source text and editorial commentary.
+- Oracle interpretations are optional and distinct from source text and editorial commentary;
+- salted, expiring identifiers may be used for abuse-prevention counters.
 
 ## Progressive Web App
 
@@ -133,12 +154,13 @@ Verify cache/update behavior and all offline-capable modes before store packagin
 - [`docs/PRODUCT_AUDIT.md`](docs/PRODUCT_AUDIT.md) — current strengths, blockers, accuracy concerns, architecture, and milestones.
 - [`docs/UX_INTEGRATION_SPEC.md`](docs/UX_INTEGRATION_SPEC.md) — first-run orientation, mode integration, settings, accessibility, and visual refinement.
 - [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — production web, PWA, Capacitor/TWA, and Google Play publication path.
-- [`docs/TYPED_ORACLE_API.md`](docs/TYPED_ORACLE_API.md) — versioned request schema, server reconstruction, limits, and remaining public controls.
+- [`docs/TYPED_ORACLE_API.md`](docs/TYPED_ORACLE_API.md) — versioned request schema, server reconstruction, and trust boundary.
+- [`docs/ORACLE_PUBLIC_CONTROLS.md`](docs/ORACLE_PUBLIC_CONTROLS.md) — kill switch, durable counters, headers, logging, bot protection, and rollout verification.
 
 ## Near-term roadmap
 
-1. Complete accuracy and provenance review.
-2. Add durable Oracle rate limiting, bot protection, budgets, and monitoring.
+1. Configure and verify production Upstash, Bot Protection, and provider budgets.
+2. Complete accuracy and provenance review.
 3. Add journal export/import, search, notes, and favorites.
 4. Run a controlled public beta on the production PWA.
 5. Prepare Capacitor or Trusted Web Activity packaging and Google Play closed testing.
