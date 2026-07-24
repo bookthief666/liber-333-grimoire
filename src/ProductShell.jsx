@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MODE_LABELS, useGrimoireNavigation } from './contexts/GrimoireNavigationContext.jsx';
 import { getExperienceSettingsRuntime } from './features/settings/experienceSettings.js';
 
@@ -162,7 +163,7 @@ function OrientationPanel({ onClose, onNavigate }) {
   return (
     <Modal title="Ways of Working" onClose={onClose}>
       <p className="liber-orientation-intro">
-        Choose an intention rather than a feature. This guidance can be reopened or reset from Reading Environment settings.
+        Choose an intention rather than a feature. Open this guide anytime from WAYS in the top navigation or from Reading Environment settings.
       </p>
       <div className="liber-orientation-grid">
         {ORIENTATION_STEPS.map((step) => (
@@ -174,7 +175,7 @@ function OrientationPanel({ onClose, onNavigate }) {
         ))}
       </div>
       <div className="liber-shell-actions">
-        <button onClick={onClose}>Enter the Astral Void</button>
+        <button onClick={onClose}>Close Guide</button>
       </div>
     </Modal>
   );
@@ -204,7 +205,7 @@ function SegmentedControl({ label, value, options, onChange, description, disabl
   );
 }
 
-function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall, onResetOrientation }) {
+function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall, onOpenOrientation }) {
   return (
     <Modal title="Reading Environment" onClose={onClose}>
       <div className="liber-settings-stack">
@@ -218,7 +219,7 @@ function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall
             description="Reduced ceremony shortens nonessential reveal pacing without changing the selected chapters or text." />
           <SegmentedControl label="Motion" value={settings.motionExplicit ? settings.motion : settings.effectiveMotion} onChange={(motion) => onPatch({ motion })}
             options={[{ value: 'full', label: 'Full' }, { value: 'reduced', label: 'Reduced' }]}
-            description={settings.motionExplicit ? `Your explicit preference is active.` : `System preference is currently applied as ${settings.effectiveMotion}.`} />
+            description={settings.motionExplicit ? 'Your explicit preference is active.' : `System preference is currently applied as ${settings.effectiveMotion}.`} />
           <SegmentedControl label="Visual effects" value={settings.effects} onChange={(effects) => onPatch({ effects })}
             options={[{ value: 'high', label: 'High' }, { value: 'low', label: 'Low' }]}
             description="Low reduces particle, WebGL, whisper, blur, glow, and simultaneous background intensity." />
@@ -234,7 +235,7 @@ function SettingsPanel({ settings, onPatch, onClose, installAvailable, onInstall
             description={settings.hapticsSupported ? 'Used only where the browser and device support vibration.' : 'Haptics are not exposed by this browser or device.'} />
         </div>
 
-        <button className="liber-reset-orientation" onClick={onResetOrientation}>Reset orientation guidance</button>
+        <button className="liber-reset-orientation" onClick={onOpenOrientation}>Open Ways of Working</button>
         {installAvailable ? <button className="liber-install-action" onClick={onInstall}>Install Liber 333 on this device</button> : null}
 
         <section className="liber-privacy-card">
@@ -250,13 +251,25 @@ export default function ProductShell({ children }) {
   const runtime = useMemo(() => getExperienceSettingsRuntime(), []);
   const initialSettings = useMemo(() => runtime?.getSnapshot?.() || {}, [runtime]);
   const [settings, setSettings] = useState(initialSettings);
-  const [activePanel, setActivePanel] = useState(() => (initialSettings.orientationSeen ? null : 'orientation'));
+  const [activePanel, setActivePanel] = useState(null);
+  const [navRail, setNavRail] = useState(null);
   const { mode: activeMode, navigate } = useGrimoireNavigation();
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || false);
   const help = useMemo(() => MODE_HELP[activeMode] || MODE_HELP.oracle, [activeMode]);
 
   useEffect(() => runtime?.subscribe?.(setSettings), [runtime]);
+
+  useEffect(() => {
+    const syncRail = () => {
+      const nextRail = document.querySelector('.nav-rail');
+      setNavRail((current) => (current === nextRail ? current : nextRail));
+    };
+    syncRail();
+    const observer = new MutationObserver(syncRail);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const beforeInstall = (event) => {
@@ -280,14 +293,11 @@ export default function ProductShell({ children }) {
     runtime?.markOrientationSeen?.();
     setActivePanel(null);
   };
+  const openOrientation = () => setActivePanel('orientation');
   const navigateFromPanel = (nextMode) => {
     if (activePanel === 'orientation') runtime?.markOrientationSeen?.();
     setActivePanel(null);
     navigate(nextMode);
-  };
-  const resetOrientation = () => {
-    runtime?.resetOrientation?.();
-    setActivePanel('orientation');
   };
   const install = async () => {
     if (!installPrompt) return;
@@ -295,20 +305,37 @@ export default function ProductShell({ children }) {
     await installPrompt.userChoice.catch(() => null);
     setInstallPrompt(null);
   };
+  const activeModeLabel = MODE_LABELS[activeMode]?.toLowerCase() || 'oracle';
 
   return (
     <div className="liber-product-shell">
       <div className="liber-shell-starfield" aria-hidden="true" />
       {children}
 
+      {navRail ? createPortal(
+        <button
+          className={`liber-ways-nav relative text-[12px] tracking-[0.22em] whitespace-nowrap transition-all duration-300 ${activePanel === 'orientation' ? 'lux-crimson is-active' : 'lux-dim hover:text-[#cfd3ee]'}`}
+          style={{ fontFamily: 'Cinzel, serif' }}
+          onClick={openOrientation}
+          aria-label="Open Ways of Working guide"
+          aria-haspopup="dialog"
+          aria-expanded={activePanel === 'orientation'}
+          aria-pressed={activePanel === 'orientation'}
+          title="Ways of Working"
+        >
+          WAYS
+        </button>,
+        navRail,
+      ) : null}
+
       <div className="liber-context-tools" aria-label="Contextual guidance and settings">
         <button
           className={`liber-context-help ${activePanel === 'help' ? 'is-active' : ''}`}
           onClick={() => setActivePanel('help')}
-          aria-label={`Explain ${MODE_LABELS[activeMode].toLowerCase()} mode`}
+          aria-label={`Explain ${activeModeLabel} mode`}
           aria-expanded={activePanel === 'help'}
           aria-pressed={activePanel === 'help'}
-          title={`Explain ${MODE_LABELS[activeMode].toLowerCase()} mode`}
+          title={`Explain ${activeModeLabel} mode`}
         >
           <span aria-hidden="true">{help.glyph}</span><sup aria-hidden="true">?</sup>
         </button>
@@ -331,7 +358,7 @@ export default function ProductShell({ children }) {
           settings={settings}
           onPatch={patchSettings}
           onClose={() => setActivePanel(null)}
-          onResetOrientation={resetOrientation}
+          onOpenOrientation={openOrientation}
           installAvailable={!installed && Boolean(installPrompt)}
           onInstall={install}
         />
