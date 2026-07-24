@@ -1690,19 +1690,26 @@ const App = () => {
     // Act 4: Silence (6-6.5s) — brief darkness
     // Act 5: Reveal (6.5s) — SLAM
     const duration = window.__LIBER333_EXPERIENCE__?.ceremonyDuration?.(7000) ?? 7000;
+    const ceremonyScale = duration / 7000;
+    const actThresholds = {
+      communing: 2500 * ceremonyScale,
+      receiving: 4500 * ceremonyScale,
+      silence: 6000 * ceremonyScale,
+      reveal: 6500 * ceremonyScale,
+    };
     const start = Date.now();
     const tick = () => {
       const elapsed = Date.now() - start;
       const pct = Math.min((elapsed / duration) * 100, 100);
       setRitualProgress(pct);
 
-      if (elapsed < 2500) setRitualAct(0);
-      else if (elapsed < 4500) {
+      if (elapsed < actThresholds.communing) setRitualAct(0);
+      else if (elapsed < actThresholds.receiving) {
         if (ritualAct !== 1 && audioEnabled) playBell(396);
         setRitualAct(1);
       }
-      else if (elapsed < 6000) setRitualAct(2);
-      else if (elapsed < 6500) setRitualAct(3);
+      else if (elapsed < actThresholds.silence) setRitualAct(2);
+      else if (elapsed < actThresholds.reveal) setRitualAct(3);
       else {
         setRitualAct(4);
         setPhase("revelation");

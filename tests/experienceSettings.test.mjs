@@ -150,3 +150,15 @@ test('low-effects stylesheet targets atmosphere, canvas, whispers, blur, and glo
   assert.match(css, /backdrop-filter/);
   assert.match(css, /text-shadow/);
 });
+
+test('reduced ceremony scales every ritual act threshold while preserving the full timeline', async () => {
+  const source = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
+  assert.match(source, /const ceremonyScale = duration \/ 7000/);
+  assert.match(source, /communing: 2500 \* ceremonyScale/);
+  assert.match(source, /receiving: 4500 \* ceremonyScale/);
+  assert.match(source, /silence: 6000 \* ceremonyScale/);
+  assert.match(source, /reveal: 6500 \* ceremonyScale/);
+  assert.doesNotMatch(source, /if \(elapsed < 2500\) setRitualAct/);
+  assert.doesNotMatch(source, /else if \(elapsed < 6500\) setRitualAct/);
+});
+
