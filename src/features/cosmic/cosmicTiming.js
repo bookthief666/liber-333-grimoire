@@ -1,28 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CHALDEAN_ORDER, DAY_RULERS, MOON_PHASES, PLANETS } from '../../data/planetary.js';
 
-export const PLANETS = {
-  Saturn:  { symbol: '♄', color: '#6b7280', colorLight: '#9ca3af', element: 'Earth/Lead', frequency: 147.85 },
-  Jupiter: { symbol: '♃', color: '#6366f1', colorLight: '#818cf8', element: 'Air/Tin', frequency: 183.58 },
-  Mars:    { symbol: '♂', color: '#dc2626', colorLight: '#f87171', element: 'Fire/Iron', frequency: 144.72 },
-  Sol:     { symbol: '☉', color: '#eab308', colorLight: '#fbbf24', element: 'Fire/Gold', frequency: 126.22 },
-  Venus:   { symbol: '♀', color: '#10b981', colorLight: '#34d399', element: 'Earth/Copper', frequency: 221.23 },
-  Mercury: { symbol: '☿', color: '#a855f7', colorLight: '#c084fc', element: 'Air/Mercury', frequency: 141.27 },
-  Luna:    { symbol: '☽', color: '#94a3b8', colorLight: '#cbd5e1', element: 'Water/Silver', frequency: 210.42 },
-};
-
-export const CHALDEAN_ORDER = ['Saturn', 'Jupiter', 'Mars', 'Sol', 'Venus', 'Mercury', 'Luna'];
-export const DAY_RULERS = { 0: 'Sol', 1: 'Luna', 2: 'Mars', 3: 'Mercury', 4: 'Jupiter', 5: 'Venus', 6: 'Saturn' };
-
-export const MOON_PHASES = [
-  { name: 'New Moon', emoji: '🌑', waxing: true, index: 0 },
-  { name: 'Waxing Crescent', emoji: '🌒', waxing: true, index: 1 },
-  { name: 'First Quarter', emoji: '🌓', waxing: true, index: 2 },
-  { name: 'Waxing Gibbous', emoji: '🌔', waxing: true, index: 3 },
-  { name: 'Full Moon', emoji: '🌕', waxing: false, index: 4 },
-  { name: 'Waning Gibbous', emoji: '🌖', waxing: false, index: 5 },
-  { name: 'Last Quarter', emoji: '🌗', waxing: false, index: 6 },
-  { name: 'Waning Crescent', emoji: '🌘', waxing: false, index: 7 },
-];
+export { CHALDEAN_ORDER, DAY_RULERS, MOON_PHASES, PLANETS } from '../../data/planetary.js';
 
 export function calculatePlanetaryTime(now) {
   const dayRuler = DAY_RULERS[now.getDay()];
