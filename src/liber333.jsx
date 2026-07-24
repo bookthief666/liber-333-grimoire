@@ -16,6 +16,7 @@ import { useJournal } from './features/journal/useJournal.js';
 import { RITUALS } from './features/rites/ritualData.js';
 import { ELEMENT_SYMBOLS, HEBREW_LETTERS, formatChapterNumber, getSephiraColor, getSephiraInfo } from './data/correspondences.js';
 import { LIBER_333 } from './data/liber333.js';
+import { PROVENANCE_LABELS, PROVENANCE_NOTES, getCorpusConventionSummary, getCorpusRecordCount } from './data/provenance.js';
 import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';
 import { TREE_NODE_ORDER, TREE_POS, deriveTreePaths, getVeilChapters, groupChaptersBySephira } from './features/tree/treeModel.js';
 
@@ -1026,7 +1027,7 @@ const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, on
 };
 
 // ─────────────────────────────────────────────
-//  TREE OF LIFE — interactive map of all 93 chapters
+//  TREE OF LIFE — interactive map of the complete corpus
 //  Every chapter is seated on its Sephira or Path. Click a node or path
 //  to read the chapters that live there; click a chapter to consult it.
 // ─────────────────────────────────────────────
@@ -1059,7 +1060,7 @@ const TreeOfLife = ({ onBack, onSelectChapter, accentColor = "#dc2626" }) => {
         </button>
       </div>
       <p className="text-neutral-400 text-[10px] mb-4" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-        The 96 chapters mapped to the 10 Sephiroth and 22 Paths · tap a sphere or path
+        {getCorpusRecordCount(LIBER_333)} records mapped to the 10 Sephiroth and 22 Paths · tap a sphere or path
       </p>
 
       <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
@@ -1897,7 +1898,7 @@ const App = () => {
                   LIBER CCCXXXIII
                 </p>
                 <p className="lux-dim text-[12px] mb-12 italic" style={{ fontFamily: "'IM Fell English', serif" }}>
-                  93 chapters · gematric divination · the Oracle of the Abyss
+                  {getCorpusRecordCount(LIBER_333)} records · English Ordinal divination · the Oracle of the Abyss
                 </p>
                 <button onClick={() => setPhase("input")}
                   className="text-base tracking-[0.3em] lux-crimson transition-all duration-700 hover:tracking-[0.45em]"
@@ -2099,6 +2100,7 @@ const App = () => {
 
                 {/* Key Text — floating illuminated verse, no box */}
                 <div className="mb-10 relative text-center px-2" style={{ animation: 'fadeInUp 1s ease-out 0.3s both' }}>
+                  <div className="text-[10px] tracking-[0.28em] lux-dim mb-3" style={{ fontFamily: 'JetBrains Mono, monospace' }}>{PROVENANCE_LABELS.sourceText}</div>
                   <div aria-hidden="true" className="lux-crimson text-sm mb-3" style={{ fontFamily: "'UnifrakturCook', serif" }}>✦ ❧ ✦</div>
                   <div className="relative lux leading-loose text-left
                       first-letter:text-6xl first-letter:float-left first-letter:pr-2 first-letter:mt-1 first-letter:leading-[0.7]
@@ -2124,7 +2126,7 @@ const App = () => {
 
                 {/* Expandable Sections */}
                 <div className="space-y-0" style={{ animation: 'fadeInUp 1s ease-out 0.6s both' }}>
-                  <ExpandableSection title="Commentary" icon="☥" defaultOpen={true} accentColor={accentColor}>
+                  <ExpandableSection title={PROVENANCE_LABELS.editorialCommentary} icon="☥" defaultOpen={true} accentColor={accentColor}>
                     <div className="pt-1 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16px' }}>{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
@@ -2163,6 +2165,15 @@ const App = () => {
                           {isSpread ? "Invoke the Oracle's synthesis..." : "Invoke the Oracle..."}
                         </button>
                       )}
+                    </div>
+                  </ExpandableSection>
+
+                  <ExpandableSection title="PROVENANCE & EDITION NOTE" icon="§" defaultOpen={false} accentColor={accentColor}>
+                    <div className="pt-1 space-y-3 text-[13px] leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif" }}>
+                      <p><span className="lux-crimson">{PROVENANCE_LABELS.sourceText}:</span> {PROVENANCE_NOTES.sourceText}</p>
+                      <p><span className="lux-crimson">{PROVENANCE_LABELS.editorialCommentary}:</span> {PROVENANCE_NOTES.editorialCommentary}</p>
+                      <p><span className="lux-crimson">{PROVENANCE_LABELS.oracleInterpretation}:</span> {PROVENANCE_NOTES.oracleInterpretation}</p>
+                      <p><span className="lux-crimson">CORPUS CONVENTION:</span> {getCorpusConventionSummary(LIBER_333)} {PROVENANCE_NOTES.corpus}</p>
                     </div>
                   </ExpandableSection>
 
