@@ -27,12 +27,14 @@ test('corpus convention remains explicit', () => {
   );
 });
 
-test('reader labels distinguish the three interpretive layers', () => {
+test('reader labels distinguish the three interpretive layers without changing the Oracle title', () => {
   assert.equal(PROVENANCE_LABELS.sourceText, 'SOURCE TEXT');
   assert.equal(PROVENANCE_LABELS.editorialCommentary, 'MODERN EDITORIAL COMMENTARY');
-  assert.equal(PROVENANCE_LABELS.aiInterpretation, 'AI-GENERATED INTERPRETATION');
+  assert.equal(PROVENANCE_LABELS.oracleInterpretation, 'ORACLE INTERPRETATION');
   assert.match(PROVENANCE_NOTES.sourceText, /Crowley/);
   assert.match(PROVENANCE_NOTES.editorialCommentary, /not presented as Crowley/);
-  assert.match(PROVENANCE_NOTES.aiInterpretation, /external AI provider/);
+  assert.match(PROVENANCE_NOTES.oracleInterpretation, /optional interpretive response/);
+  assert.doesNotMatch(PROVENANCE_LABELS.oracleInterpretation, /AI-generated/i);
+  assert.doesNotMatch(PROVENANCE_NOTES.oracleInterpretation, /AI-generated/i);
   assert.match(PROVENANCE_NOTES.corpus, /94 records/);
 });
