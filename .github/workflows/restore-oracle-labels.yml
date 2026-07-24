@@ -1,0 +1,40 @@
+name: Restore Oracle-facing labels
+
+on:
+  push:
+    branches:
+      - agent/liber333-accuracy-provenance
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node scripts/restore-oracle-labels.mjs
+      - run: npm ci
+      - run: npm run check
+      - name: Commit restored labels
+        run: |
+          if git diff --quiet; then
+            echo "No label restoration changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/liber333.jsx
+          git commit -m "Restore Oracle of the Abyss labels"
+          git push
