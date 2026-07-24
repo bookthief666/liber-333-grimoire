@@ -2130,7 +2130,7 @@ const App = () => {
                     <div className="pt-1 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif", fontSize: '16px' }}>{drawnChapter.commentary}</div>
                   </ExpandableSection>
 
-                  <ExpandableSection title={isSpread ? `${PROVENANCE_LABELS.aiInterpretation} · TRIAD SYNTHESIS` : PROVENANCE_LABELS.aiInterpretation} icon="☉" defaultOpen={true} accentColor={accentColor}>
+                  <ExpandableSection title={isSpread ? "ORACLE OF THE ABYSS · TRIAD SYNTHESIS" : "ORACLE OF THE ABYSS"} icon="☉" defaultOpen={true} accentColor={accentColor}>
                     <div className="pt-1">
                       {oracle.loading && !oracle.text ? (
                         <div className="flex items-center gap-2 lux-crimson">
@@ -2172,7 +2172,7 @@ const App = () => {
                     <div className="pt-1 space-y-3 text-[13px] leading-relaxed" style={{ fontFamily: "'IM Fell English', Georgia, serif" }}>
                       <p><span className="lux-crimson">{PROVENANCE_LABELS.sourceText}:</span> {PROVENANCE_NOTES.sourceText}</p>
                       <p><span className="lux-crimson">{PROVENANCE_LABELS.editorialCommentary}:</span> {PROVENANCE_NOTES.editorialCommentary}</p>
-                      <p><span className="lux-crimson">{PROVENANCE_LABELS.aiInterpretation}:</span> {PROVENANCE_NOTES.aiInterpretation}</p>
+                      <p><span className="lux-crimson">{PROVENANCE_LABELS.oracleInterpretation}:</span> {PROVENANCE_NOTES.oracleInterpretation}</p>
                       <p><span className="lux-crimson">CORPUS CONVENTION:</span> {getCorpusConventionSummary(LIBER_333)} {PROVENANCE_NOTES.corpus}</p>
                     </div>
                   </ExpandableSection>
