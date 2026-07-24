@@ -1,14 +1,14 @@
 // /src/api.js — Oracle API helper
-// All AI calls go through /api/oracle (Vercel serverless function)
-// instead of calling Anthropic/Gemini directly from the browser.
+// Provider calls go through /api/oracle so credentials and prompt construction
+// remain on the server rather than in the browser request body.
 
 // ── Buffered request (single response) ──────────────────────────────
-export async function fetchOracleInterpretation({ prompt, systemPrompt, signal }) {
+export async function fetchOracleInterpretation({ request, signal }) {
   try {
     const response = await fetch('/api/oracle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, systemPrompt, stream: false }),
+      body: JSON.stringify({ ...request, stream: false }),
       signal,
     });
 
@@ -19,21 +19,20 @@ export async function fetchOracleInterpretation({ prompt, systemPrompt, signal }
 
     const data = await response.json();
     return data.text;
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    console.error('Oracle fetch error:', e);
-    throw e;
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    console.error('Oracle fetch error:', error);
+    throw error;
   }
 }
 
 // ── Streaming request (Server-Sent Events) ──────────────────────────
-// Calls onToken(textChunk) as the Oracle speaks, and onThinking(active)
-// when Opus 4.8 enters/leaves its private reasoning. Resolves with the
-// full assembled text. Falls back to the buffered endpoint if the
-// browser/runtime can't read a streaming body.
+// Calls onToken(textChunk) as the Oracle speaks and onThinking(active)
+// when the configured provider enters or leaves its private reasoning.
+// Falls back to the buffered endpoint if the browser/runtime cannot read
+// a streaming response body.
 export async function streamOracleInterpretation({
-  prompt,
-  systemPrompt,
+  request,
   signal,
   onToken,
   onThinking,
@@ -43,13 +42,12 @@ export async function streamOracleInterpretation({
     response = await fetch('/api/oracle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, systemPrompt, stream: true }),
+      body: JSON.stringify({ ...request, stream: true }),
       signal,
     });
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    // Network-level failure — try buffered as a last resort.
-    return fetchOracleInterpretation({ prompt, systemPrompt, signal });
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    return fetchOracleInterpretation({ request, signal });
   }
 
   if (!response.ok) {
@@ -58,7 +56,6 @@ export async function streamOracleInterpretation({
   }
 
   const contentType = response.headers.get('content-type') || '';
-  // If the server answered with plain JSON (e.g. Gemini fallback), buffer it.
   if (!contentType.includes('text/event-stream') || !response.body) {
     const data = await response.json().catch(() => null);
     const text = data?.text || 'The Abyss returns silence.';
@@ -80,6 +77,7 @@ export async function streamOracleInterpretation({
       else if (line.startsWith('data:')) dataStr += line.slice(5).trim();
     }
     if (!dataStr) return;
+
     let payload;
     try { payload = JSON.parse(dataStr); } catch { return; }
 
