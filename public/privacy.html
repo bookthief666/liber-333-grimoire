@@ -12,7 +12,7 @@
     <header>
       <p class="kicker">Liber CCCXXXIII · Public Release</p>
       <h1>Privacy Policy</h1>
-      <p class="updated">Effective July 22, 2026</p>
+      <p class="updated">Effective July 24, 2026</p>
       <nav aria-label="Policy navigation">
         <a href="/">Return to the Grimoire</a>
         <a href="/terms.html">Terms</a>
@@ -20,15 +20,19 @@
       </nav>
     </header>
 
-    <p class="note">Liber 333 is designed primarily as a local study and journaling tool. The AI-assisted Oracle is the principal feature that may transmit information beyond your device.</p>
+    <p class="note">Liber 333 is designed primarily as a local study and journaling tool. The optional Oracle interpretation is the principal feature that may transmit information beyond your device.</p>
 
     <h2>Information stored on your device</h2>
     <p>The application may store saved readings, questions, chapter selections, recurrence counts, presentation preferences, and related ritual context in your browser's local storage. This information is not synchronized to an account because the current application does not provide user accounts.</p>
     <p>You can remove locally stored information through the Grimoire controls or by clearing this site's storage in your browser or device settings. Clearing site data may permanently remove saved readings.</p>
 
-    <h2>AI-assisted Oracle requests</h2>
-    <p>When you request an AI interpretation, the application may send your question and relevant reading context to the application's server endpoint and then to the configured external AI provider. Context may include selected chapters, calculated correspondences, timing information, and a limited summary of recent readings when continuity features are enabled.</p>
-    <p>Do not enter information you consider highly sensitive, confidential, or identifying into an Oracle question. External AI, hosting, security, and network providers may process operational data under their own policies.</p>
+    <h2>Oracle requests</h2>
+    <p>When you request an Oracle interpretation, the application may send your question and relevant reading context to the application's server endpoint and then to the configured external model provider. Context may include selected chapters, calculated correspondences, timing information, and a limited summary of recent readings when continuity features are enabled.</p>
+    <p>Do not enter information you consider highly sensitive, confidential, or identifying into an Oracle question. External model, hosting, security, and network providers may process operational data under their own policies.</p>
+
+    <h2>Abuse prevention and service protection</h2>
+    <p>To limit automated use and protect service availability, the server may derive a short-lived, salted cryptographic identifier from a network address and use it for consultation counters. The raw network address is not included in the application's Redis rate-limit key. Rate-limit records expire automatically according to the configured short and daily windows.</p>
+    <p>Operational security logs may record a random request identifier, whether the request was Single or Triad, provider status, error category, and rate-limit mode. Application logging is designed not to include the Oracle question, reconstructed prompt, chapter text, recent-reading questions, or raw network address.</p>
 
     <h2>Operational and technical information</h2>
     <p>The application does not intentionally create an advertising profile or sell personal information. Hosting and infrastructure providers may nevertheless create ordinary operational logs, such as request time, network address, browser information, error details, rate-limit events, and security signals. These logs may be used to operate, secure, diagnose, and control the cost of the service.</p>
@@ -40,10 +44,10 @@
     <p>The application is not directed to children under 13. The source text and commentary may contain mature philosophical, religious, sexual, or ritual themes.</p>
 
     <h2>Security and retention</h2>
-    <p>No online service can guarantee absolute security. Local journal information remains until you remove it or the browser removes site data. Operational data handled by hosting or AI providers may be retained according to their service configuration and policies.</p>
+    <p>No online service can guarantee absolute security. Local journal information remains until you remove it or the browser removes site data. Operational data handled by hosting or model providers may be retained according to their service configuration and policies. Application-managed rate-limit counters expire automatically, but infrastructure providers may retain separate security logs.</p>
 
     <h2>Changes to this policy</h2>
-    <p>This policy may be updated as the application gains accounts, synchronization, analytics, native-device functions, or different AI providers. The effective date above will change when material revisions are published.</p>
+    <p>This policy may be updated as the application gains accounts, synchronization, analytics, native-device functions, or different external providers. The effective date above will change when material revisions are published.</p>
 
     <h2>Contact</h2>
     <p>Questions, privacy requests, and security reports can be submitted through the project's <a href="https://github.com/bookthief666/liber-333-grimoire/issues">public support tracker</a>. Avoid posting private information in a public issue.</p>
