@@ -2,7 +2,7 @@
 
 A living digital companion to Aleister Crowley's *Liber CCCXXXIII: The Book of Lies*.
 
-Liber 333 combines a complete chapter corpus with an interactive study map, English ordinal gematria, guided ritual sequences, a local reading journal, atmospheric audio/visual systems, and an optional AI-assisted Oracle.
+Liber 333 combines a complete chapter corpus with an interactive study map, English ordinal gematria, guided ritual sequences, a local reading journal, atmospheric audio/visual systems, and an optional streaming Oracle.
 
 ## Current product surfaces
 
@@ -13,7 +13,7 @@ Enter a question and choose either:
 - **Single** — one chapter selected from the query's English ordinal value.
 - **Triad Spread** — Thesis, Antithesis, and Synthesis selected through three deterministic transforms of the query.
 
-The result includes the chapter text, editorial commentary, correspondences, optional streaming AI interpretation, recurrence awareness, and journal saving.
+The result includes the chapter text, editorial commentary, correspondences, optional streaming Oracle interpretation, recurrence awareness, and journal saving.
 
 ### Rites
 
@@ -78,6 +78,12 @@ npm run build
 npm run preview
 ```
 
+Complete release gate:
+
+```bash
+npm run check
+```
+
 ## Environment variables
 
 Configure provider keys only in the server/deployment environment. Never expose them through `VITE_` variables or client code.
@@ -98,42 +104,44 @@ Legacy Oracle key names are temporarily accepted for backward compatibility, but
 
 ## Public-release warning
 
-The current Oracle endpoint still accepts client-supplied prompt text. Before broad public promotion, add durable rate limiting, bot protection, usage budgets, monitoring, and preferably server-side typed Oracle operations. Otherwise a public endpoint may be abused and consume provider credits.
+The Oracle endpoint accepts only versioned, typed Liber 333 reading requests. Chapter text, Gematria, correspondences, and provider prompts are reconstructed on the server; browser-supplied provider prompts and system instructions are rejected.
 
-Also publish a privacy policy explaining that:
+Before broad public promotion, still add durable rate limiting, bot protection, usage budgets, and privacy-preserving monitoring. Typed requests close the general-purpose proxy surface but do not prevent automated consumption of the allowed Oracle operation.
 
-- questions and reading context may be sent to an external AI provider;
+The privacy policy explains that:
+
+- questions and reading context may be sent to an external model provider;
 - the local Grimoire journal is stored on the user's device;
-- AI interpretations are optional and distinct from the source text and editorial commentary.
+- Oracle interpretations are optional and distinct from source text and editorial commentary.
 
 ## Progressive Web App
 
-The publication-foundation work adds:
+The current PWA foundation includes:
 
 - web app manifest;
 - standalone install metadata;
-- service worker;
-- offline fallback;
-- install icon;
+- service worker and offline fallback;
+- SVG, 192 × 192, and 512 × 512 application icons;
+- maskable Android icon support;
+- Oracle, Rites, and Gematria shortcuts;
 - accessible viewport and focus defaults.
 
-Before final store release, add production raster icons at 192 × 192 and 512 × 512, verify cache/update behavior, and test all offline-capable modes.
+Verify cache/update behavior and all offline-capable modes before store packaging.
 
 ## Documentation
 
 - [`docs/PRODUCT_AUDIT.md`](docs/PRODUCT_AUDIT.md) — current strengths, blockers, accuracy concerns, architecture, and milestones.
 - [`docs/UX_INTEGRATION_SPEC.md`](docs/UX_INTEGRATION_SPEC.md) — first-run orientation, mode integration, settings, accessibility, and visual refinement.
 - [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — production web, PWA, Capacitor/TWA, and Google Play publication path.
+- [`docs/TYPED_ORACLE_API.md`](docs/TYPED_ORACLE_API.md) — versioned request schema, server reconstruction, limits, and remaining public controls.
 
 ## Near-term roadmap
 
-1. Public foundation and runtime reliability.
-2. First-run “Ways of Working” orientation.
-3. Contextual explanation for every tool.
-4. Accuracy/provenance review.
-5. Journal export, search, notes, and deletion controls.
-6. Rate limiting, privacy pages, tests, and public beta.
-7. Capacitor Android packaging and Google Play closed testing.
+1. Complete accuracy and provenance review.
+2. Add durable Oracle rate limiting, bot protection, budgets, and monitoring.
+3. Add journal export/import, search, notes, and favorites.
+4. Run a controlled public beta on the production PWA.
+5. Prepare Capacitor or Trusted Web Activity packaging and Google Play closed testing.
 
 ## Project rule
 
