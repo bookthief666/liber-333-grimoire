@@ -27,6 +27,8 @@ export async function dismissOrientation(page) {
 
 export async function openWays(page) {
   const trigger = page.getByRole('button', { name: 'Open Ways of Working guide' });
+  await expect(trigger).toBeVisible();
+  await trigger.focus();
   await activate(trigger);
   const dialog = page.getByRole('dialog', { name: 'Ways of Working' });
   await expect(dialog).toBeVisible();
