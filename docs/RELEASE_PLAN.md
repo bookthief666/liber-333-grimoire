@@ -4,66 +4,137 @@
 
 Publish in three stages:
 
-1. **Production web app** — stable custom domain, privacy policy, public beta safeguards.
-2. **Installable PWA** — manifest, service worker, offline shell, install testing.
+1. **Canonical production web app** — one verified Vercel project, custom domain, privacy documents, and public safeguards.
+2. **Installable PWA** — manifest, service worker, offline shell, installed-app testing, and update behavior.
 3. **Android application** — package the proven web product for Google Play.
 
-Do not begin with the Play Store. A Play listing amplifies every reliability, cost, privacy, and onboarding problem. The production web/PWA should be the canonical product first.
+Do not begin with the Play Store. The production web/PWA should remain the canonical product until reliability, cost, privacy, onboarding, accessibility, and low-power behavior are proven.
+
+## Current repository status
+
+Completed in source and tests:
+
+- versioned typed Oracle requests;
+- server-side canonical chapter resolution and prompt reconstruction;
+- rejection of browser-supplied provider prompts and system instructions;
+- emergency Oracle kill switch;
+- short-window and daily rate-limit logic;
+- optional Upstash Redis REST counters;
+- optional fail-closed durable mode;
+- privacy-preserving salted counter identifiers and operational logs;
+- request IDs, allowance/reset headers, and controlled quota failures;
+- corpus-count and provenance clarification;
+- versioned local Grimoire export and non-destructive import;
+- automated `npm run check` release gate;
+- PWA manifest, service worker, offline fallback, icons, and standalone metadata.
+
+The exact PR #35 preview passed manual browser/provider/filesystem testing, including Single and Triad readings, Oracle streaming/retry/cancellation, Grimoire export/import, duplicate and invalid imports, Fold 6 closed/unfolded layouts, and installed-PWA behavior.
+
+Not yet verified as production-complete:
+
+- final canonical production deployment;
+- one canonical Vercel project and deployment ownership;
+- custom domain and `PUBLIC_APP_ORIGIN`;
+- production provider keys and model access;
+- Upstash credentials and live durable-counter behavior;
+- strong production salt;
+- Vercel Bot Protection;
+- provider budget alerts or hard ceilings;
+- monitoring and rollback.
+
+The final integration merge’s automatic Vercel deployments were rejected by the account’s daily deployment quota. This is an external deployment blocker, not a repository build failure.
 
 ## Stage 1 — Production web application
 
-### Hosting
+### Hosting and ownership
 
 Vercel is appropriate for the current Vite frontend and serverless Oracle endpoint.
 
-Required:
+Before broad promotion:
 
-- custom domain;
-- production and preview environments;
+- select one canonical Vercel project;
+- disconnect or archive duplicate Git integrations that create competing deployments;
+- configure production and preview environments deliberately;
+- attach the custom domain;
+- set `PUBLIC_APP_ORIGIN` to the canonical HTTPS origin;
+- document who owns deployment, rollback, provider keys, and emergency disablement.
+
+### Required production environment
+
+Verify each value in the provider dashboard and the deployed runtime:
+
 - `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`;
-- environment-configurable model names;
+- current accessible model identifier;
 - `PUBLIC_APP_ORIGIN`;
-- error monitoring;
-- analytics that avoid collecting question text by default;
-- durable rate limiting or platform-level firewall rules;
-- AI usage budget alerts.
+- `ORACLE_PUBLIC_ENABLED`;
+- short and daily allowance settings;
+- strong `ORACLE_RATE_LIMIT_SALT`;
+- `UPSTASH_REDIS_REST_URL`;
+- `UPSTASH_REDIS_REST_TOKEN`;
+- `ORACLE_REQUIRE_DURABLE_RATE_LIMIT=true` where public access requires shared durable counters.
+
+Do not mark environment setup complete from documentation or source code alone.
+
+### Public safeguards
+
+Repository implementation is complete for the kill switch and allowance logic. Production verification still requires:
+
+- live Upstash counter increments and expiry;
+- 429 responses and `Retry-After` behavior;
+- fail-closed behavior when durable storage is required but unavailable;
+- confirmation that raw client addresses are absent from Redis keys and application logs;
+- Vercel Bot Protection;
+- provider usage alerts and hard budget ceilings;
+- operational monitoring that avoids question text;
+- emergency rollback and kill-switch rehearsal.
 
 ### Public documents
 
-Add public routes or static pages for:
+Verify deployed routes for:
 
 - Privacy Policy;
 - Terms / educational-use notice;
 - Contact / support;
-- About the text and editorial provenance;
-- Safety note for ritual material.
+- text and editorial provenance;
+- safety note for ritual material.
+
+The privacy disclosure must distinguish local Grimoire data from optional provider processing and explain salted, expiring abuse-prevention identifiers.
 
 ### Public beta limits
 
 For the first public version:
 
 - allow static study tools without account creation;
-- keep the journal local;
-- cap anonymous AI consultations;
-- show a clear quota state rather than silently failing;
-- provide a non-AI interpretation path using the fixed commentary.
+- keep the Grimoire local;
+- cap anonymous Oracle consultations;
+- show clear quota and unavailable states;
+- retain the fixed editorial commentary as a non-AI path;
+- keep a tested emergency switch available.
 
 ## Stage 2 — Progressive Web App
 
-The web app should pass installability and offline checks before Android packaging.
-
-### PWA requirements
+### Implemented foundation
 
 - valid web app manifest;
-- 192 × 192 and 512 × 512 raster icons before final release;
-- maskable icon;
-- service worker;
-- offline fallback;
-- HTTPS;
-- responsive standalone layout;
-- no critical dependency on browser chrome;
-- tested launch from home screen;
-- tested update behavior and cache invalidation.
+- standalone install metadata;
+- 192 × 192 and 512 × 512 icons;
+- maskable Android icon support;
+- service worker and offline fallback;
+- HTTPS through Vercel previews;
+- responsive mobile/foldable foundation;
+- application shortcuts.
+
+### Remaining PWA verification
+
+Before Android packaging:
+
+- verify the canonical production origin rather than only a preview;
+- test install/update/cache invalidation behavior;
+- verify storage persistence through app updates;
+- repeat closed-phone, open-foldable, tablet, and low/mid-range Android tests;
+- add settings, accessibility, and low-effects controls;
+- ensure no critical flow depends on browser chrome;
+- confirm the Oracle fails gracefully offline and recovers after reconnection.
 
 ### Offline behavior
 
@@ -74,9 +145,10 @@ Offline mode should support:
 - Tree browsing;
 - Gematria calculation;
 - guided Rites;
-- local journal review.
+- local Grimoire review;
+- local export/import where the installed platform exposes file access.
 
-Offline mode cannot provide fresh AI interpretations. State this directly.
+Offline mode cannot provide fresh Oracle interpretations. State this directly.
 
 ## Stage 3 — Android / Google Play
 
@@ -86,97 +158,79 @@ Offline mode cannot provide fresh AI interpretations. State this directly.
 
 Use Capacitor when the app needs or may later need:
 
-- reliable local storage/database migration;
-- native share/export;
+- reliable storage/database migration;
+- native share and file export/import;
 - haptics;
 - status/navigation bar control;
 - native text-to-speech;
 - notifications or scheduled practice reminders;
-- file export/import;
-- in-app purchases or subscriptions;
-- deeper control over Android lifecycle and offline behavior.
+- deeper Android lifecycle and offline control;
+- in-app purchases or subscriptions.
 
-Liber 333 already uses haptics, audio, speech, local data, and may need export or reminders. Capacitor is therefore the preferred long-term route.
+Liber 333 already uses haptics, audio, speech, local data, and file export/import, so Capacitor remains the preferred long-term route.
 
 ### Alternative: Trusted Web Activity
 
-A Trusted Web Activity is suitable if the Android app will remain almost entirely the hosted PWA. It is faster to package, but the web origin and Android package must be linked with Digital Asset Links. It offers less native control and depends more directly on the hosted site.
-
-Use a TWA only if the goal is a minimal Play Store wrapper around the web product.
+Use a Trusted Web Activity only for a minimal wrapper around a proven hosted PWA. It requires Digital Asset Links, offers less native control, and depends directly on the production web origin.
 
 ## Capacitor implementation outline
 
 1. Add Capacitor core, CLI, and Android packages.
 2. Set the web output directory to `dist`.
-3. Initialize an app ID such as `com.geistintheshell.liber333` after confirming ownership and final branding.
+3. Confirm final branding and app ID ownership.
 4. Build the Vite app.
-5. Add the Android project.
-6. Sync web assets into Android.
-7. Configure status bar, splash screen, haptics, share, and file access only as needed.
-8. Open Android Studio.
-9. Set the required target SDK.
-10. Generate a signed Android App Bundle (`.aab`).
-11. Upload through Play Console internal testing.
+5. Add and sync the Android project.
+6. Configure only required native capabilities.
+7. Open Android Studio.
+8. set the current required target SDK;
+9. generate and protect the signing key;
+10. generate a signed Android App Bundle;
+11. upload through Play Console internal testing.
 
 ## Play Console preparation
 
 Prepare:
 
-- developer account registration and verification;
-- app name, short description, and full description;
-- high-resolution icon;
-- feature graphic;
-- phone and tablet screenshots, including foldable layouts;
-- privacy-policy URL;
-- support email;
-- content rating questionnaire;
-- Data Safety form;
-- ads declaration;
-- target audience declaration;
-- app-access instructions if any features require login;
-- AI-generated content disclosure where applicable;
+- developer registration and verification;
+- app name and descriptions;
+- high-resolution icon and feature graphic;
+- closed-phone, foldable, and tablet screenshots;
+- privacy-policy URL and support email;
+- content rating and Data Safety declarations;
+- ads and target-audience declarations;
+- AI-assisted content disclosure where applicable;
 - testing instructions covering every major mode.
-
-## Testing tracks
-
-Recommended order:
-
-1. local Android debug build;
-2. Play internal testing;
-3. closed testing;
-4. production access application if required;
-5. staged production rollout.
 
 Newly created personal Play developer accounts may be required to keep at least 12 testers opted into a closed test for 14 continuous days before applying for production access. Confirm the requirement shown in the specific Play Console account.
 
-## 2026 target API planning
+## Store positioning
 
-The Android project must be kept on the current Google Play target API requirement. Starting August 31, 2026, new apps and updates are required to target Android 16 / API level 36 or higher, subject to Google's listed exceptions and extensions.
-
-## Store-positioning recommendation
-
-Position the app as:
-
-**Books & Reference / Education**
-
-Not as a guaranteed fortune-telling or supernatural-results service.
+Position the app as **Books & Reference / Education**, not as a guaranteed fortune-telling or supernatural-results service.
 
 Suggested public description:
 
-> A richly designed digital companion to Liber CCCXXXIII: read and study the chapters, explore their Tree of Life attributions, calculate English ordinal gematria, follow guided textual rites, record recurring patterns, and optionally request an AI-assisted interpretive reflection.
+> A richly designed digital companion to Liber CCCXXXIII: read and study the chapters, explore their Tree of Life attributions, calculate English Ordinal Gematria, follow guided textual rites, record recurring patterns, export or restore a local Grimoire, and optionally request an AI-assisted interpretive reflection.
 
 ## Release gate
 
-Do not submit to Google Play until all of these are true:
+Do not begin a broad public beta or submit to Google Play until all applicable items are true:
 
-- Oracle runtime works with current provider models;
-- rate limits and bot protection are active;
-- privacy policy accurately describes AI processing and local journal storage;
-- source/editorial/AI content is distinguished;
-- first-run orientation is complete;
-- chapter count and terminology inconsistencies are corrected;
-- accessibility and low-power modes exist;
-- journal export and deletion are tested;
-- core flows pass on closed phone, open foldable, tablet, and a low/mid-range Android phone;
+- the final `main` tree passes `npm run check`;
+- the canonical production deployment points to the intended commit;
+- current provider models work in production;
+- typed Oracle requests remain enforced;
+- durable rate limits, strong salt, and fail-closed behavior are verified;
+- Bot Protection and provider budgets are active;
+- privacy, terms, provenance, safety, and support pages are deployed;
+- source, editorial commentary, and Oracle interpretation remain distinguished;
+- settings, reduced motion/ceremony, large text, and low-effects modes exist;
+- overlay keyboard and focus behavior are tested;
+- Grimoire export/import and deletion behavior are tested;
+- core flows pass on a closed phone, open foldable, tablet, and low/mid-range Android phone;
+- monitoring, emergency disablement, and rollback are rehearsed;
 - Play assets and declarations are complete;
 - a signed release bundle installs and updates correctly.
+
+## Immediate next milestone
+
+Implement **Settings, Accessibility, and Performance** while preserving the full ritual experience as the default and protecting deterministic readings, corpus data, Oracle prompt wording, and the Astral Void identity.
