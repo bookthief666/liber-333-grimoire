@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { streamOracleInterpretation } from '../../api.js';
-import { buildSingleOraclePrompt, buildTriadOraclePrompt } from './oraclePrompts.js';
+import { createSingleOracleRequest, createTriadOracleRequest } from './oracleRequest.js';
 
 const INITIAL_ORACLE_STATE = {
   loading: false,
@@ -10,30 +10,22 @@ const INITIAL_ORACLE_STATE = {
   error: null,
 };
 
-export function useAIOracle(planetaryData = {}) {
+export function useAIOracle() {
   const [oracleState, setOracleState] = useState(INITIAL_ORACLE_STATE);
   const abortRef = useRef(null);
 
-  const consultOracle = useCallback(async (question, chapter, gematria, correspondences, context = {}) => {
+  const consultOracle = useCallback(async (question, chapter, _gematria, _correspondences, context = {}) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
 
-    const { prompt, systemPrompt } = buildSingleOraclePrompt({
-      question,
-      chapter,
-      gematria,
-      correspondences,
-      context,
-      planetaryData,
-    });
+    const request = createSingleOracleRequest({ question, chapter, context });
 
     try {
       let acc = '';
       const text = await streamOracleInterpretation({
-        prompt,
-        systemPrompt,
+        request,
         signal: controller.signal,
         onThinking: (active) => {
           if (controller.signal.aborted) return;
@@ -42,7 +34,6 @@ export function useAIOracle(planetaryData = {}) {
         onToken: (chunk) => {
           if (controller.signal.aborted) return;
           acc += chunk;
-          // First token: the Oracle begins to speak — leave the loading veil.
           setOracleState((state) => ({ ...state, loading: false, streaming: true, thinking: false, text: acc }));
         },
       });
@@ -53,28 +44,20 @@ export function useAIOracle(planetaryData = {}) {
       if (error.name === 'AbortError') return;
       setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: error.message });
     }
-  }, [planetaryData]);
+  }, []);
 
-  const consultSpread = useCallback(async (question, chapters, gematria, correspondences, context = {}) => {
+  const consultSpread = useCallback(async (question, chapters, _gematria, _correspondences, context = {}) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setOracleState({ loading: true, streaming: false, thinking: false, text: null, error: null });
 
-    const { prompt, systemPrompt } = buildTriadOraclePrompt({
-      question,
-      chapters,
-      gematria,
-      correspondences,
-      context,
-      planetaryData,
-    });
+    const request = createTriadOracleRequest({ question, chapters, context });
 
     try {
       let acc = '';
       const text = await streamOracleInterpretation({
-        prompt,
-        systemPrompt,
+        request,
         signal: controller.signal,
         onThinking: (active) => {
           if (controller.signal.aborted) return;
@@ -92,7 +75,7 @@ export function useAIOracle(planetaryData = {}) {
       if (error.name === 'AbortError') return;
       setOracleState({ loading: false, streaming: false, thinking: false, text: null, error: error.message });
     }
-  }, [planetaryData]);
+  }, []);
 
   const resetOracle = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
