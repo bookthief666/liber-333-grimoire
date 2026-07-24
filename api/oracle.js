@@ -1,17 +1,18 @@
 // /api/oracle.js — Vercel Serverless Function
-// Proxies AI requests so provider keys never reach the browser.
+// Accepts only typed Liber 333 reading requests, reconstructs the canonical
+// Oracle prompt on the server, and proxies the provider response.
 //
 // Supports:
 //   • Streaming Anthropic responses over Server-Sent Events.
 //   • Buffered Anthropic responses.
 //   • Buffered Gemini fallback only when no Anthropic key is configured.
 
+import { buildOraclePromptFromRequest, validateOracleRequest } from '../src/features/oracle/oracleRequest.js';
+
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-1-20250805';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const MAX_TOKENS = 3200;
 const THINKING_BUDGET = 1600;
-const MAX_PROMPT_CHARS = 24000;
-const MAX_SYSTEM_CHARS = 12000;
 
 function normalizeOrigin(value) {
   if (!value) return null;
@@ -43,32 +44,13 @@ function applyResponseHeaders(req, res) {
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('X-Oracle-Request-Version', '1');
 
   if (origin && allowed.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
 
   return !origin || allowed.has(origin);
-}
-
-function validateRequestBody(body) {
-  const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
-  const systemPrompt = typeof body?.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
-
-  if (!prompt) return { error: 'Missing prompt.' };
-  if (prompt.length > MAX_PROMPT_CHARS) {
-    return { error: `Prompt exceeds the ${MAX_PROMPT_CHARS.toLocaleString()} character limit.` };
-  }
-  if (systemPrompt.length > MAX_SYSTEM_CHARS) {
-    return { error: `System prompt exceeds the ${MAX_SYSTEM_CHARS.toLocaleString()} character limit.` };
-  }
-
-  return {
-    prompt,
-    systemPrompt,
-    stream: body?.stream === true,
-    thinking: body?.thinking !== false,
-  };
 }
 
 export default async function handler(req, res) {
@@ -81,10 +63,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
 
-  const validated = validateRequestBody(req.body || {});
-  if (validated.error) return res.status(400).json({ error: validated.error });
+  const validation = validateOracleRequest(req.body || {});
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error, code: validation.code });
+  }
 
-  const { prompt, systemPrompt, stream, thinking } = validated;
+  const { request } = validation;
+  const { prompt, systemPrompt } = buildOraclePromptFromRequest(request);
+  const stream = request.stream;
+  const thinking = true;
 
   // Accept the canonical name first, then legacy names previously used by this project.
   const anthropicKey =
@@ -99,10 +86,10 @@ export default async function handler(req, res) {
   if (stream && anthropicKey) {
     try {
       return await streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey });
-    } catch (err) {
-      console.error('Anthropic stream error:', err.message);
+    } catch (error) {
+      console.error('Anthropic stream error:', error.message);
       if (res.headersSent) {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
         return res.end();
       }
       // If the stream failed before headers were sent, retry through the buffered path below.
@@ -114,10 +101,10 @@ export default async function handler(req, res) {
     try {
       const text = await bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey });
       return res.status(200).json({ text, provider: 'anthropic', model: ANTHROPIC_MODEL });
-    } catch (err) {
-      console.error('Anthropic error:', err.message);
+    } catch (error) {
+      console.error('Anthropic error:', error.message);
       return res.status(502).json({
-        error: `Anthropic: ${err.message}`,
+        error: `Anthropic: ${error.message}`,
         provider: 'anthropic',
         model: ANTHROPIC_MODEL,
       });
@@ -140,16 +127,16 @@ export default async function handler(req, res) {
         }
       );
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || `Gemini API error: ${response.status}`);
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
       }
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'The Abyss returns silence.';
       return res.status(200).json({ text, provider: 'gemini', model: GEMINI_MODEL });
-    } catch (err) {
-      console.error('Gemini error:', err.message);
+    } catch (error) {
+      console.error('Gemini error:', error.message);
       return res.status(502).json({
-        error: `Gemini: ${err.message}`,
+        error: `Gemini: ${error.message}`,
         provider: 'gemini',
         model: GEMINI_MODEL,
       });
@@ -164,7 +151,6 @@ export default async function handler(req, res) {
 // ─────────────────────────────────────────────────────────────────────
 // Anthropic helpers
 // ─────────────────────────────────────────────────────────────────────
-
 function buildBody({ prompt, systemPrompt, thinking, stream }) {
   const body = {
     model: ANTHROPIC_MODEL,
@@ -191,8 +177,8 @@ async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey 
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Anthropic API error: ${response.status}`);
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `Anthropic API error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -215,8 +201,8 @@ async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicK
   });
 
   if (!upstream.ok || !upstream.body) {
-    const err = await upstream.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Anthropic API error: ${upstream.status}`);
+    const error = await upstream.json().catch(() => ({}));
+    throw new Error(error.error?.message || `Anthropic API error: ${upstream.status}`);
   }
 
   res.writeHead(200, {
