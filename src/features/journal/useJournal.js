@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  getJournalBackupFilename,
+  mergeJournalBackup,
+  parseJournalBackup,
+  serializeJournalBackup,
+} from './journalBackup.js';
+import {
   clearStoredJournalEntries,
   getJournalRecurrenceCount,
   getMilestoneForTotal,
@@ -54,6 +60,36 @@ export function useJournal() {
     clearStoredJournalEntries(localStorage);
   }, []);
 
+  const exportBackup = useCallback(() => {
+    const exportedAt = new Date();
+    return {
+      filename: getJournalBackupFilename(exportedAt),
+      content: serializeJournalBackup({ entries, totalReadings, exportedAt }),
+      entryCount: entries.length,
+      totalReadings,
+    };
+  }, [entries, totalReadings]);
+
+  const importBackup = useCallback(async (text) => {
+    const backup = parseJournalBackup(text);
+    const result = mergeJournalBackup({
+      currentEntries: entries,
+      currentTotalReadings: totalReadings,
+      backup,
+    });
+
+    setEntries(result.entries);
+    setTotalReadings(result.totalReadings);
+    writeJournalEntries(localStorage, result.entries);
+    writeTotalReadings(localStorage, result.totalReadings);
+
+    return {
+      ...result,
+      backupExportedAt: backup.exportedAt,
+      backupEntryCount: backup.entries.length,
+    };
+  }, [entries, totalReadings]);
+
   const getRecurrenceCount = useCallback(
     (chapterNum) => getJournalRecurrenceCount(entries, chapterNum),
     [entries],
@@ -75,6 +111,8 @@ export function useJournal() {
     addEntry,
     removeEntry,
     clearAll,
+    exportBackup,
+    importBackup,
     getRecurrenceCount,
     getRecentReadings,
   };
