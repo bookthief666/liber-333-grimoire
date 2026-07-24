@@ -1,12 +1,10 @@
 // /api/oracle.js — Vercel Serverless Function
 // Accepts only typed Liber 333 reading requests, reconstructs the canonical
-// Oracle prompt on the server, and proxies the provider response.
-//
-// Supports:
-//   • Streaming Anthropic responses over Server-Sent Events.
-//   • Buffered Anthropic responses.
-//   • Buffered Gemini fallback only when no Anthropic key is configured.
+// Oracle prompt on the server, enforces public-access controls, and proxies
+// the configured provider response.
 
+import { randomUUID } from 'node:crypto';
+import { applyOracleAccessHeaders, checkOracleAccess } from './_lib/oracleRateLimit.js';
 import { buildOraclePromptFromRequest, validateOracleRequest } from '../src/features/oracle/oracleRequest.js';
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-1-20250805';
@@ -34,7 +32,7 @@ function allowedOrigins() {
   );
 }
 
-function applyResponseHeaders(req, res) {
+function applyResponseHeaders(req, res, requestId) {
   const origin = normalizeOrigin(req.headers?.origin);
   const allowed = allowedOrigins();
 
@@ -45,6 +43,7 @@ function applyResponseHeaders(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('X-Oracle-Request-Version', '1');
+  res.setHeader('X-Oracle-Request-Id', requestId);
 
   if (origin && allowed.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
@@ -53,27 +52,79 @@ function applyResponseHeaders(req, res) {
   return !origin || allowed.has(origin);
 }
 
+function logOracleEvent(event, details = {}) {
+  console.log(JSON.stringify({
+    scope: 'liber333-oracle',
+    event,
+    timestamp: new Date().toISOString(),
+    ...details,
+  }));
+}
+
+function accessError(access) {
+  if (access.code === 'oracle_disabled') {
+    return 'The Oracle is temporarily veiled.';
+  }
+  if (access.code === 'oracle_rate_limit_unavailable') {
+    return 'The Oracle cannot open safely at this moment.';
+  }
+  return access.retryAfter > 0
+    ? `The Oracle rests between consultations. Try again in ${access.retryAfter} seconds.`
+    : 'The Oracle rests between consultations. Try again shortly.';
+}
+
 export default async function handler(req, res) {
-  const originAllowed = applyResponseHeaders(req, res);
+  const requestId = randomUUID();
+  const originAllowed = applyResponseHeaders(req, res, requestId);
 
   if (!originAllowed) {
-    return res.status(403).json({ error: 'Origin not allowed.' });
+    logOracleEvent('rejected', { requestId, reason: 'origin_not_allowed' });
+    return res.status(403).json({ error: 'Origin not allowed.', requestId });
   }
 
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.', requestId });
 
   const validation = validateOracleRequest(req.body || {});
   if (!validation.ok) {
-    return res.status(400).json({ error: validation.error, code: validation.code });
+    logOracleEvent('rejected', { requestId, reason: validation.code });
+    return res.status(400).json({ error: validation.error, code: validation.code, requestId });
   }
 
   const { request } = validation;
+  const access = await checkOracleAccess({ req });
+  applyOracleAccessHeaders(res, access);
+
+  if (access.degraded || access.internalError) {
+    logOracleEvent('rate_limit_state', {
+      requestId,
+      operation: request.operation,
+      mode: access.mode,
+      degraded: access.degraded,
+      error: access.internalError || undefined,
+    });
+  }
+
+  if (!access.allowed) {
+    logOracleEvent('rejected', {
+      requestId,
+      operation: request.operation,
+      reason: access.code,
+      rateLimitMode: access.mode,
+      retryAfter: access.retryAfter,
+    });
+    return res.status(access.status).json({
+      error: accessError(access),
+      code: access.code,
+      retryAfter: access.retryAfter,
+      requestId,
+    });
+  }
+
   const { prompt, systemPrompt } = buildOraclePromptFromRequest(request);
   const stream = request.stream;
   const thinking = true;
 
-  // Accept the canonical name first, then legacy names previously used by this project.
   const anthropicKey =
     process.env.ANTHROPIC_API_KEY ||
     process.env.Liber333Oracle ||
@@ -82,36 +133,67 @@ export default async function handler(req, res) {
     process.env.CLAUDE_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  // ── Streaming path (Anthropic only) ──────────────────────────────────
+  logOracleEvent('accepted', {
+    requestId,
+    operation: request.operation,
+    stream,
+    rateLimitMode: access.mode,
+  });
+
   if (stream && anthropicKey) {
     try {
-      return await streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey });
+      const result = await streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicKey });
+      logOracleEvent('completed', {
+        requestId,
+        operation: request.operation,
+        provider: 'anthropic',
+        model: ANTHROPIC_MODEL,
+        stream: true,
+      });
+      return result;
     } catch (error) {
-      console.error('Anthropic stream error:', error.message);
+      logOracleEvent('provider_error', {
+        requestId,
+        operation: request.operation,
+        provider: 'anthropic',
+        stream: true,
+        error: error.message,
+      });
       if (res.headersSent) {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message, requestId })}\n\n`);
         return res.end();
       }
-      // If the stream failed before headers were sent, retry through the buffered path below.
     }
   }
 
-  // ── Buffered Anthropic ───────────────────────────────────────────────
   if (anthropicKey) {
     try {
       const text = await bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey });
-      return res.status(200).json({ text, provider: 'anthropic', model: ANTHROPIC_MODEL });
+      logOracleEvent('completed', {
+        requestId,
+        operation: request.operation,
+        provider: 'anthropic',
+        model: ANTHROPIC_MODEL,
+        stream: false,
+      });
+      return res.status(200).json({ text, provider: 'anthropic', model: ANTHROPIC_MODEL, requestId });
     } catch (error) {
-      console.error('Anthropic error:', error.message);
+      logOracleEvent('provider_error', {
+        requestId,
+        operation: request.operation,
+        provider: 'anthropic',
+        stream: false,
+        error: error.message,
+      });
       return res.status(502).json({
         error: `Anthropic: ${error.message}`,
         provider: 'anthropic',
         model: ANTHROPIC_MODEL,
+        requestId,
       });
     }
   }
 
-  // ── Buffered Gemini — only when no Anthropic key is configured ──────
   if (geminiKey) {
     try {
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
@@ -127,30 +209,43 @@ export default async function handler(req, res) {
         }
       );
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
+        const providerError = await response.json().catch(() => ({}));
+        throw new Error(providerError.error?.message || `Gemini API error: ${response.status}`);
       }
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'The Abyss returns silence.';
-      return res.status(200).json({ text, provider: 'gemini', model: GEMINI_MODEL });
+      logOracleEvent('completed', {
+        requestId,
+        operation: request.operation,
+        provider: 'gemini',
+        model: GEMINI_MODEL,
+        stream: false,
+      });
+      return res.status(200).json({ text, provider: 'gemini', model: GEMINI_MODEL, requestId });
     } catch (error) {
-      console.error('Gemini error:', error.message);
+      logOracleEvent('provider_error', {
+        requestId,
+        operation: request.operation,
+        provider: 'gemini',
+        stream: false,
+        error: error.message,
+      });
       return res.status(502).json({
         error: `Gemini: ${error.message}`,
         provider: 'gemini',
         model: GEMINI_MODEL,
+        requestId,
       });
     }
   }
 
+  logOracleEvent('provider_unavailable', { requestId, operation: request.operation });
   return res.status(503).json({
     error: 'No Oracle provider is configured. Add ANTHROPIC_API_KEY or GEMINI_API_KEY in the deployment environment, then redeploy.',
+    requestId,
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Anthropic helpers
-// ─────────────────────────────────────────────────────────────────────
 function buildBody({ prompt, systemPrompt, thinking, stream }) {
   const body = {
     model: ANTHROPIC_MODEL,
@@ -182,7 +277,6 @@ async function bufferedAnthropic({ prompt, systemPrompt, thinking, anthropicKey 
   }
 
   const data = await response.json();
-  // Only surface visible text blocks; thinking blocks remain private.
   return data.content
     ?.filter((block) => block.type === 'text')
     .map((block) => block.text)
@@ -250,7 +344,6 @@ async function streamAnthropic({ res, prompt, systemPrompt, thinking, anthropicK
           emitted = true;
           send('token', { text: delta.text });
         }
-        // thinking_delta and signature_delta are intentionally ignored.
       } else if (event.type === 'content_block_stop') {
         if (inThinking) send('thinking', { active: false });
         inThinking = false;
