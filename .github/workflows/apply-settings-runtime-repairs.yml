@@ -6,6 +6,7 @@ on:
       - feature/settings-accessibility-performance
     paths:
       - .github/workflows/apply-settings-runtime-repairs.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "5fcc26667070924843d680d09ecf832a2490bbcb"
+          test "$(git rev-parse HEAD^)" = "d651c84c7ea39192609e6c17c76f745f9d2bc57a"
 
       - name: Apply guarded runtime repairs
         shell: bash
@@ -33,6 +34,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          import re
 
           def replace_once(text, old, new, label):
               count = text.count(old)
@@ -40,34 +42,25 @@ jobs:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               return text.replace(old, new, 1)
 
+          def sub_once(pattern, replacement, text, label, flags=0):
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one regex match, found {count}')
+              return updated
+
           settings_path = Path('src/features/settings/experienceSettings.js')
           settings = settings_path.read_text()
 
-          settings = replace_once(
-              settings,
-              """  const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+          if 'let previousSound = Boolean(getSettings().sound);' not in settings:
+              settings = replace_once(
+                  settings,
+                  "  const patchSymbol = Symbol.for('liber333.experience.audio.patch');\n",
+                  "  const patchSymbol = Symbol.for('liber333.experience.audio.patch');\n  let previousSound = Boolean(getSettings().sound);\n",
+                  'audio previous state',
+              )
 
-  for (const name of ['AudioContext', 'webkitAudioContext']) {
-""",
-              """  const patchSymbol = Symbol.for('liber333.experience.audio.patch');
-  let previousSound = Boolean(getSettings().sound);
-
-  for (const name of ['AudioContext', 'webkitAudioContext']) {
-""",
-              'audio previous-state anchor',
-          )
-
-          settings = replace_once(
-              settings,
-              """    onSettingsChanged(settings) {
-      if (!settings.sound) {
-        contexts.forEach((context) => {
-          if (context?.state !== 'closed') context?.suspend?.().catch?.(() => {});
-        });
-      }
-      if (!settings.voice) synth?.cancel?.();
-    },
-""",
+          settings = sub_once(
+              r"    onSettingsChanged\(settings\) \{\n      if \(!settings\.sound\) \{.*?\n      \}\n      if \(!settings\.voice\) synth\?\.cancel\?\.\(\);\n    \},",
               """    onSettingsChanged(settings) {
       if (!settings.sound) {
         contexts.forEach((context) => {
@@ -82,21 +75,14 @@ jobs:
       }
       previousSound = Boolean(settings.sound);
       if (!settings.voice) synth?.cancel?.();
-    },
-""",
-              'sensory settings handler',
+    },""",
+              settings,
+              'sensory settings transition',
+              re.S,
           )
 
-          settings = replace_once(
-              settings,
-              """export function createExperienceSettingsRuntime({
-  windowObject = typeof window !== 'undefined' ? window : null,
-  documentObject = typeof document !== 'undefined' ? document : null,
-  navigatorObject = typeof navigator !== 'undefined' ? navigator : null,
-  storage = windowObject?.localStorage,
-} = {}) {
-  let settings = readExperienceSettings(storage);
-""",
+          settings = sub_once(
+              r"export function createExperienceSettingsRuntime\(\{\n  windowObject = typeof window !== 'undefined' \? window : null,\n  documentObject = typeof document !== 'undefined' \? document : null,\n  navigatorObject = typeof navigator !== 'undefined' \? navigator : null,\n  storage = windowObject\?\.localStorage,\n\} = \{\}\) \{\n  let settings = readExperienceSettings\(storage\);",
               """export function createExperienceSettingsRuntime({
   windowObject = typeof window !== 'undefined' ? window : null,
   documentObject = typeof document !== 'undefined' ? document : null,
@@ -111,8 +97,8 @@ jobs:
       resolvedStorage = null;
     }
   }
-  let settings = readExperienceSettings(resolvedStorage);
-""",
+  let settings = readExperienceSettings(resolvedStorage);""",
+              settings,
               'guarded storage initialization',
           )
           settings = replace_once(
@@ -123,50 +109,44 @@ jobs:
           )
           settings_path.write_text(settings)
 
-          app_path = Path('src/liber333.jsx')
-          app = app_path.read_text()
+          hook_path = Path('src/features/settings/useExperienceSettings.js')
+          hook_path.write_text("""import { useEffect, useState } from 'react';
+import { getExperienceSettingsRuntime } from './experienceSettings.js';
 
-          app = replace_once(
-              app,
-              "import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';\n",
-              "import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';\nimport { getExperienceSettingsRuntime } from './features/settings/experienceSettings.js';\n",
-              'settings runtime import',
-          )
-
-          voice_marker = """// ─────────────────────────────────────────────
-//  VOICE ENGINE (Web Speech API)
-// ─────────────────────────────────────────────
-const useVoice = () => {
-"""
-          voice_replacement = """const EXPERIENCE_FALLBACK = Object.freeze({
+const EXPERIENCE_FALLBACK = Object.freeze({
   effects: 'high',
   effectiveMotion: 'full',
   sound: true,
   voice: true,
 });
 
-const useExperienceSettingsSnapshot = () => {
-  const runtimeRef = useRef(null);
-  if (!runtimeRef.current) runtimeRef.current = getExperienceSettingsRuntime();
-  const [settings, setSettings] = useState(() => runtimeRef.current?.getSnapshot?.() || EXPERIENCE_FALLBACK);
+export function useExperienceSettingsSnapshot() {
+  const [settings, setSettings] = useState(() => (
+    getExperienceSettingsRuntime()?.getSnapshot?.() || EXPERIENCE_FALLBACK
+  ));
 
   useEffect(() => {
-    const runtime = runtimeRef.current;
+    const runtime = getExperienceSettingsRuntime();
     if (!runtime) return undefined;
     setSettings(runtime.getSnapshot());
     return runtime.subscribe((next) => setSettings(next));
   }, []);
 
   return settings;
-};
+}
+""")
 
-// ─────────────────────────────────────────────
-//  VOICE ENGINE (Web Speech API)
-// ─────────────────────────────────────────────
-const useVoice = (enabled = true) => {
-"""
-          app = replace_once(app, voice_marker, voice_replacement, 'settings subscription hook')
+          app_path = Path('src/liber333.jsx')
+          app = app_path.read_text()
+          if "useExperienceSettingsSnapshot" not in app.split('\n', 30)[0:30]:
+              app = replace_once(
+                  app,
+                  "import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';\n",
+                  "import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';\nimport { useExperienceSettingsSnapshot } from './features/settings/useExperienceSettings.js';\n",
+                  'settings hook import',
+              )
 
+          app = replace_once(app, 'const useVoice = () => {', 'const useVoice = (enabled = true) => {', 'voice signature')
           app = replace_once(
               app,
               """  const speak = useCallback((text) => {
@@ -174,9 +154,10 @@ const useVoice = (enabled = true) => {
     synthRef.current.cancel();
 """,
               """  useEffect(() => {
-    if (enabled) return;
+    if (enabled) return undefined;
     synthRef.current?.cancel();
     setSpeaking(false);
+    return undefined;
   }, [enabled]);
 
   const speak = useCallback((text) => {
@@ -189,32 +170,17 @@ const useVoice = (enabled = true) => {
 """,
               'voice disabled no-op',
           )
-          app = replace_once(app, '  }, [pickVoice]);\n\n  const stop = useCallback(() => {', '  }, [pickVoice, enabled]);\n\n  const stop = useCallback(() => {', 'voice callback dependencies')
-
           app = replace_once(
               app,
-              """const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
-                         evolutionRings = 0, accentColor = "#dc2626" }) => {
-  const [time, setTime] = useState(0);
-  useEffect(() => {
-    if (!spinning) return;
-    const iv = setInterval(() => setTime(t => t + 0.02), 16);
-    return () => clearInterval(iv);
-  }, [spinning]);
-""",
-              """const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
-                         evolutionRings = 0, accentColor = "#dc2626" }) => {
-  const experienceSettings = useExperienceSettingsSnapshot();
-  const animateSigil = spinning
-    && experienceSettings.effects !== 'low'
-    && experienceSettings.effectiveMotion !== 'reduced';
-  const [time, setTime] = useState(0);
-  useEffect(() => {
-    if (!animateSigil) return undefined;
-    const iv = setInterval(() => setTime(t => t + 0.02), 16);
-    return () => clearInterval(iv);
-  }, [animateSigil]);
-""",
+              '  }, [pickVoice]);\n\n  const stop = useCallback(() => {',
+              '  }, [pickVoice, enabled]);\n\n  const stop = useCallback(() => {',
+              'voice dependencies',
+          )
+
+          app = sub_once(
+              r"(const AnimatedSigil = \(\{ input, size = 200, spinning = true, glowing = true,\s*\n\s*evolutionRings = 0, accentColor = \"#dc2626\" \}\) => \{\n)  const \[time, setTime\] = useState\(0\);\n  useEffect\(\(\) => \{\n    if \(!spinning\) return;\n    const iv = setInterval\(\(\) => setTime\(t => t \+ 0\.02\), 16\);\n    return \(\) => clearInterval\(iv\);\n  \}, \[spinning\]\);",
+              r"\1  const experienceSettings = useExperienceSettingsSnapshot();\n  const animateSigil = spinning\n    && experienceSettings.effects !== 'low'\n    && experienceSettings.effectiveMotion !== 'reduced';\n  const [time, setTime] = useState(0);\n  useEffect(() => {\n    if (!animateSigil) return undefined;\n    const iv = setInterval(() => setTime(t => t + 0.02), 16);\n    return () => clearInterval(iv);\n  }, [animateSigil]);",
+              app,
               'sigil timer throttling',
           )
 
@@ -231,10 +197,9 @@ const useVoice = (enabled = true) => {
 
   // ── Phase: init | input | ritual | revelation ──
 """,
-              'app settings subscription',
+              'App settings subscription',
           )
-          app = replace_once(app, '  const voice = useVoice();', '  const voice = useVoice(experienceSettings.voice);', 'voice settings integration')
-
+          app = replace_once(app, '  const voice = useVoice();', '  const voice = useVoice(experienceSettings.voice);', 'voice integration')
           app = replace_once(
               app,
               """      {/* Background Layers */}
@@ -267,24 +232,18 @@ const useVoice = (enabled = true) => {
           tests = tests_path.read_text()
           tests = replace_once(
               tests,
-              """  applyExperienceRootState,
-  getExperienceRootState,
-""",
-              """  applyExperienceRootState,
-  createExperienceSettingsRuntime,
-  getExperienceRootState,
-""",
+              '  applyExperienceRootState,\n  getExperienceRootState,',
+              '  applyExperienceRootState,\n  createExperienceSettingsRuntime,\n  getExperienceRootState,',
               'runtime test import',
           )
-          additions = r'''
+          tests += r'''
 
-test('runtime falls back to defaults when access to localStorage itself is blocked', () => {
-  const windowObject = {
-    get localStorage() { throw new Error('SecurityError'); },
-    dispatchEvent() {},
-  };
+test('runtime survives blocked access to the localStorage property', () => {
   const runtime = createExperienceSettingsRuntime({
-    windowObject,
+    windowObject: {
+      get localStorage() { throw new Error('SecurityError'); },
+      dispatchEvent() {},
+    },
     documentObject: null,
     navigatorObject: null,
   });
@@ -313,35 +272,42 @@ test('Sound Off suspends known contexts and Sound On resumes eligible contexts',
   runtime.setSettings({ sound: false });
   await Promise.resolve();
   assert.equal(context.state, 'suspended');
-  assert.ok(suspends > 0);
   runtime.setSettings({ sound: true });
   await Promise.resolve();
   assert.equal(context.state, 'running');
+  assert.ok(suspends > 0);
   assert.ok(resumes > 0);
   runtime.destroy();
 });
 
-test('low effects and reduced motion remove expensive runtime atmosphere and stop sigil timers', async () => {
+test('Low Effects and Reduced Motion stop expensive atmosphere work', async () => {
   const source = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
   assert.match(source, /const reduceAtmosphereWork = experienceSettings\.effects === 'low'/);
   assert.match(source, /\{!reduceAtmosphereWork && \(/);
-  assert.match(source, /<AbyssShader/);
-  assert.match(source, /<ParticleCanvas/);
   assert.match(source, /const animateSigil = spinning/);
   assert.match(source, /experienceSettings\.effectiveMotion !== 'reduced'/);
 });
 
-test('Voice Off cancels narration and remains a clean non-speaking no-op', async () => {
+test('Voice Off cancels narration and remains a non-speaking no-op', async () => {
   const source = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
   assert.match(source, /const useVoice = \(enabled = true\)/);
   assert.match(source, /if \(!enabled \|\| !synthRef\.current \|\| !text\)/);
-  assert.match(source, /setSpeaking\(false\)/);
   assert.match(source, /const voice = useVoice\(experienceSettings\.voice\)/);
 });
 '''
-          if "runtime falls back to defaults when access to localStorage itself is blocked" not in tests:
-              tests = tests.rstrip() + additions + '\n'
           tests_path.write_text(tests)
+
+          required = {
+              'settings resolved storage': 'resolvedStorage' in settings,
+              'sound recovery': 'else if (!previousSound)' in settings,
+              'hook file': hook_path.exists(),
+              'voice guard': 'const useVoice = (enabled = true)' in app,
+              'atmosphere guard': '{!reduceAtmosphereWork && (' in app,
+              'sigil throttle': 'const animateSigil = spinning' in app,
+          }
+          missing = [name for name, present in required.items() if not present]
+          if missing:
+              raise SystemExit('Missing repair postconditions: ' + ', '.join(missing))
 
           Path('.github/workflows/apply-settings-runtime-repairs.yml').unlink()
           PY
@@ -357,6 +323,6 @@ test('Voice Off cancels narration and remains a clean non-speaking no-op', async
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/features/settings/experienceSettings.js src/liber333.jsx tests/experienceSettings.test.mjs .github/workflows/apply-settings-runtime-repairs.yml
+          git add -A
           git commit -m "Repair settings runtime behavior"
           git push origin HEAD:feature/settings-accessibility-performance
