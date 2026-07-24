@@ -21,7 +21,7 @@ The runtime validates every field independently. Malformed data recovers to full
 
 ## Motion precedence
 
-A stored explicit Motion choice takes precedence. Until the user chooses Full or Reduced, `prefers-reduced-motion: reduce` supplies the effective motion state without replacing the stored default.
+A stored explicit Motion choice takes precedence. Until the user chooses Full or Reduced, `prefers-reduced-motion: reduce` supplies the effective motion state without replacing the stored default. The visible segmented control follows the effective state until the user chooses an explicit override.
 
 Reduced Motion disables nonessential animation and transition duration through the root accessibility state. It does not modify reading calculation, timers used by provider requests, or journal timestamps.
 
@@ -48,7 +48,7 @@ Low Effects is not a redesign and does not remove functional state indicators.
 
 ## Sensory controls
 
-- Sound Off suspends known Web Audio contexts and prevents disabled contexts from being resumed through the application controls.
+- Sound Off suspends known Web Audio contexts, including contexts initialized after Sound was disabled, and prevents disabled contexts from being resumed through application controls.
 - Voice Off cancels active speech and suppresses subsequent browser speech-synthesis output.
 - Haptics Off suppresses vibration calls where the browser exposes the Vibration API.
 
@@ -83,8 +83,8 @@ Verify before merge:
 5. Explicit Full overriding system reduction and explicit Reduced overriding system Full.
 6. Reduced Ceremony completes the same Single and Triad flows with shorter pacing.
 7. Low Effects retains legibility and functional state while reducing atmosphere.
-8. Sound, Voice, and Haptics switch independently.
+8. Sound, Voice, and Haptics switch independently, including Sound Off before audio initialization.
 9. Standard and Large text on Fold 6 closed and unfolded layouts.
-10. Escape, focus containment, and focus restoration in Help, Orientation, Settings, Grimoire, and milestone overlays.
+10. Escape, focus containment, and focus restoration in Help, Orientation, Settings, and Grimoire.
 11. Reset orientation guidance without journal or settings loss.
 12. Installed-PWA persistence and offline local surfaces.
