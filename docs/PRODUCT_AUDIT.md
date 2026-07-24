@@ -2,230 +2,238 @@
 
 ## Executive assessment
 
-Liber 333 is no longer a simple text reader. It is already a distinctive occult study and practice application with five connected surfaces:
+Liber 333 is a distinctive occult study and practice application with five connected surfaces:
 
-1. **Oracle** — single-chapter and triad consultations derived from query gematria.
+1. **Oracle** — deterministic Single and Triad consultations derived from the question’s English Ordinal value.
 2. **Rites** — guided station-by-station performances for three ritual chapters.
 3. **Tree** — an interactive Tree of Life used to browse chapters by attributed location.
-4. **Gematria** — an English ordinal calculator with number correspondences and Hebrew-letter reference.
-5. **Grimoire** — a local journal, recurrence tracker, reading milestones, and evolving sigil.
+4. **Gematria** — an English Ordinal calculator with number correspondences and a Hebrew-letter reference.
+5. **Grimoire** — a local journal, recurrence tracker, reading milestones, evolving sigil, and versioned backup/restore workflow.
 
-It also includes planetary and lunar context, audio, haptics, speech synthesis, a streaming AI interpretation layer, atmospheric WebGL/canvas effects, and responsive mobile navigation.
+The app also includes planetary and lunar context, audio, haptics, speech synthesis, an optional streaming Oracle interpretation layer, atmospheric WebGL/canvas effects, responsive foldable layouts, and an installable PWA foundation.
 
-The app has genuine product potential. Its primary problem is no longer lack of features. Its primary problems are **orientation, accuracy, reliability, architecture, and public-release safety**.
+The primary product problem is no longer missing core features. The remaining work is **orientation, accessibility, low-power behavior, external production configuration, operational verification, and selected scholarly/correctness refinements**.
 
 ## What is already strong
 
 ### Distinctive identity
 
-The Astral Void design direction is recognizable and coherent: luminous silver prose, crimson accents, blackletter display typography, illuminated manuscript details, animated sigils, zodiac rings, marginalia, constellation fields, and a deep-space ritual background.
+The Astral Void direction is coherent: luminous silver prose, crimson accents, blackletter display typography, illuminated manuscript details, animated sigils, zodiac rings, marginalia, constellation fields, and a deep-space ritual background.
 
 ### Connected symbolic loop
 
-The best existing workflow is:
+`question → gematria → deterministic chapter selection → revelation → optional Oracle interpretation → save to Grimoire → recurrence awareness`
 
-`question → gematria → chapter selection → revelation → AI interpretation → save to journal → recurrence awareness`
+Every subsystem feeds the same book and symbolic vocabulary rather than behaving like a collection of unrelated utilities.
 
-This is more compelling than a generic tarot or quote app because every subsystem feeds the same book and symbolic vocabulary.
-
-### Useful study/practice tools
+### Useful study and practice tools
 
 - Tree-based chapter browsing supports study rather than only divination.
-- Guided rites turn textual material into a practical step sequence.
-- Journal recurrence makes repeated chapters meaningful.
+- Guided rites turn textual material into a practical sequence.
+- Recurrence tracking makes repeated chapters meaningful.
 - Triad synthesis is stronger than three disconnected readings.
 - Speech, sound, haptics, and ritual pacing create embodied interaction.
+- Local JSON export/import gives users practical control over journal data.
 
-## Critical release blockers
+## Completed public-readiness controls
 
-### 1. Oracle endpoint abuse risk
+### Typed Oracle boundary
 
-The public API currently accepts arbitrary client-supplied prompts and system prompts. Without authentication, durable rate limits, or server-side operation schemas, it can be used as a general-purpose AI proxy and can exhaust the owner's API budget.
+The browser no longer supplies arbitrary provider prompts or system instructions. It sends a versioned typed Liber 333 request containing bounded reading data. The server:
 
-**Required before broad public launch:**
+- accepts only Single or Triad operations;
+- resolves canonical chapter objects from the 94-record corpus;
+- reconstructs the approved prompt from repository-controlled data;
+- recomputes Gematria and correspondences;
+- bounds question, journal, timing, and counter context;
+- rejects legacy `prompt` and `systemPrompt` payloads;
+- preserves streaming, cancellation, retry, thinking, and provider fallback behavior.
 
-- rate limiting backed by a durable store or platform firewall;
-- bot protection for anonymous consultations;
-- server-side request schemas;
-- ideally construct Oracle prompts on the server from typed reading data instead of accepting arbitrary system prompts;
-- usage telemetry and a monthly budget ceiling;
-- clear failure states when the public allowance is exhausted.
+### Public Oracle controls
 
-### 2. Provider model drift
+Repository code now includes:
 
-AI model identifiers must be environment-configurable and periodically verified. Hard-coded retired or invented model IDs can make the Oracle fail while the static app still deploys successfully.
+- `ORACLE_PUBLIC_ENABLED` emergency switch;
+- short-window and daily allowances;
+- salted hashing before client identifiers become counter keys;
+- optional Upstash Redis REST counters;
+- labeled in-memory fallback for previews and development;
+- optional fail-closed durable mode;
+- request IDs and quota/reset headers;
+- controlled 429 and unavailable states;
+- privacy-preserving operational logs that omit questions and reconstructed prompts.
 
-### 3. Privacy disclosure
+### Provenance and corpus clarity
 
-Questions, recent reading context, chapter content, and timing context may be sent to an external AI provider. Journal entries are stored locally in the browser. Users need a concise privacy notice explaining both behaviors.
+- Visible corpus counts derive from `LIBER_333.length`.
+- The 94-record convention is explained.
+- Source text and modern editorial commentary are distinguished.
+- The visible headings remain `ORACLE OF THE ABYSS` and `ORACLE OF THE ABYSS · TRIAD SYNTHESIS`.
+- The provenance layer uses `ORACLE INTERPRETATION`; the rejected “AI-generated interpretation” reader wording is not used.
 
-### 4. No test or quality gate
+### Grimoire data portability
 
-The project has a build command but no lint script, automated tests, accessibility checks, or end-to-end ritual-flow tests. Vercel compilation success is not equivalent to product readiness.
+Versioned JSON export/import is implemented with:
 
-## Important correctness issues
+- local browser processing;
+- canonical chapter validation and title restoration;
+- non-destructive merge behavior;
+- local-entry precedence on ID collisions;
+- duplicate handling;
+- newest-first ordering and the 50-entry cap;
+- highest-lifetime-total preservation;
+- all-or-nothing rejection of invalid backups.
 
-### Chapter-count inconsistency
+### Quality gate
 
-The interface uses conflicting numbers such as 93, 94, and 96 in different areas. Derive the displayed corpus count from `LIBER_333.length` and separately explain the traditional chapter-count convention.
+The repository now has a complete `npm run check` gate covering accumulated unit domains, production build, release-file validation, and built-output HTTP smoke testing. The exact PR #35 preview also passed manual browser, provider, filesystem, Fold 6, and installed-PWA checks.
 
-### Gematria naming
+## Remaining release blockers and external dependencies
 
-The current calculator uses ordinal English values `A=1 ... Z=26`. Calling this simply “English Qabalah” may imply a more specific historical cipher than the app actually implements. Label it clearly as **English Ordinal Gematria** and later add selectable systems rather than presenting one method as universal.
+These items are not proven complete by merged source code:
+
+### 1. Canonical production deployment
+
+The final integration commit’s automatic Vercel deployments were blocked by the account’s daily deployment quota. A canonical production deployment must be created and verified after quota availability returns.
+
+### 2. Durable production configuration
+
+Verify in provider dashboards and the live runtime:
+
+- Upstash database, REST URL, and token;
+- strong `ORACLE_RATE_LIMIT_SALT`;
+- `ORACLE_REQUIRE_DURABLE_RATE_LIMIT=true` where intended;
+- expiry/reset behavior and fail-closed behavior;
+- absence of raw client addresses in durable keys and logs.
+
+### 3. Bot and budget controls
+
+Verify rather than assume:
+
+- Vercel Bot Protection;
+- provider-side usage alerts and hard ceilings;
+- provider billing and model access;
+- operational monitoring and rollback ownership.
+
+### 4. Canonical origin and environment
+
+Verify:
+
+- custom domain;
+- production and preview project ownership;
+- `PUBLIC_APP_ORIGIN`;
+- production API keys and model identifiers;
+- kill-switch operation in production;
+- one canonical Vercel project rather than duplicate competing deployments.
+
+## Remaining correctness work
+
+### Gematria naming and systems
+
+The current method is correctly labeled **English Ordinal Gematria**. Selectable systems remain future work.
 
 ### Planetary hours
 
-The current planetary-hour function assumes sunrise at 6:00 a.m. and uses equal civil hours. Traditional planetary hours divide the actual daylight and nighttime intervals into twelve unequal hours. Present the current display as an approximation until real sunrise/sunset calculation is implemented.
+The current presentation must remain explicitly approximate until actual sunrise/sunset-based unequal hours are implemented and tested.
 
 ### Lunar phase
 
-The current lunar phase is an approximation calculated at mount time. It is suitable as atmosphere, not precision electional timing. Label it accordingly or replace it with a tested astronomical calculation.
+The current calculation is suitable for atmosphere rather than precision electional timing unless replaced by a tested astronomical implementation.
 
-### Commentary provenance
+### Editorial review
 
-The chapter commentary is extensive and often interpretive. The public product should distinguish:
+Continue reviewing chapter attributions and modern commentary. Provenance labels improve clarity but do not substitute for scholarly verification.
 
-- Crowley's source text;
-- Crowley's own published commentary where included;
-- modern editorial interpretation;
-- generated Oracle interpretation.
+## UX and accessibility priorities
 
-A source/provenance panel will improve scholarly credibility.
+### Settings and accessible defaults
 
-## UX problems
+The next focused milestone should add persistent local controls for:
 
-### The app exposes modes, but not purposes
+- Ceremony: Full / Reduced;
+- Motion: Full / Reduced;
+- Visual Effects: High / Low;
+- Sound, Voice, and Haptics;
+- Text Size: Standard / Large;
+- reset orientation guidance.
 
-The navigation labels — Oracle, Rites, Tree, Gematria, Grimoire — identify sections but do not explain when or why to use each one.
+Full ceremony, motion, effects, sound, voice, and supported haptics should remain the ritual default. `prefers-reduced-motion` must be respected without silently rewriting the user’s stored choice.
 
-Add a first-run **Orientation / Ways of Working** layer with five practical intentions:
+### Glyph controls
 
-- “I have a question” → Oracle
-- “I want to study the book” → Tree / chapter reader
-- “I want to perform a practice” → Rites
-- “I want to examine a word or number” → Gematria
-- “I want to review patterns in my work” → Grimoire
+Preserve glyphs while adding accessible names, visible active states, comfortable targets, and state announcements where appropriate.
 
-### Important concepts lack explanation at the moment of use
+### Overlay behavior
 
-Examples:
+Overlays need predictable Escape handling, initial focus, focus containment where required, and focus restoration to the invoking control.
 
-- single reading versus triad spread;
-- how the query maps to a chapter;
-- what Thesis / Antithesis / Synthesis means;
-- why a repeated chapter matters;
-- what is local-only versus AI-generated;
-- what the planetary/lunar indicators do and do not claim;
-- what saving a reading preserves.
+### Low-effects mode
 
-Use short contextual help, not long modal lectures.
+Reduce WebGL load, particles, whispers, blur, glow, and simultaneous background systems without redesigning the Astral Void aesthetic.
 
-### Glyph-only controls reduce discoverability
+### Orientation
 
-The audio and voice controls use small symbols. Preserve the symbols, but add accessible labels, visible active states, and a compact settings sheet.
+Add concise first-run and resettable “Ways of Working” guidance:
 
-### The seven-second ritual is unskippable
-
-The theatrical reveal is effective once, but repeat users need a “reduced ceremony” preference. Preserve the full ritual as the default experience and allow a shorter accessible mode.
-
-### Journal management is incomplete
-
-Add:
-
-- export/import as JSON;
-- optional plain-text or Markdown export;
-- search and filters;
-- notes added after a reading;
-- favorites/bookmarks;
-- data deletion confirmation;
-- explicit local-storage explanation.
+- question → Oracle;
+- study → Tree/chapter reader;
+- practice → Rites;
+- word or number → Gematria;
+- pattern review → Grimoire.
 
 ## Architecture assessment
 
-### Current condition
+Continue incremental extraction rather than a rewrite. Existing feature modules for Oracle, rate limiting, planetary data, and journal backup demonstrate the preferred direction.
 
-Most data, hooks, feature components, visual systems, and the main application live in `src/liber333.jsx`. This enabled rapid experimentation but now makes changes high-risk.
+Recommended next extractions and boundaries:
 
-### Incremental extraction plan
+1. persistent settings store and schema;
+2. settings sheet and accessible control primitives;
+3. atmosphere quality selectors;
+4. overlay/focus utilities;
+5. ceremony and motion selectors;
+6. remaining large feature sections from `src/liber333.jsx`.
 
-Do not rewrite the app. Extract in this order:
+Each extraction should preserve deterministic readings, corpus data, Oracle wording, journal schema, and ritual defaults.
 
-1. `src/data/liber333.js`
-2. `src/data/correspondences.js`
-3. `src/data/rituals.js`
-4. `src/lib/gematria.js`
-5. `src/hooks/useOracle.js`
-6. `src/hooks/useJournal.js`
-7. `src/features/oracle/`
-8. `src/features/rituals/`
-9. `src/features/tree/`
-10. `src/features/gematria/`
-11. `src/components/atmosphere/`
+## Milestones
 
-Each extraction should preserve behavior and ship independently.
+### Completed foundation
 
-## Visual refinement direction
-
-Do not add more random decoration. Improve hierarchy and meaning.
-
-### Keep
-
-- Astral Void palette;
-- illuminated prose;
-- zodiac ring and evolving sigil;
-- Babalon star and marginalia as restrained atmosphere;
-- floating text rather than dashboard boxes;
-- ritual pacing and cinematic transitions.
-
-### Refine
-
-- give each mode a distinct symbolic “chamber” while retaining the shared cosmos;
-- use visual motifs functionally: Tree geometry in study mode, number constellations in Gematria, station circles in Rites, memory threads in Grimoire;
-- add quiet explanatory microcopy below ornamental headings;
-- reduce simultaneous background systems on narrow or low-power devices;
-- add motion and effects settings;
-- establish one consistent button/action hierarchy.
-
-## Recommended milestones
-
-### V1.1 — Public foundation
-
-- valid configurable AI models;
+- configurable provider models;
 - request validation and origin restrictions;
-- installable PWA shell;
-- accessibility viewport/focus improvements;
-- current README and release documentation.
+- typed Oracle requests and server prompt reconstruction;
+- PWA shell and offline foundation;
+- corpus/provenance labels;
+- automated release gate;
+- kill switch and rate-limit implementation;
+- privacy and terms surfaces;
+- Grimoire export/import.
 
-### V1.2 — Orientation and integration
+### Next — Settings, accessibility, and performance
 
-- first-run Ways of Working screen;
-- contextual help for every mode;
-- settings sheet;
-- clearer transitions between revelation, rite, Tree, and journal;
-- explain data/privacy behavior.
+- persistent settings schema;
+- reduced ceremony and reduced motion;
+- low-effects mode;
+- sound/voice/haptics controls;
+- large text;
+- accessible glyph states;
+- Escape and focus management;
+- Fold 6 and installed-PWA validation.
 
-### V1.3 — Accuracy and provenance
+### Production verification
 
-- derive chapter counts;
-- rename the current gematria method;
-- add selectable gematria systems;
-- accurate planetary hours or an explicit approximation label;
-- source/provenance UI;
-- editorial review of chapter attributions and commentary.
+- canonical deployment;
+- Upstash and fail-closed validation;
+- Bot Protection;
+- provider budgets;
+- custom domain/origin and environment verification;
+- monitoring and rollback.
 
-### V1.4 — Reliability and public beta
+### Later public beta and Android
 
-- tests and CI;
-- rate limiting and bot protection;
-- error monitoring;
-- journal export/import;
-- privacy policy and terms;
-- controlled public allowance for AI readings.
-
-### V1.5 — Android release
-
-- production PWA first;
-- package with Capacitor or a Trusted Web Activity;
-- Android App Bundle;
-- Play Console internal and closed testing;
-- store listing, content rating, privacy/data-safety declarations, screenshots, and release review.
+- controlled public allowance;
+- Grimoire search, notes, favorites, and human-readable export;
+- Capacitor or TWA evaluation;
+- Play internal and closed testing;
+- store assets, declarations, and release review.
