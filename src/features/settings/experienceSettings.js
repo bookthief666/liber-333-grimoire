@@ -16,6 +16,7 @@ export const DEFAULT_EXPERIENCE_SETTINGS = Object.freeze({
 });
 
 const MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+const REDUCED_ANIMATION_FRAME_INTERVAL = 100;
 const ENUMS = {
   ceremony: new Set(['full', 'reduced']),
   motion: new Set(['full', 'reduced']),
@@ -51,6 +52,12 @@ export function resolveEffectiveMotion(settings, prefersReducedMotion = false) {
   if (normalized.motion === 'reduced') return 'reduced';
   if (normalized.motionExplicit) return 'full';
   return prefersReducedMotion ? 'reduced' : 'full';
+}
+
+export function shouldReduceAnimationWork(settings, prefersReducedMotion = false) {
+  const normalized = normalizeExperienceSettings(settings);
+  return normalized.effects === 'low'
+    || resolveEffectiveMotion(normalized, prefersReducedMotion) === 'reduced';
 }
 
 export function scaleCeremonyDuration(duration, settings) {
@@ -101,6 +108,7 @@ export function getExperienceRootState(settings, prefersReducedMotion = false) {
       liberVoice: normalized.voice ? 'on' : 'off',
       liberHaptics: normalized.haptics ? 'on' : 'off',
       liberTextSize: normalized.textSize,
+      liberAnimationBudget: shouldReduceAnimationWork(normalized, prefersReducedMotion) ? 'reduced' : 'full',
     },
   };
 }
@@ -197,10 +205,79 @@ function installOverlayAccessibility(documentObject) {
   };
 }
 
+function installAnimationBudget(windowObject, shouldReduceWork) {
+  const originalRequest = windowObject?.requestAnimationFrame?.bind(windowObject);
+  const originalCancel = windowObject?.cancelAnimationFrame?.bind(windowObject);
+  if (!originalRequest || !originalCancel) return { destroy() {} };
+
+  const patchSymbol = Symbol.for('liber333.experience.animation.patch');
+  if (windowObject[patchSymbol]) return { destroy() {} };
+
+  const pending = new Map();
+  const lastRunByCallback = new WeakMap();
+  let nextId = 1;
+
+  const controlledRequest = (callback) => {
+    if (typeof callback !== 'function') return originalRequest(callback);
+    const publicId = nextId;
+    nextId += 1;
+    const state = { nativeId: null, cancelled: false };
+
+    const run = (timestamp) => {
+      if (state.cancelled) return;
+      const lastRun = lastRunByCallback.get(callback) || 0;
+      if (shouldReduceWork() && timestamp - lastRun < REDUCED_ANIMATION_FRAME_INTERVAL) {
+        state.nativeId = originalRequest(run);
+        return;
+      }
+      pending.delete(publicId);
+      lastRunByCallback.set(callback, timestamp);
+      callback(timestamp);
+    };
+
+    state.nativeId = originalRequest(run);
+    pending.set(publicId, state);
+    return publicId;
+  };
+
+  const controlledCancel = (id) => {
+    const state = pending.get(id);
+    if (!state) {
+      originalCancel(id);
+      return;
+    }
+    state.cancelled = true;
+    originalCancel(state.nativeId);
+    pending.delete(id);
+  };
+
+  try {
+    windowObject.requestAnimationFrame = controlledRequest;
+    windowObject.cancelAnimationFrame = controlledCancel;
+    windowObject[patchSymbol] = true;
+  } catch {
+    return { destroy() {} };
+  }
+
+  return {
+    destroy() {
+      pending.forEach((state) => {
+        state.cancelled = true;
+        originalCancel(state.nativeId);
+      });
+      pending.clear();
+      if (windowObject.requestAnimationFrame === controlledRequest) windowObject.requestAnimationFrame = originalRequest;
+      if (windowObject.cancelAnimationFrame === controlledCancel) windowObject.cancelAnimationFrame = originalCancel;
+      try { delete windowObject[patchSymbol]; } catch { /* non-critical */ }
+    },
+  };
+}
+
 function installSensoryGuards(windowObject, navigatorObject, getSettings) {
   const cleanups = [];
   const contexts = new Set();
   const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+  let previousSound = Boolean(getSettings().sound);
 
   for (const name of ['AudioContext', 'webkitAudioContext']) {
     const Constructor = windowObject?.[name];
@@ -243,6 +320,13 @@ function installSensoryGuards(windowObject, navigatorObject, getSettings) {
     const guardedSpeak = (utterance) => {
       if (!getSettings().voice) {
         synth.cancel?.();
+        queueMicrotask(() => {
+          try {
+            utterance?.onerror?.({ error: 'canceled', type: 'error', target: utterance });
+          } catch {
+            // An utterance callback must never compromise the settings runtime.
+          }
+        });
         return undefined;
       }
       return originalSpeak(utterance);
@@ -274,7 +358,14 @@ function installSensoryGuards(windowObject, navigatorObject, getSettings) {
         contexts.forEach((context) => {
           if (context?.state !== 'closed') context?.suspend?.().catch?.(() => {});
         });
+      } else if (!previousSound) {
+        contexts.forEach((context) => {
+          if (context?.state !== 'closed' && context?.state !== 'running') {
+            context?.resume?.().catch?.(() => {});
+          }
+        });
       }
+      previousSound = Boolean(settings.sound);
       if (!settings.voice) synth?.cancel?.();
     },
     destroy() {
@@ -287,24 +378,38 @@ export function createExperienceSettingsRuntime({
   windowObject = typeof window !== 'undefined' ? window : null,
   documentObject = typeof document !== 'undefined' ? document : null,
   navigatorObject = typeof navigator !== 'undefined' ? navigator : null,
-  storage = windowObject?.localStorage,
+  storage,
 } = {}) {
-  let settings = readExperienceSettings(storage);
+  let resolvedStorage = storage;
+  if (resolvedStorage === undefined) {
+    try {
+      resolvedStorage = windowObject?.localStorage || null;
+    } catch {
+      resolvedStorage = null;
+    }
+  }
+
+  let settings = readExperienceSettings(resolvedStorage);
   const listeners = new Set();
   const media = windowObject?.matchMedia?.(MOTION_QUERY) || null;
   let prefersReducedMotion = Boolean(media?.matches);
+  const effectiveMotion = () => resolveEffectiveMotion(settings, prefersReducedMotion);
+  const animationBudget = installAnimationBudget(
+    windowObject,
+    () => settings.effects === 'low' || effectiveMotion() === 'reduced',
+  );
   const sensory = installSensoryGuards(windowObject, navigatorObject, () => settings);
   const removeOverlayAccessibility = installOverlayAccessibility(documentObject);
 
   const snapshot = () => ({
     ...settings,
-    effectiveMotion: resolveEffectiveMotion(settings, prefersReducedMotion),
+    effectiveMotion: effectiveMotion(),
     hapticsSupported: Boolean(navigatorObject?.vibrate),
   });
 
   const apply = ({ persist = true } = {}) => {
     const rootState = applyExperienceRootState(documentObject?.documentElement, settings, prefersReducedMotion);
-    if (persist) persistExperienceSettings(storage, settings);
+    if (persist) persistExperienceSettings(resolvedStorage, settings);
     sensory.onSettingsChanged(settings);
     const detail = snapshot();
     listeners.forEach((listener) => listener(detail));
@@ -354,6 +459,7 @@ export function createExperienceSettingsRuntime({
       media?.removeEventListener?.('change', onMediaChange);
       media?.removeListener?.(onMediaChange);
       removeOverlayAccessibility();
+      animationBudget.destroy();
       sensory.destroy();
       listeners.clear();
     },
