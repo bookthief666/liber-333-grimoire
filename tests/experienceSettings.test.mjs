@@ -246,9 +246,12 @@ test('blocked speech schedules an utterance error so speaking state can settle',
   runtime.destroy();
 });
 
-test('reduced animation budget throttles repeated requestAnimationFrame callbacks', () => {
+
+test('reduced animation budget delays wrapper work between animation frames', () => {
   let nextNativeId = 1;
+  let nextTimerId = 1;
   const callbacks = new Map();
+  const timers = new Map();
   const windowObject = {
     requestAnimationFrame(callback) {
       const id = nextNativeId;
@@ -257,6 +260,13 @@ test('reduced animation budget throttles repeated requestAnimationFrame callback
       return id;
     },
     cancelAnimationFrame(id) { callbacks.delete(id); },
+    setTimeout(callback, delay) {
+      const id = nextTimerId;
+      nextTimerId += 1;
+      timers.set(id, { callback, delay });
+      return id;
+    },
+    clearTimeout(id) { timers.delete(id); },
     dispatchEvent() {},
   };
   const runtime = createExperienceSettingsRuntime({
@@ -274,6 +284,12 @@ test('reduced animation budget throttles repeated requestAnimationFrame callback
   callbacks.clear();
   first(10);
   assert.equal(calls, 0);
+  assert.equal(callbacks.size, 0);
+  assert.equal(timers.size, 1);
+  const timer = timers.values().next().value;
+  assert.equal(timer.delay, 90);
+  timers.clear();
+  timer.callback();
   const retry = callbacks.values().next().value;
   callbacks.clear();
   retry(120);

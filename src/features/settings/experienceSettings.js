@@ -237,9 +237,12 @@ if (!currentOverlay.hasAttribute('aria-label') && !currentOverlay.hasAttribute('
   };
 }
 
+
 function installAnimationBudget(windowObject, shouldReduceWork) {
   const originalRequest = windowObject?.requestAnimationFrame?.bind(windowObject);
   const originalCancel = windowObject?.cancelAnimationFrame?.bind(windowObject);
+  const originalSetTimeout = windowObject?.setTimeout?.bind(windowObject) || globalThis.setTimeout?.bind(globalThis);
+  const originalClearTimeout = windowObject?.clearTimeout?.bind(windowObject) || globalThis.clearTimeout?.bind(globalThis);
   if (!originalRequest || !originalCancel) return { destroy() {} };
 
   const patchSymbol = Symbol.for('liber333.experience.animation.patch');
@@ -253,13 +256,26 @@ function installAnimationBudget(windowObject, shouldReduceWork) {
     if (typeof callback !== 'function') return originalRequest(callback);
     const publicId = nextId;
     nextId += 1;
-    const state = { nativeId: null, cancelled: false };
+    const state = { nativeId: null, timeoutId: null, cancelled: false };
+
+    const schedule = (delay = 0) => {
+      if (state.cancelled) return;
+      if (delay > 0 && originalSetTimeout) {
+        state.timeoutId = originalSetTimeout(() => {
+          state.timeoutId = null;
+          if (!state.cancelled) state.nativeId = originalRequest(run);
+        }, delay);
+        return;
+      }
+      state.nativeId = originalRequest(run);
+    };
 
     const run = (timestamp) => {
       if (state.cancelled) return;
       const lastRun = lastRunByCallback.get(callback) || 0;
-      if (shouldReduceWork() && timestamp - lastRun < REDUCED_ANIMATION_FRAME_INTERVAL) {
-        state.nativeId = originalRequest(run);
+      const elapsed = timestamp - lastRun;
+      if (shouldReduceWork() && elapsed < REDUCED_ANIMATION_FRAME_INTERVAL) {
+        schedule(REDUCED_ANIMATION_FRAME_INTERVAL - elapsed);
         return;
       }
       pending.delete(publicId);
@@ -267,7 +283,7 @@ function installAnimationBudget(windowObject, shouldReduceWork) {
       callback(timestamp);
     };
 
-    state.nativeId = originalRequest(run);
+    schedule();
     pending.set(publicId, state);
     return publicId;
   };
@@ -279,7 +295,8 @@ function installAnimationBudget(windowObject, shouldReduceWork) {
       return;
     }
     state.cancelled = true;
-    originalCancel(state.nativeId);
+    if (state.nativeId !== null) originalCancel(state.nativeId);
+    if (state.timeoutId !== null) originalClearTimeout?.(state.timeoutId);
     pending.delete(id);
   };
 
@@ -295,7 +312,8 @@ function installAnimationBudget(windowObject, shouldReduceWork) {
     destroy() {
       pending.forEach((state) => {
         state.cancelled = true;
-        originalCancel(state.nativeId);
+        if (state.nativeId !== null) originalCancel(state.nativeId);
+        if (state.timeoutId !== null) originalClearTimeout?.(state.timeoutId);
       });
       pending.clear();
       if (windowObject.requestAnimationFrame === controlledRequest) windowObject.requestAnimationFrame = originalRequest;
