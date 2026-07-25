@@ -18,6 +18,7 @@ import { ELEMENT_SYMBOLS, HEBREW_LETTERS, formatChapterNumber, getSephiraColor, 
 import { LIBER_333 } from './data/liber333.js';
 import { PROVENANCE_LABELS, PROVENANCE_NOTES, getCorpusConventionSummary, getCorpusRecordCount } from './data/provenance.js';
 import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';
+import { getExperienceSettingsRuntime } from './features/settings/experienceSettings.js';
 import { TREE_NODE_ORDER, TREE_POS, deriveTreePaths, getVeilChapters, groupChaptersBySephira } from './features/tree/treeModel.js';
 
 // ─────────────────────────────────────────────
@@ -453,10 +454,20 @@ const CRTOverlay = () => (
 // ─────────────────────────────────────────────
 const GLYPHS = "\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u2234\u2235\u2295\u2297\u2609\u263D\u2605\u26A1\u2318\u221E\u2299";
 
+
+const useReducedAnimationBudget = () => {
+  const runtime = useMemo(() => getExperienceSettingsRuntime(), []);
+  const isReduced = (snapshot) => snapshot?.effects === 'low' || snapshot?.effectiveMotion === 'reduced';
+  const [reduced, setReduced] = useState(() => isReduced(runtime?.getSnapshot?.()));
+  useEffect(() => runtime?.subscribe?.((snapshot) => setReduced(isReduced(snapshot))), [runtime]);
+  return reduced;
+};
+
 const GlitchText = ({ text, active, speed = 30, className = "" }) => {
   const [display, setDisplay] = useState(text);
+  const reducedAnimation = useReducedAnimationBudget();
   useEffect(() => {
-    if (!active) { setDisplay(text); return; }
+    if (!active || reducedAnimation) { setDisplay(text); return; }
     let iter = 0;
     const iv = setInterval(() => {
       setDisplay(text.split("").map((c, i) => {
@@ -468,17 +479,25 @@ const GlitchText = ({ text, active, speed = 30, className = "" }) => {
       iter += 1 / 3;
     }, speed);
     return () => clearInterval(iv);
-  }, [text, active, speed]);
+  }, [text, active, speed, reducedAnimation]);
   return <span className={className}>{display}</span>;
 };
 
 // ─────────────────────────────────────────────
 //  TYPEWRITER TEXT
 // ─────────────────────────────────────────────
+
 const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
   const [displayed, setDisplayed] = useState("");
   const [done, setDone] = useState(false);
+  const reducedAnimation = useReducedAnimationBudget();
   useEffect(() => {
+    if (reducedAnimation) {
+      setDisplayed(text);
+      setDone(true);
+      queueMicrotask(() => onComplete?.());
+      return undefined;
+    }
     setDisplayed(""); setDone(false);
     let i = 0;
     const iv = setInterval(() => {
@@ -487,7 +506,7 @@ const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
       if (i >= text.length) { clearInterval(iv); setDone(true); onComplete?.(); }
     }, speed);
     return () => clearInterval(iv);
-  }, [text, speed]);
+  }, [text, speed, reducedAnimation]);
   return (
     <span className={className}>
       {displayed}

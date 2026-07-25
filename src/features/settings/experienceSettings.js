@@ -67,17 +67,32 @@ export function scaleCeremonyDuration(duration, settings) {
   return Math.max(120, Math.min(900, Math.round(milliseconds * 0.22)));
 }
 
+
 export function readExperienceSettings(storage) {
   if (!storage?.getItem) return { ...DEFAULT_EXPERIENCE_SETTINGS };
 
-  for (const key of [EXPERIENCE_SETTINGS_KEY, LEGACY_SHELL_PREFERENCES_KEY]) {
+  let currentRaw;
+  try {
+    currentRaw = storage.getItem(EXPERIENCE_SETTINGS_KEY);
+  } catch {
+    return { ...DEFAULT_EXPERIENCE_SETTINGS };
+  }
+
+  if (currentRaw !== null && currentRaw !== undefined) {
     try {
-      const raw = storage.getItem(key);
-      if (!raw) continue;
-      return normalizeExperienceSettings(JSON.parse(raw));
+      return normalizeExperienceSettings(JSON.parse(currentRaw));
     } catch {
-      // Ignore malformed local preferences and recover to safe defaults.
+      return { ...DEFAULT_EXPERIENCE_SETTINGS };
     }
+  }
+
+  try {
+    const legacyRaw = storage.getItem(LEGACY_SHELL_PREFERENCES_KEY);
+    if (legacyRaw !== null && legacyRaw !== undefined) {
+      return normalizeExperienceSettings(JSON.parse(legacyRaw));
+    }
+  } catch {
+    // A missing or malformed legacy preference never weakens safe defaults.
   }
 
   return { ...DEFAULT_EXPERIENCE_SETTINGS };
@@ -139,8 +154,10 @@ function installOverlayAccessibility(documentObject) {
 
   let currentOverlay = null;
   let previousFocus = null;
+  let generatedLabelId = 0;
 
   const findOverlay = () => {
+    if (documentObject.querySelector('.liber-shell-backdrop .liber-shell-dialog')) return null;
     const closeButtons = Array.from(documentObject.querySelectorAll('[aria-label^="Close"]'));
     for (let index = closeButtons.length - 1; index >= 0; index -= 1) {
       const button = closeButtons[index];
@@ -162,6 +179,20 @@ function installOverlayAccessibility(documentObject) {
     if (currentOverlay) {
       currentOverlay.setAttribute('role', currentOverlay.getAttribute('role') || 'dialog');
       currentOverlay.setAttribute('aria-modal', 'true');
+
+if (!currentOverlay.hasAttribute('aria-label') && !currentOverlay.hasAttribute('aria-labelledby')) {
+  const heading = currentOverlay.querySelector('h1, h2, h3, [data-liber-overlay-title]');
+  if (heading) {
+    if (!heading.id) {
+      generatedLabelId += 1;
+      heading.id = `liber-overlay-title-${generatedLabelId}`;
+    }
+    currentOverlay.setAttribute('aria-labelledby', heading.id);
+  } else {
+    const closeLabel = found?.button?.getAttribute?.('aria-label')?.replace(/^Close\s*/i, '').trim();
+    currentOverlay.setAttribute('aria-label', closeLabel || 'Liber 333 dialog');
+  }
+}
       queueMicrotask(() => {
         const items = focusableElements(currentOverlay);
         (items[0] || currentOverlay).focus?.();
@@ -174,6 +205,7 @@ function installOverlayAccessibility(documentObject) {
   syncOverlay();
 
   const onKeyDown = (event) => {
+    if (event.defaultPrevented || documentObject.querySelector('.liber-shell-backdrop .liber-shell-dialog')) return;
     if (!currentOverlay) return;
     if (event.key === 'Escape') {
       const close = currentOverlay.querySelector('[aria-label^="Close"]');
@@ -275,9 +307,40 @@ function installAnimationBudget(windowObject, shouldReduceWork) {
 
 function installSensoryGuards(windowObject, navigatorObject, getSettings) {
   const cleanups = [];
-  const contexts = new Set();
-  const patchSymbol = Symbol.for('liber333.experience.audio.patch');
-  let previousSound = Boolean(getSettings().sound);
+const contexts = new Set();
+const pendingSuspends = new WeakMap();
+const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+let previousSound = Boolean(getSettings().sound);
+
+const resumeWhenSettled = (context) => {
+  const resumeIfNeeded = () => {
+    if (getSettings().sound && context?.state !== 'closed' && context?.state !== 'running') {
+      return context?.resume?.().catch?.(() => {});
+    }
+    return undefined;
+  };
+  const pending = pendingSuspends.get(context);
+  if (pending) pending.finally(resumeIfNeeded);
+  else resumeIfNeeded();
+};
+
+const suspendContext = (context) => {
+  if (!context || context.state === 'closed') return Promise.resolve();
+  const existing = pendingSuspends.get(context);
+  if (existing) return existing;
+  let pending;
+  try {
+    pending = Promise.resolve(context.suspend?.()).catch(() => {});
+  } catch {
+    pending = Promise.resolve();
+  }
+  pendingSuspends.set(context, pending);
+  pending.finally(() => {
+    if (pendingSuspends.get(context) === pending) pendingSuspends.delete(context);
+    if (getSettings().sound) resumeWhenSettled(context);
+  });
+  return pending;
+};
 
   for (const name of ['AudioContext', 'webkitAudioContext']) {
     const Constructor = windowObject?.[name];
@@ -295,7 +358,7 @@ function installSensoryGuards(windowObject, navigatorObject, getSettings) {
       contexts.add(this);
       const node = originalCreateGain.apply(this, args);
       if (!getSettings().sound && this?.state !== 'closed') {
-        queueMicrotask(() => this?.suspend?.().catch?.(() => {}));
+        queueMicrotask(() => suspendContext(this));
       }
       return node;
     };
@@ -353,21 +416,16 @@ function installSensoryGuards(windowObject, navigatorObject, getSettings) {
   }
 
   return {
-    onSettingsChanged(settings) {
-      if (!settings.sound) {
-        contexts.forEach((context) => {
-          if (context?.state !== 'closed') context?.suspend?.().catch?.(() => {});
-        });
-      } else if (!previousSound) {
-        contexts.forEach((context) => {
-          if (context?.state !== 'closed' && context?.state !== 'running') {
-            context?.resume?.().catch?.(() => {});
-          }
-        });
-      }
-      previousSound = Boolean(settings.sound);
-      if (!settings.voice) synth?.cancel?.();
-    },
+
+onSettingsChanged(settings) {
+  if (!settings.sound) {
+    contexts.forEach((context) => suspendContext(context));
+  } else if (!previousSound) {
+    contexts.forEach((context) => resumeWhenSettled(context));
+  }
+  previousSound = Boolean(settings.sound);
+  if (!settings.voice) synth?.cancel?.();
+},
     destroy() {
       cleanups.reverse().forEach((cleanup) => cleanup());
     },

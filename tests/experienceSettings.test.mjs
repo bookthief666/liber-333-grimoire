@@ -86,6 +86,18 @@ test('malformed storage falls back safely and persistence writes normalized data
   assert.equal(written.ceremony, 'full');
 });
 
+
+test('malformed current settings recover to defaults instead of reviving stale legacy preferences', () => {
+  const storage = memoryStorage({
+    [EXPERIENCE_SETTINGS_KEY]: '{bad json',
+    [LEGACY_SHELL_PREFERENCES_KEY]: JSON.stringify({ motion: 'reduced', textScale: '130' }),
+  });
+  const settings = readExperienceSettings(storage);
+  assert.equal(settings.motion, 'full');
+  assert.equal(settings.motionExplicit, false);
+  assert.equal(settings.textSize, 'standard');
+});
+
 test('prefers-reduced-motion is honored until the user makes an explicit choice', () => {
   assert.equal(resolveEffectiveMotion({ motion: 'full', motionExplicit: false }, true), 'reduced');
   assert.equal(resolveEffectiveMotion({ motion: 'full', motionExplicit: true }, true), 'full');
@@ -179,6 +191,37 @@ test('Sound Off suspends known contexts and Sound On resumes eligible contexts',
   assert.equal(context.state, 'running');
   assert.ok(suspends > 0);
   assert.ok(resumes > 0);
+  runtime.destroy();
+});
+
+
+test('Sound Off to On waits for an asynchronous suspension and restores the context', async () => {
+  let releaseSuspend;
+  class DeferredAudioContext {
+    constructor() { this.state = 'running'; }
+    createGain() { return {}; }
+    suspend() {
+      return new Promise((resolve) => {
+        releaseSuspend = () => { this.state = 'suspended'; resolve(); };
+      });
+    }
+    resume() { this.state = 'running'; return Promise.resolve(); }
+  }
+  const runtime = createExperienceSettingsRuntime({
+    windowObject: { AudioContext: DeferredAudioContext, dispatchEvent() {} },
+    documentObject: null,
+    navigatorObject: null,
+    storage: memoryStorage(),
+  });
+  const context = new DeferredAudioContext();
+  context.createGain();
+  runtime.setSettings({ sound: false });
+  runtime.setSettings({ sound: true });
+  releaseSuspend();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(context.state, 'running');
   runtime.destroy();
 });
 
@@ -289,4 +332,16 @@ test('reduced ceremony scales every ritual act threshold while preserving the fu
   assert.match(source, /reveal: 6500 \* ceremonyScale/);
   assert.doesNotMatch(source, /if \(elapsed < 2500\) setRitualAct/);
   assert.doesNotMatch(source, /else if \(elapsed < 6500\) setRitualAct/);
+});
+
+
+test('reduced animation and layered dialog contracts are present in source', async () => {
+  const reader = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
+  const runtime = await readFile(new URL('../src/features/settings/experienceSettings.js', import.meta.url), 'utf8');
+  assert.match(reader, /useReducedAnimationBudget/);
+  assert.match(reader, /if \(!active \|\| reducedAnimation\)/);
+  assert.match(reader, /if \(reducedAnimation\) \{/);
+  assert.match(runtime, /\.liber-shell-backdrop \.liber-shell-dialog/);
+  assert.match(runtime, /aria-labelledby/);
+  assert.match(runtime, /resumeWhenSettled/);
 });
