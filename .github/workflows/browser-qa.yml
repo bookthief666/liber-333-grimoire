@@ -13,7 +13,7 @@ on:
       expected_feature_sha:
         description: Approved PR #38 feature SHA.
         required: true
-        default: 03bd30097617e1463777d99a6dba3181f00fe2ad
+        default: e8daae0ee445a2ef3f0a1e96a8f506fdaeacdd23
         type: string
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      APPROVED_FEATURE_SHA: 03bd30097617e1463777d99a6dba3181f00fe2ad
+      APPROVED_FEATURE_SHA: e8daae0ee445a2ef3f0a1e96a8f506fdaeacdd23
       PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_url || '' }}
 
     steps:
