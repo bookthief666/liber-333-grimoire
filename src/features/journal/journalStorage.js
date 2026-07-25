@@ -1,3 +1,5 @@
+import { migrateJournalEntries, migrateJournalEntry } from './journalSchema.js';
+
 export const JOURNAL_STORAGE_KEY = 'liber333_journal';
 export const TOTAL_READINGS_STORAGE_KEY = 'liber333_total';
 export const MAX_JOURNAL_ENTRIES = 50;
@@ -11,7 +13,7 @@ export function readJournalState(storage) {
     const raw = storage?.getItem(JOURNAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      entries = Array.isArray(parsed) ? parsed : [];
+      entries = migrateJournalEntries(Array.isArray(parsed) ? parsed : []);
     }
   } catch {
     entries = [];
@@ -28,7 +30,8 @@ export function readJournalState(storage) {
 }
 
 export function prependJournalEntry(entries, entry) {
-  return [entry, ...entries].slice(0, MAX_JOURNAL_ENTRIES);
+  const migrated = migrateJournalEntry(entry);
+  return migrated ? [migrated, ...migrateJournalEntries(entries)].slice(0, MAX_JOURNAL_ENTRIES) : migrateJournalEntries(entries);
 }
 
 export function removeJournalEntry(entries, id) {
@@ -49,7 +52,7 @@ export function getMilestoneForTotal(totalReadings) {
 
 export function writeJournalEntries(storage, entries) {
   try {
-    storage?.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(entries));
+    storage?.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(migrateJournalEntries(entries)));
   } catch {
     // Browser storage is best-effort; preserve the current in-memory session.
   }
