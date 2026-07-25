@@ -1,0 +1,411 @@
+name: Apply Final Settings Fixes
+
+on:
+  pull_request:
+    branches:
+      - feature/settings-accessibility-performance
+    paths:
+      - .github/workflows/apply-final-settings-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/settings-accessibility-performance
+          fetch-depth: 0
+
+      - name: Verify approved starting head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "e0bc328aeeed26b1e8c3cdb9074bc59251fe65cc"
+
+      - name: Apply final blocker fixes and tests
+        shell: python
+        run: |
+          from pathlib import Path
+
+          settings_path = Path('src/features/settings/experienceSettings.js')
+          settings = settings_path.read_text()
+
+          old_read = """export function readExperienceSettings(storage) {
+            if (!storage?.getItem) return { ...DEFAULT_EXPERIENCE_SETTINGS };
+
+            for (const key of [EXPERIENCE_SETTINGS_KEY, LEGACY_SHELL_PREFERENCES_KEY]) {
+              try {
+                const raw = storage.getItem(key);
+                if (!raw) continue;
+                return normalizeExperienceSettings(JSON.parse(raw));
+              } catch {
+                // Ignore malformed local preferences and recover to safe defaults.
+              }
+            }
+
+            return { ...DEFAULT_EXPERIENCE_SETTINGS };
+          }
+          """
+          new_read = """export function readExperienceSettings(storage) {
+            if (!storage?.getItem) return { ...DEFAULT_EXPERIENCE_SETTINGS };
+
+            let currentRaw;
+            try {
+              currentRaw = storage.getItem(EXPERIENCE_SETTINGS_KEY);
+            } catch {
+              return { ...DEFAULT_EXPERIENCE_SETTINGS };
+            }
+
+            if (currentRaw !== null && currentRaw !== undefined) {
+              try {
+                return normalizeExperienceSettings(JSON.parse(currentRaw));
+              } catch {
+                return { ...DEFAULT_EXPERIENCE_SETTINGS };
+              }
+            }
+
+            try {
+              const legacyRaw = storage.getItem(LEGACY_SHELL_PREFERENCES_KEY);
+              if (legacyRaw !== null && legacyRaw !== undefined) {
+                return normalizeExperienceSettings(JSON.parse(legacyRaw));
+              }
+            } catch {
+              // A missing or malformed legacy preference never weakens safe defaults.
+            }
+
+            return { ...DEFAULT_EXPERIENCE_SETTINGS };
+          }
+          """
+          if old_read not in settings:
+            raise SystemExit('readExperienceSettings block not found')
+          settings = settings.replace(old_read, new_read, 1)
+
+          old_overlay_start = """  let currentOverlay = null;
+            let previousFocus = null;
+
+            const findOverlay = () => {
+              const closeButtons = Array.from(documentObject.querySelectorAll('[aria-label^=\"Close\"]'));
+          """
+          new_overlay_start = """  let currentOverlay = null;
+            let previousFocus = null;
+            let generatedLabelId = 0;
+
+            const findOverlay = () => {
+              if (documentObject.querySelector('.liber-shell-backdrop .liber-shell-dialog')) return null;
+              const closeButtons = Array.from(documentObject.querySelectorAll('[aria-label^=\"Close\"]'));
+          """
+          if old_overlay_start not in settings:
+            raise SystemExit('overlay start block not found')
+          settings = settings.replace(old_overlay_start, new_overlay_start, 1)
+
+          old_overlay_attrs = """    if (currentOverlay) {
+              currentOverlay.setAttribute('role', currentOverlay.getAttribute('role') || 'dialog');
+              currentOverlay.setAttribute('aria-modal', 'true');
+              queueMicrotask(() => {
+          """
+          new_overlay_attrs = """    if (currentOverlay) {
+              currentOverlay.setAttribute('role', currentOverlay.getAttribute('role') || 'dialog');
+              currentOverlay.setAttribute('aria-modal', 'true');
+              if (!currentOverlay.hasAttribute('aria-label') && !currentOverlay.hasAttribute('aria-labelledby')) {
+                const heading = currentOverlay.querySelector('h1, h2, h3, [data-liber-overlay-title]');
+                if (heading) {
+                  if (!heading.id) {
+                    generatedLabelId += 1;
+                    heading.id = `liber-overlay-title-${generatedLabelId}`;
+                  }
+                  currentOverlay.setAttribute('aria-labelledby', heading.id);
+                } else {
+                  const closeLabel = found?.button?.getAttribute?.('aria-label')?.replace(/^Close\\s*/i, '').trim();
+                  currentOverlay.setAttribute('aria-label', closeLabel || 'Liber 333 dialog');
+                }
+              }
+              queueMicrotask(() => {
+          """
+          if old_overlay_attrs not in settings:
+            raise SystemExit('overlay attribute block not found')
+          settings = settings.replace(old_overlay_attrs, new_overlay_attrs, 1)
+
+          old_sensory_header = """  const contexts = new Set();
+            const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+            let previousSound = Boolean(getSettings().sound);
+
+            for (const name of ['AudioContext', 'webkitAudioContext']) {
+          """
+          new_sensory_header = """  const contexts = new Set();
+            const pendingSuspends = new WeakMap();
+            const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+            let previousSound = Boolean(getSettings().sound);
+
+            const resumeWhenSettled = (context) => {
+              const resumeIfNeeded = () => {
+                if (getSettings().sound && context?.state !== 'closed' && context?.state !== 'running') {
+                  return context?.resume?.().catch?.(() => {});
+                }
+                return undefined;
+              };
+              const pending = pendingSuspends.get(context);
+              if (pending) pending.finally(resumeIfNeeded);
+              else resumeIfNeeded();
+            };
+
+            const suspendContext = (context) => {
+              if (!context || context.state === 'closed') return Promise.resolve();
+              const existing = pendingSuspends.get(context);
+              if (existing) return existing;
+              let pending;
+              try {
+                pending = Promise.resolve(context.suspend?.()).catch(() => {});
+              } catch {
+                pending = Promise.resolve();
+              }
+              pendingSuspends.set(context, pending);
+              pending.finally(() => {
+                if (pendingSuspends.get(context) === pending) pendingSuspends.delete(context);
+                if (getSettings().sound) resumeWhenSettled(context);
+              });
+              return pending;
+            };
+
+            for (const name of ['AudioContext', 'webkitAudioContext']) {
+          """
+          if old_sensory_header not in settings:
+            raise SystemExit('sensory header block not found')
+          settings = settings.replace(old_sensory_header, new_sensory_header, 1)
+
+          old_create_gain = """      if (!getSettings().sound && this?.state !== 'closed') {
+                queueMicrotask(() => this?.suspend?.().catch?.(() => {}));
+              }
+          """
+          new_create_gain = """      if (!getSettings().sound && this?.state !== 'closed') {
+                queueMicrotask(() => suspendContext(this));
+              }
+          """
+          if old_create_gain not in settings:
+            raise SystemExit('createGain suspension block not found')
+          settings = settings.replace(old_create_gain, new_create_gain, 1)
+
+          old_changed = """    onSettingsChanged(settings) {
+              if (!settings.sound) {
+                contexts.forEach((context) => {
+                  if (context?.state !== 'closed') context?.suspend?.().catch?.(() => {});
+                });
+              } else if (!previousSound) {
+                contexts.forEach((context) => {
+                  if (context?.state !== 'closed' && context?.state !== 'running') {
+                    context?.resume?.().catch?.(() => {});
+                  }
+                });
+              }
+              previousSound = Boolean(settings.sound);
+          """
+          new_changed = """    onSettingsChanged(settings) {
+              if (!settings.sound) {
+                contexts.forEach((context) => suspendContext(context));
+              } else if (!previousSound) {
+                contexts.forEach((context) => resumeWhenSettled(context));
+              }
+              previousSound = Boolean(settings.sound);
+          """
+          if old_changed not in settings:
+            raise SystemExit('onSettingsChanged audio block not found')
+          settings = settings.replace(old_changed, new_changed, 1)
+          settings_path.write_text(settings)
+
+          reader_path = Path('src/liber333.jsx')
+          reader = reader_path.read_text()
+          old_import = "import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';"
+          new_import = old_import + "\nimport { getExperienceSettingsRuntime } from './features/settings/experienceSettings.js';"
+          if old_import not in reader or new_import in reader:
+            raise SystemExit('reader settings import precondition failed')
+          reader = reader.replace(old_import, new_import, 1)
+
+          old_glitch = '''const GlitchText = ({ text, active, speed = 30, className = "" }) => {
+            const [display, setDisplay] = useState(text);
+            useEffect(() => {
+              if (!active) { setDisplay(text); return; }
+              let iter = 0;
+              const iv = setInterval(() => {
+                setDisplay(text.split("").map((c, i) => {
+                  if (c === ' ') return ' ';
+                  if (i < iter) return text[i];
+                  return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+                }).join(""));
+                if (iter >= text.length) clearInterval(iv);
+                iter += 1 / 3;
+              }, speed);
+              return () => clearInterval(iv);
+            }, [text, active, speed]);
+            return <span className={className}>{display}</span>;
+          };
+          '''
+          new_glitch = '''const useReducedAnimationBudget = () => {
+            const runtime = useMemo(() => getExperienceSettingsRuntime(), []);
+            const isReduced = (snapshot) => snapshot?.effects === 'low' || snapshot?.effectiveMotion === 'reduced';
+            const [reduced, setReduced] = useState(() => isReduced(runtime?.getSnapshot?.()));
+            useEffect(() => runtime?.subscribe?.((snapshot) => setReduced(isReduced(snapshot))), [runtime]);
+            return reduced;
+          };
+
+          const GlitchText = ({ text, active, speed = 30, className = "" }) => {
+            const [display, setDisplay] = useState(text);
+            const reducedAnimation = useReducedAnimationBudget();
+            useEffect(() => {
+              if (!active || reducedAnimation) { setDisplay(text); return; }
+              let iter = 0;
+              const iv = setInterval(() => {
+                setDisplay(text.split("").map((c, i) => {
+                  if (c === ' ') return ' ';
+                  if (i < iter) return text[i];
+                  return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+                }).join(""));
+                if (iter >= text.length) clearInterval(iv);
+                iter += 1 / 3;
+              }, speed);
+              return () => clearInterval(iv);
+            }, [text, active, speed, reducedAnimation]);
+            return <span className={className}>{display}</span>;
+          };
+          '''
+          if old_glitch not in reader:
+            raise SystemExit('GlitchText block not found')
+          reader = reader.replace(old_glitch, new_glitch, 1)
+
+          old_typewriter = '''const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
+            const [displayed, setDisplayed] = useState("");
+            const [done, setDone] = useState(false);
+            useEffect(() => {
+              setDisplayed(""); setDone(false);
+              let i = 0;
+              const iv = setInterval(() => {
+                i++;
+                setDisplayed(text.slice(0, i));
+                if (i >= text.length) { clearInterval(iv); setDone(true); onComplete?.(); }
+              }, speed);
+              return () => clearInterval(iv);
+            }, [text, speed]);
+            return (
+              <span className={className}>
+                {displayed}
+                {!done && <span className="animate-pulse" style={{ opacity: 0.7 }}>▌</span>}
+              </span>
+            );
+          };
+          '''
+          new_typewriter = '''const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
+            const [displayed, setDisplayed] = useState("");
+            const [done, setDone] = useState(false);
+            const reducedAnimation = useReducedAnimationBudget();
+            useEffect(() => {
+              if (reducedAnimation) {
+                setDisplayed(text);
+                setDone(true);
+                queueMicrotask(() => onComplete?.());
+                return undefined;
+              }
+              setDisplayed(""); setDone(false);
+              let i = 0;
+              const iv = setInterval(() => {
+                i++;
+                setDisplayed(text.slice(0, i));
+                if (i >= text.length) { clearInterval(iv); setDone(true); onComplete?.(); }
+              }, speed);
+              return () => clearInterval(iv);
+            }, [text, speed, reducedAnimation]);
+            return (
+              <span className={className}>
+                {displayed}
+                {!done && <span className="animate-pulse" style={{ opacity: 0.7 }}>▌</span>}
+              </span>
+            );
+          };
+          '''
+          if old_typewriter not in reader:
+            raise SystemExit('TypewriterText block not found')
+          reader = reader.replace(old_typewriter, new_typewriter, 1)
+          reader_path.write_text(reader)
+
+          test_path = Path('tests/experienceSettings.test.mjs')
+          tests = test_path.read_text()
+          marker = "test('prefers-reduced-motion is honored until the user makes an explicit choice', () => {"
+          additions = '''test('malformed current settings recover to defaults instead of reviving stale legacy preferences', () => {
+            const storage = memoryStorage({
+              [EXPERIENCE_SETTINGS_KEY]: '{bad json',
+              [LEGACY_SHELL_PREFERENCES_KEY]: JSON.stringify({ motion: 'reduced', textScale: '130' }),
+            });
+            const settings = readExperienceSettings(storage);
+            assert.equal(settings.motion, 'full');
+            assert.equal(settings.motionExplicit, false);
+            assert.equal(settings.textSize, 'standard');
+          });
+
+          '''
+          if marker not in tests:
+            raise SystemExit('test insertion marker not found')
+          tests = tests.replace(marker, additions + marker, 1)
+
+          race_marker = "test('blocked speech schedules an utterance error so speaking state can settle', async () => {"
+          race_test = '''test('Sound Off to On waits for an asynchronous suspension and restores the context', async () => {
+            let releaseSuspend;
+            class DeferredAudioContext {
+              constructor() { this.state = 'running'; }
+              createGain() { return {}; }
+              suspend() {
+                return new Promise((resolve) => {
+                  releaseSuspend = () => { this.state = 'suspended'; resolve(); };
+                });
+              }
+              resume() { this.state = 'running'; return Promise.resolve(); }
+            }
+            const runtime = createExperienceSettingsRuntime({
+              windowObject: { AudioContext: DeferredAudioContext, dispatchEvent() {} },
+              documentObject: null,
+              navigatorObject: null,
+              storage: memoryStorage(),
+            });
+            const context = new DeferredAudioContext();
+            context.createGain();
+            runtime.setSettings({ sound: false });
+            runtime.setSettings({ sound: true });
+            releaseSuspend();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            assert.equal(context.state, 'running');
+            runtime.destroy();
+          });
+
+          '''
+          if race_marker not in tests:
+            raise SystemExit('audio race test marker not found')
+          tests = tests.replace(race_marker, race_test + race_marker, 1)
+
+          tests += '''
+          test('reduced animation and layered dialog contracts are present in source', async () => {
+            const reader = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
+            const runtime = await readFile(new URL('../src/features/settings/experienceSettings.js', import.meta.url), 'utf8');
+            assert.match(reader, /useReducedAnimationBudget/);
+            assert.match(reader, /if \(!active \|\| reducedAnimation\)/);
+            assert.match(reader, /if \(reducedAnimation\) \{/);
+            assert.match(runtime, /\.liber-shell-backdrop \.liber-shell-dialog/);
+            assert.match(runtime, /aria-labelledby/);
+            assert.match(runtime, /resumeWhenSettled/);
+          });
+          '''
+          test_path.write_text(tests)
+
+      - name: Run complete release gate
+        run: npm ci && npm run check
+
+      - name: Commit and push exact repair
+        run: |
+          set -euo pipefail
+          git config user.name "bookthief666"
+          git config user.email "208150485+bookthief666@users.noreply.github.com"
+          git add src/features/settings/experienceSettings.js src/liber333.jsx tests/experienceSettings.test.mjs
+          git diff --cached --check
+          git commit -m "Close final settings accessibility edge cases"
+          git push origin HEAD:feature/settings-accessibility-performance
