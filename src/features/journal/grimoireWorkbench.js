@@ -1,4 +1,10 @@
-export const GRIMOIRE_NOTE_LIMIT = 12_000;
+import {
+  JOURNAL_NOTE_LIMIT,
+  normalizeJournalNote,
+  patchJournalEntryMetadata,
+} from './journalSchema.js';
+
+export const GRIMOIRE_NOTE_LIMIT = JOURNAL_NOTE_LIMIT;
 
 export const DEFAULT_GRIMOIRE_FILTERS = Object.freeze({
   query: '',
@@ -51,13 +57,7 @@ export function normalizeSpreadType(value) {
 }
 
 export function normalizeGrimoireNote(value) {
-  if (value === undefined || value === null) return '';
-  if (typeof value !== 'string') throw new TypeError('Integration note must be text.');
-  const normalized = value.replace(/\r\n?/g, '\n');
-  if (normalized.length > GRIMOIRE_NOTE_LIMIT) {
-    throw new RangeError(`Integration note exceeds ${GRIMOIRE_NOTE_LIMIT.toLocaleString('en-US')} characters.`);
-  }
-  return normalized;
+  return normalizeJournalNote(value, { strict: true });
 }
 
 export function normalizeGrimoireFilters(filters = {}) {
@@ -194,10 +194,7 @@ export function updateGrimoireEntryMetadata(entries, id, patch = {}) {
   const updated = entries.map((entry) => {
     if (entry?.id !== id) return entry;
     found = true;
-    const next = { ...entry };
-    if (Object.prototype.hasOwnProperty.call(patch, 'favorite')) next.favorite = patch.favorite === true;
-    if (Object.prototype.hasOwnProperty.call(patch, 'note')) next.note = normalizeGrimoireNote(patch.note);
-    return next;
+    return patchJournalEntryMetadata(entry, patch) || entry;
   });
 
   return found ? updated : [...entries];
