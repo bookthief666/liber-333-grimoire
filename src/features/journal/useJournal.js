@@ -6,6 +6,11 @@ import {
   serializeJournalBackup,
 } from './journalBackup.js';
 import {
+  getGrimoireMarkdownFilename,
+  serializeGrimoireMarkdown,
+} from './journalMarkdown.js';
+import { updateGrimoireEntryMetadata } from './grimoireWorkbench.js';
+import {
   clearStoredJournalEntries,
   getJournalRecurrenceCount,
   getMilestoneForTotal,
@@ -17,6 +22,14 @@ import {
   writeTotalReadings,
 } from './journalStorage.js';
 
+function getLocalStorage() {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useJournal() {
   const [entries, setEntries] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -24,7 +37,7 @@ export function useJournal() {
   const [milestone, setMilestone] = useState(null);
 
   const load = useCallback(async () => {
-    const state = readJournalState(localStorage);
+    const state = readJournalState(getLocalStorage());
     setEntries(state.entries);
     setTotalReadings(state.totalReadings);
     setLoaded(true);
@@ -33,7 +46,7 @@ export function useJournal() {
   useEffect(() => { load(); }, [load]);
 
   const save = useCallback(async (newEntries) => {
-    writeJournalEntries(localStorage, newEntries);
+    writeJournalEntries(getLocalStorage(), newEntries);
   }, []);
 
   const addEntry = useCallback(async (entry) => {
@@ -43,7 +56,7 @@ export function useJournal() {
 
     const newTotal = totalReadings + 1;
     setTotalReadings(newTotal);
-    writeTotalReadings(localStorage, newTotal);
+    writeTotalReadings(getLocalStorage(), newTotal);
 
     const nextMilestone = getMilestoneForTotal(newTotal);
     if (nextMilestone) setMilestone(nextMilestone);
@@ -55,9 +68,26 @@ export function useJournal() {
     await save(newEntries);
   }, [entries, save]);
 
+  const updateEntryMetadata = useCallback(async (id, patch) => {
+    const newEntries = updateGrimoireEntryMetadata(entries, id, patch);
+    setEntries(newEntries);
+    await save(newEntries);
+    return newEntries.find((entry) => entry.id === id) || null;
+  }, [entries, save]);
+
+  const setFavorite = useCallback(
+    (id, favorite) => updateEntryMetadata(id, { favorite }),
+    [updateEntryMetadata],
+  );
+
+  const saveNote = useCallback(
+    (id, note) => updateEntryMetadata(id, { note }),
+    [updateEntryMetadata],
+  );
+
   const clearAll = useCallback(async () => {
     setEntries([]);
-    clearStoredJournalEntries(localStorage);
+    clearStoredJournalEntries(getLocalStorage());
   }, []);
 
   const exportBackup = useCallback(() => {
@@ -67,6 +97,23 @@ export function useJournal() {
       content: serializeJournalBackup({ entries, totalReadings, exportedAt }),
       entryCount: entries.length,
       totalReadings,
+    };
+  }, [entries, totalReadings]);
+
+  const exportMarkdown = useCallback(({ selectedEntries = entries, filterDescription = null } = {}) => {
+    const exportedAt = new Date();
+    const filtered = selectedEntries !== entries || Boolean(filterDescription);
+    return {
+      filename: getGrimoireMarkdownFilename(exportedAt, { filtered }),
+      content: serializeGrimoireMarkdown({
+        entries: selectedEntries,
+        totalReadings,
+        exportedAt,
+        filterDescription,
+      }),
+      entryCount: Array.isArray(selectedEntries) ? selectedEntries.length : 0,
+      totalReadings,
+      filtered,
     };
   }, [entries, totalReadings]);
 
@@ -80,13 +127,14 @@ export function useJournal() {
 
     setEntries(result.entries);
     setTotalReadings(result.totalReadings);
-    writeJournalEntries(localStorage, result.entries);
-    writeTotalReadings(localStorage, result.totalReadings);
+    writeJournalEntries(getLocalStorage(), result.entries);
+    writeTotalReadings(getLocalStorage(), result.totalReadings);
 
     return {
       ...result,
       backupExportedAt: backup.exportedAt,
       backupEntryCount: backup.entries.length,
+      backupSourceVersion: backup.sourceVersion,
     };
   }, [entries, totalReadings]);
 
@@ -110,8 +158,12 @@ export function useJournal() {
     dismissMilestone,
     addEntry,
     removeEntry,
+    updateEntryMetadata,
+    setFavorite,
+    saveNote,
     clearAll,
     exportBackup,
+    exportMarkdown,
     importBackup,
     getRecurrenceCount,
     getRecentReadings,
