@@ -1,8 +1,15 @@
 import { LIBER_333 } from '../../data/liber333.js';
 import { MAX_JOURNAL_ENTRIES } from './journalStorage.js';
+import {
+  JOURNAL_ENTRY_SCHEMA_VERSION,
+  JOURNAL_NOTE_LIMIT,
+  migrateJournalEntries,
+  normalizeJournalNote,
+} from './journalSchema.js';
 
 export const JOURNAL_BACKUP_FORMAT = 'liber-333-grimoire-backup';
-export const JOURNAL_BACKUP_VERSION = 1;
+export const JOURNAL_BACKUP_VERSION = 2;
+export const SUPPORTED_JOURNAL_BACKUP_VERSIONS = Object.freeze([1, JOURNAL_BACKUP_VERSION]);
 
 export const JOURNAL_BACKUP_LIMITS = Object.freeze({
   fileBytes: 2 * 1024 * 1024,
@@ -10,6 +17,7 @@ export const JOURNAL_BACKUP_LIMITS = Object.freeze({
   idChars: 128,
   questionChars: 4000,
   interpretationChars: 50000,
+  noteChars: JOURNAL_NOTE_LIMIT,
   labelChars: 100,
   totalReadings: 10_000_000,
 });
@@ -30,7 +38,7 @@ function requireString(value, label, maxChars, { allowEmpty = false } = {}) {
   if (typeof value !== 'string') throw new JournalBackupError(`${label} must be text.`);
   const normalized = value.trim();
   if (!allowEmpty && !normalized) throw new JournalBackupError(`${label} cannot be empty.`);
-  if (normalized.length > maxChars) throw new JournalBackupError(`${label} exceeds ${maxChars.toLocaleString()} characters.`);
+  if (normalized.length > maxChars) throw new JournalBackupError(`${label} exceeds ${maxChars.toLocaleString('en-US')} characters.`);
   return normalized;
 }
 
@@ -52,6 +60,20 @@ function normalizeGematria(value) {
   return Math.max(0, Math.min(number, Number.MAX_SAFE_INTEGER));
 }
 
+function normalizeFavorite(value) {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== 'boolean') throw new JournalBackupError('Entry favorite state must be true or false.');
+  return value;
+}
+
+function normalizeNote(value) {
+  try {
+    return normalizeJournalNote(value, { strict: true });
+  } catch (error) {
+    throw new JournalBackupError(error instanceof Error ? error.message : 'Entry integration note is invalid.');
+  }
+}
+
 export function normalizeJournalEntry(entry) {
   if (!isPlainObject(entry)) throw new JournalBackupError('Each journal entry must be an object.');
 
@@ -64,7 +86,7 @@ export function normalizeJournalEntry(entry) {
   }
   const chapter = CHAPTER_BY_NUMBER.get(entry.chapter);
 
-  const normalized = {
+  return {
     id,
     date,
     question,
@@ -75,9 +97,10 @@ export function normalizeJournalEntry(entry) {
     spreadType: optionalString(entry.spreadType, 'Spread label', JOURNAL_BACKUP_LIMITS.labelChars) || 'single',
     planetary: optionalString(entry.planetary, 'Planetary label', JOURNAL_BACKUP_LIMITS.labelChars),
     lunar: optionalString(entry.lunar, 'Lunar label', JOURNAL_BACKUP_LIMITS.labelChars),
+    schemaVersion: JOURNAL_ENTRY_SCHEMA_VERSION,
+    favorite: normalizeFavorite(entry.favorite),
+    note: normalizeNote(entry.note ?? entry.integrationNote),
   };
-
-  return normalized;
 }
 
 function normalizeEntries(entries) {
@@ -97,7 +120,7 @@ function normalizeEntries(entries) {
 
 function normalizeTotalReadings(value, entryCount) {
   if (!Number.isInteger(value) || value < 0 || value > JOURNAL_BACKUP_LIMITS.totalReadings) {
-    throw new JournalBackupError(`Lifetime reading total must be an integer from 0 to ${JOURNAL_BACKUP_LIMITS.totalReadings.toLocaleString()}.`);
+    throw new JournalBackupError(`Lifetime reading total must be an integer from 0 to ${JOURNAL_BACKUP_LIMITS.totalReadings.toLocaleString('en-US')}.`);
   }
   return Math.max(value, entryCount);
 }
@@ -149,14 +172,18 @@ export function parseJournalBackup(input) {
 
   if (!isPlainObject(parsed)) throw new JournalBackupError('Backup root must be an object.');
   if (parsed.format !== JOURNAL_BACKUP_FORMAT) throw new JournalBackupError('This is not a Liber 333 Grimoire backup.');
-  if (parsed.version !== JOURNAL_BACKUP_VERSION) {
-    throw new JournalBackupError(`Unsupported backup version. Expected version ${JOURNAL_BACKUP_VERSION}.`, 'unsupported_journal_backup_version');
+  if (!SUPPORTED_JOURNAL_BACKUP_VERSIONS.includes(parsed.version)) {
+    throw new JournalBackupError(
+      `Unsupported backup version. Expected version 1 or ${JOURNAL_BACKUP_VERSION}.`,
+      'unsupported_journal_backup_version',
+    );
   }
 
   const entries = normalizeEntries(parsed.entries);
   return {
     format: JOURNAL_BACKUP_FORMAT,
     version: JOURNAL_BACKUP_VERSION,
+    sourceVersion: parsed.version,
     exportedAt: normalizeExportedAt(parsed.exportedAt),
     totalReadings: normalizeTotalReadings(parsed.totalReadings, entries.length),
     entries,
@@ -174,9 +201,10 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     throw new JournalBackupError('Import requires a validated Liber 333 backup.');
   }
 
-  const existingIds = new Set(currentEntries.map((entry) => entry?.id).filter((id) => typeof id === 'string'));
+  const migratedCurrent = migrateJournalEntries(currentEntries);
+  const existingIds = new Set(migratedCurrent.map((entry) => entry?.id).filter((id) => typeof id === 'string'));
   const importedEntries = backup.entries.filter((entry) => !existingIds.has(entry.id));
-  const mergedEntries = [...currentEntries, ...importedEntries]
+  const mergedEntries = [...migratedCurrent, ...importedEntries]
     .sort((left, right) => timestamp(right) - timestamp(left))
     .slice(0, MAX_JOURNAL_ENTRIES);
 
@@ -191,6 +219,6 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     totalReadings,
     importedCount: importedEntries.length,
     duplicateCount: backup.entries.length - importedEntries.length,
-    omittedByCap: Math.max(0, currentEntries.length + importedEntries.length - mergedEntries.length),
+    omittedByCap: Math.max(0, migratedCurrent.length + importedEntries.length - mergedEntries.length),
   };
 }
