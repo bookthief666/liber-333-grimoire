@@ -1,0 +1,195 @@
+name: Apply Reduced Animation Delay Fix
+
+on:
+  pull_request:
+    branches:
+      - feature/settings-accessibility-performance
+    paths:
+      - .github/workflows/apply-animation-delay-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/settings-accessibility-performance
+          fetch-depth: 0
+
+      - name: Verify approved starting head
+        run: test "$(git rev-parse HEAD)" = "03bd30097617e1463777d99a6dba3181f00fe2ad"
+
+      - name: Replace busy frame polling with timer-delayed scheduling
+        shell: python
+        run: |
+          from pathlib import Path
+          from textwrap import dedent
+
+          path = Path('src/features/settings/experienceSettings.js')
+          text = path.read_text()
+          start = text.index('function installAnimationBudget(windowObject, shouldReduceWork) {')
+          end = text.index('function installSensoryGuards(windowObject, navigatorObject, getSettings) {', start)
+          replacement = dedent('''
+            function installAnimationBudget(windowObject, shouldReduceWork) {
+              const originalRequest = windowObject?.requestAnimationFrame?.bind(windowObject);
+              const originalCancel = windowObject?.cancelAnimationFrame?.bind(windowObject);
+              const originalSetTimeout = windowObject?.setTimeout?.bind(windowObject) || globalThis.setTimeout?.bind(globalThis);
+              const originalClearTimeout = windowObject?.clearTimeout?.bind(windowObject) || globalThis.clearTimeout?.bind(globalThis);
+              if (!originalRequest || !originalCancel) return { destroy() {} };
+
+              const patchSymbol = Symbol.for('liber333.experience.animation.patch');
+              if (windowObject[patchSymbol]) return { destroy() {} };
+
+              const pending = new Map();
+              const lastRunByCallback = new WeakMap();
+              let nextId = 1;
+
+              const controlledRequest = (callback) => {
+                if (typeof callback !== 'function') return originalRequest(callback);
+                const publicId = nextId;
+                nextId += 1;
+                const state = { nativeId: null, timeoutId: null, cancelled: false };
+
+                const schedule = (delay = 0) => {
+                  if (state.cancelled) return;
+                  if (delay > 0 && originalSetTimeout) {
+                    state.timeoutId = originalSetTimeout(() => {
+                      state.timeoutId = null;
+                      if (!state.cancelled) state.nativeId = originalRequest(run);
+                    }, delay);
+                    return;
+                  }
+                  state.nativeId = originalRequest(run);
+                };
+
+                const run = (timestamp) => {
+                  if (state.cancelled) return;
+                  const lastRun = lastRunByCallback.get(callback) || 0;
+                  const elapsed = timestamp - lastRun;
+                  if (shouldReduceWork() && elapsed < REDUCED_ANIMATION_FRAME_INTERVAL) {
+                    schedule(REDUCED_ANIMATION_FRAME_INTERVAL - elapsed);
+                    return;
+                  }
+                  pending.delete(publicId);
+                  lastRunByCallback.set(callback, timestamp);
+                  callback(timestamp);
+                };
+
+                schedule();
+                pending.set(publicId, state);
+                return publicId;
+              };
+
+              const controlledCancel = (id) => {
+                const state = pending.get(id);
+                if (!state) {
+                  originalCancel(id);
+                  return;
+                }
+                state.cancelled = true;
+                if (state.nativeId !== null) originalCancel(state.nativeId);
+                if (state.timeoutId !== null) originalClearTimeout?.(state.timeoutId);
+                pending.delete(id);
+              };
+
+              try {
+                windowObject.requestAnimationFrame = controlledRequest;
+                windowObject.cancelAnimationFrame = controlledCancel;
+                windowObject[patchSymbol] = true;
+              } catch {
+                return { destroy() {} };
+              }
+
+              return {
+                destroy() {
+                  pending.forEach((state) => {
+                    state.cancelled = true;
+                    if (state.nativeId !== null) originalCancel(state.nativeId);
+                    if (state.timeoutId !== null) originalClearTimeout?.(state.timeoutId);
+                  });
+                  pending.clear();
+                  if (windowObject.requestAnimationFrame === controlledRequest) windowObject.requestAnimationFrame = originalRequest;
+                  if (windowObject.cancelAnimationFrame === controlledCancel) windowObject.cancelAnimationFrame = originalCancel;
+                  try { delete windowObject[patchSymbol]; } catch { /* non-critical */ }
+                },
+              };
+            }
+
+          ''')
+          path.write_text(text[:start] + replacement + text[end:])
+
+          test_path = Path('tests/experienceSettings.test.mjs')
+          tests = test_path.read_text()
+          test_start = tests.index("test('reduced animation budget throttles repeated requestAnimationFrame callbacks', () => {")
+          test_end = tests.index("test('settings UI preserves accessible labels and visible active state contracts'", test_start)
+          test_replacement = dedent('''
+            test('reduced animation budget delays wrapper work between animation frames', () => {
+              let nextNativeId = 1;
+              let nextTimerId = 1;
+              const callbacks = new Map();
+              const timers = new Map();
+              const windowObject = {
+                requestAnimationFrame(callback) {
+                  const id = nextNativeId;
+                  nextNativeId += 1;
+                  callbacks.set(id, callback);
+                  return id;
+                },
+                cancelAnimationFrame(id) { callbacks.delete(id); },
+                setTimeout(callback, delay) {
+                  const id = nextTimerId;
+                  nextTimerId += 1;
+                  timers.set(id, { callback, delay });
+                  return id;
+                },
+                clearTimeout(id) { timers.delete(id); },
+                dispatchEvent() {},
+              };
+              const runtime = createExperienceSettingsRuntime({
+                windowObject,
+                documentObject: null,
+                navigatorObject: null,
+                storage: memoryStorage(),
+              });
+              runtime.setSettings({ effects: 'low' });
+
+              let calls = 0;
+              const callback = () => { calls += 1; };
+              windowObject.requestAnimationFrame(callback);
+              const first = callbacks.values().next().value;
+              callbacks.clear();
+              first(10);
+              assert.equal(calls, 0);
+              assert.equal(callbacks.size, 0);
+              assert.equal(timers.size, 1);
+              const timer = timers.values().next().value;
+              assert.equal(timer.delay, 90);
+              timers.clear();
+              timer.callback();
+              const retry = callbacks.values().next().value;
+              callbacks.clear();
+              retry(120);
+              assert.equal(calls, 1);
+              runtime.destroy();
+            });
+
+          ''')
+          test_path.write_text(tests[:test_start] + test_replacement + tests[test_end:])
+
+      - name: Run complete release gate
+        run: npm ci && npm run check
+
+      - name: Commit and push exact repair
+        run: |
+          set -euo pipefail
+          git config user.name "bookthief666"
+          git config user.email "208150485+bookthief666@users.noreply.github.com"
+          git add src/features/settings/experienceSettings.js tests/experienceSettings.test.mjs
+          git diff --cached --check
+          git commit -m "Delay reduced animation frame polling"
+          git push origin HEAD:feature/settings-accessibility-performance
