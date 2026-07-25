@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { JOURNAL_ENTRY_SCHEMA_VERSION } from '../src/features/journal/journalSchema.js';
 import {
   JOURNAL_STORAGE_KEY,
   TOTAL_READINGS_STORAGE_KEY,
@@ -38,16 +39,34 @@ const legacyEntry = {
   lunar: 'Full Moon',
 };
 
-test('loads the existing unversioned journal array and lifetime counter unchanged', () => {
+test('loads the existing unversioned journal array with safe Workbench defaults', () => {
   const storage = new FakeStorage({
     [JOURNAL_STORAGE_KEY]: JSON.stringify([legacyEntry]),
     [TOTAL_READINGS_STORAGE_KEY]: '33',
   });
 
-  assert.deepEqual(readJournalState(storage), {
-    entries: [legacyEntry],
-    totalReadings: 33,
+  const state = readJournalState(storage);
+  assert.equal(state.totalReadings, 33);
+  assert.deepEqual(state.entries, [{
+    ...legacyEntry,
+    schemaVersion: JOURNAL_ENTRY_SCHEMA_VERSION,
+    favorite: false,
+    note: '',
+  }]);
+});
+
+test('preserves existing favorite and note metadata during storage migration', () => {
+  const storage = new FakeStorage({
+    [JOURNAL_STORAGE_KEY]: JSON.stringify([{
+      ...legacyEntry,
+      favorite: true,
+      integrationNote: 'Legacy alias note.\r\nSecond line.',
+    }]),
   });
+  const [entry] = readJournalState(storage).entries;
+  assert.equal(entry.favorite, true);
+  assert.equal(entry.note, 'Legacy alias note.\nSecond line.');
+  assert.equal(entry.schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
 });
 
 test('malformed or non-array journal data falls back to an empty list', () => {
@@ -56,14 +75,28 @@ test('malformed or non-array journal data falls back to an empty list', () => {
   assert.equal(readJournalState(new FakeStorage({ [TOTAL_READINGS_STORAGE_KEY]: 'not-a-number' })).totalReadings, 0);
 });
 
-test('new entries remain newest-first and capped at fifty', () => {
+test('new entries remain newest-first, migrated, and capped at fifty', () => {
   const existing = Array.from({ length: MAX_JOURNAL_ENTRIES }, (_, index) => ({ id: String(index) }));
   const newest = { ...legacyEntry, id: 'newest' };
   const result = prependJournalEntry(existing, newest);
 
   assert.equal(result.length, MAX_JOURNAL_ENTRIES);
-  assert.equal(result[0], newest);
+  assert.deepEqual(result[0], {
+    ...newest,
+    schemaVersion: JOURNAL_ENTRY_SCHEMA_VERSION,
+    favorite: false,
+    note: '',
+  });
   assert.equal(result.at(-1).id, '48');
+});
+
+test('writes only migrated journal entries', () => {
+  const storage = new FakeStorage();
+  writeJournalEntries(storage, [legacyEntry]);
+  const [written] = JSON.parse(storage.getItem(JOURNAL_STORAGE_KEY));
+  assert.equal(written.schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
+  assert.equal(written.favorite, false);
+  assert.equal(written.note, '');
 });
 
 test('removal, recurrence, and recent-reading helpers preserve current semantics', () => {
