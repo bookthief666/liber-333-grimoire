@@ -323,42 +323,48 @@ function installAnimationBudget(windowObject, shouldReduceWork) {
   };
 }
 
+
 function installSensoryGuards(windowObject, navigatorObject, getSettings) {
   const cleanups = [];
-const contexts = new Set();
-const pendingSuspends = new WeakMap();
-const patchSymbol = Symbol.for('liber333.experience.audio.patch');
-let previousSound = Boolean(getSettings().sound);
+  const contexts = new Set();
+  const pendingSuspends = new WeakMap();
+  const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+  let previousSound = Boolean(getSettings().sound);
 
-const resumeWhenSettled = (context) => {
-  const resumeIfNeeded = () => {
-    if (getSettings().sound && context?.state !== 'closed' && context?.state !== 'running') {
-      return context?.resume?.().catch?.(() => {});
-    }
-    return undefined;
+  const resumeWhenSettled = (context) => {
+    const resumeIfNeeded = () => {
+      if (getSettings().sound && context?.state !== 'closed' && context?.state !== 'running') {
+        return context?.resume?.().catch?.(() => {});
+      }
+      return undefined;
+    };
+    const pending = pendingSuspends.get(context);
+    if (pending) pending.finally(resumeIfNeeded);
+    else resumeIfNeeded();
   };
-  const pending = pendingSuspends.get(context);
-  if (pending) pending.finally(resumeIfNeeded);
-  else resumeIfNeeded();
-};
 
-const suspendContext = (context) => {
-  if (!context || context.state === 'closed') return Promise.resolve();
-  const existing = pendingSuspends.get(context);
-  if (existing) return existing;
-  let pending;
-  try {
-    pending = Promise.resolve(context.suspend?.()).catch(() => {});
-  } catch {
-    pending = Promise.resolve();
-  }
-  pendingSuspends.set(context, pending);
-  pending.finally(() => {
-    if (pendingSuspends.get(context) === pending) pendingSuspends.delete(context);
-    if (getSettings().sound) resumeWhenSettled(context);
-  });
-  return pending;
-};
+  const suspendContext = (context) => {
+    if (!context || context.state === 'closed') return Promise.resolve();
+    const existing = pendingSuspends.get(context);
+    if (existing) return existing;
+    let pending;
+    try {
+      pending = Promise.resolve(context.suspend?.()).catch(() => {});
+    } catch {
+      pending = Promise.resolve();
+    }
+    pendingSuspends.set(context, pending);
+    pending.finally(() => {
+      if (pendingSuspends.get(context) === pending) pendingSuspends.delete(context);
+      if (getSettings().sound) resumeWhenSettled(context);
+    });
+    return pending;
+  };
+
+  const discardSource = (source) => {
+    try { source?.stop?.(0); } catch { /* An unstarted source may reject stop(). */ }
+    try { source?.disconnect?.(); } catch { /* Disconnection is best-effort. */ }
+  };
 
   for (const name of ['AudioContext', 'webkitAudioContext']) {
     const Constructor = windowObject?.[name];
@@ -367,27 +373,59 @@ const suspendContext = (context) => {
 
     const originalResume = prototype.resume;
     const originalCreateGain = prototype.createGain;
+    const originalSourceFactories = new Map();
+
     const resume = function controlledResume(...args) {
       contexts.add(this);
       if (!getSettings().sound) return Promise.resolve();
       return originalResume?.apply(this, args);
     };
-    const createGain = function controlledCreateGain(...args) {
-      contexts.add(this);
-      const node = originalCreateGain.apply(this, args);
-      if (!getSettings().sound && this?.state !== 'closed') {
-        queueMicrotask(() => suspendContext(this));
-      }
-      return node;
-    };
+
+    const createGain = typeof originalCreateGain === 'function'
+      ? function controlledCreateGain(...args) {
+          contexts.add(this);
+          const node = originalCreateGain.apply(this, args);
+          if (!getSettings().sound && this?.state !== 'closed') {
+            queueMicrotask(() => suspendContext(this));
+          }
+          return node;
+        }
+      : originalCreateGain;
 
     try {
       prototype.resume = resume;
-      prototype.createGain = createGain;
+      if (typeof originalCreateGain === 'function') prototype.createGain = createGain;
+
+      for (const methodName of ['createOscillator', 'createBufferSource']) {
+        const originalFactory = prototype[methodName];
+        if (typeof originalFactory !== 'function') continue;
+        originalSourceFactories.set(methodName, originalFactory);
+        prototype[methodName] = function controlledCreateSource(...args) {
+          contexts.add(this);
+          const blockedAtCreation = !getSettings().sound;
+          const source = originalFactory.apply(this, args);
+          if (!source || typeof source.start !== 'function') return source;
+          const originalStart = source.start.bind(source);
+          source.start = (...startArgs) => {
+            if (blockedAtCreation || !getSettings().sound) {
+              discardSource(source);
+              return undefined;
+            }
+            return originalStart(...startArgs);
+          };
+          return source;
+        };
+      }
+
       prototype[patchSymbol] = true;
       cleanups.push(() => {
         if (prototype.resume === resume) prototype.resume = originalResume;
-        if (prototype.createGain === createGain) prototype.createGain = originalCreateGain;
+        if (typeof originalCreateGain === 'function' && prototype.createGain === createGain) {
+          prototype.createGain = originalCreateGain;
+        }
+        originalSourceFactories.forEach((originalFactory, methodName) => {
+          prototype[methodName] = originalFactory;
+        });
         try { delete prototype[patchSymbol]; } catch { /* non-critical */ }
       });
     } catch {
@@ -434,16 +472,15 @@ const suspendContext = (context) => {
   }
 
   return {
-
-onSettingsChanged(settings) {
-  if (!settings.sound) {
-    contexts.forEach((context) => suspendContext(context));
-  } else if (!previousSound) {
-    contexts.forEach((context) => resumeWhenSettled(context));
-  }
-  previousSound = Boolean(settings.sound);
-  if (!settings.voice) synth?.cancel?.();
-},
+    onSettingsChanged(settings) {
+      if (!settings.sound) {
+        contexts.forEach((context) => suspendContext(context));
+      } else if (!previousSound) {
+        contexts.forEach((context) => resumeWhenSettled(context));
+      }
+      previousSound = Boolean(settings.sound);
+      if (!settings.voice) synth?.cancel?.();
+    },
     destroy() {
       cleanups.reverse().forEach((cleanup) => cleanup());
     },

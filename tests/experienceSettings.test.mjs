@@ -225,6 +225,48 @@ test('Sound Off to On waits for an asynchronous suspension and restores the cont
   runtime.destroy();
 });
 
+
+test('audio sources created or started while Sound is off are discarded instead of queued', async () => {
+  let starts = 0;
+  let disconnects = 0;
+  class FakeAudioContext {
+    constructor() { this.state = 'running'; }
+    createGain() { return {}; }
+    createOscillator() {
+      return {
+        start() { starts += 1; },
+        stop() {},
+        disconnect() { disconnects += 1; },
+      };
+    }
+    suspend() { this.state = 'suspended'; return Promise.resolve(); }
+    resume() { this.state = 'running'; return Promise.resolve(); }
+  }
+  const runtime = createExperienceSettingsRuntime({
+    windowObject: { AudioContext: FakeAudioContext, dispatchEvent() {} },
+    documentObject: null,
+    navigatorObject: null,
+    storage: memoryStorage(),
+  });
+  const context = new FakeAudioContext();
+  context.createGain();
+  runtime.setSettings({ sound: false });
+  const mutedSource = context.createOscillator();
+  mutedSource.start();
+  assert.equal(starts, 0);
+  assert.equal(disconnects, 1);
+
+  runtime.setSettings({ sound: true });
+  await Promise.resolve();
+  mutedSource.start();
+  assert.equal(starts, 0);
+
+  const audibleSource = context.createOscillator();
+  audibleSource.start();
+  assert.equal(starts, 1);
+  runtime.destroy();
+});
+
 test('blocked speech schedules an utterance error so speaking state can settle', async () => {
   let cancelled = 0;
   let errorEvents = 0;
@@ -357,6 +399,9 @@ test('reduced animation and layered dialog contracts are present in source', asy
   assert.match(reader, /useReducedAnimationBudget/);
   assert.match(reader, /if \(!active \|\| reducedAnimation\)/);
   assert.match(reader, /if \(reducedAnimation\) \{/);
+  assert.match(reader, /if \(!spinning \|\| reducedAnimation\)/);
+  assert.match(runtime, /createOscillator/);
+  assert.match(runtime, /blockedAtCreation/);
   assert.match(runtime, /\.liber-shell-backdrop \.liber-shell-dialog/);
   assert.match(runtime, /aria-labelledby/);
   assert.match(runtime, /resumeWhenSettled/);
