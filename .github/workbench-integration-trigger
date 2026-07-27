@@ -1,2 +1,2 @@
 Run the exact-head-guarded Grimoire Workbench integration for draft PR #44.
-Retry after workflow indexing on main.
+Launch through the trusted release-gate workflow handoff.
