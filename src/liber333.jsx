@@ -338,14 +338,26 @@ const ParticleCanvas = ({ active, intensity = 1, accentColor = "#dc2626" }) => {
 // ─────────────────────────────────────────────
 //  EVOLVING SIGIL (Enhanced — accumulates from readings)
 // ─────────────────────────────────────────────
+const useReducedAnimationBudget = () => {
+  const runtime = useMemo(() => getExperienceSettingsRuntime(), []);
+  const isReduced = (snapshot) => snapshot?.effects === 'low' || snapshot?.effectiveMotion === 'reduced';
+  const [reduced, setReduced] = useState(() => isReduced(runtime?.getSnapshot?.()));
+  useEffect(() => runtime?.subscribe?.((snapshot) => setReduced(isReduced(snapshot))), [runtime]);
+  return reduced;
+};
+
 const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
                          evolutionRings = 0, accentColor = "#dc2626" }) => {
   const [time, setTime] = useState(0);
+  const reducedAnimation = useReducedAnimationBudget();
   useEffect(() => {
-    if (!spinning) return;
+    if (!spinning || reducedAnimation) {
+      setTime(0);
+      return undefined;
+    }
     const iv = setInterval(() => setTime(t => t + 0.02), 16);
     return () => clearInterval(iv);
-  }, [spinning]);
+  }, [spinning, reducedAnimation]);
 
   const geometry = useMemo(() => {
     if (!input) return null;
@@ -454,14 +466,6 @@ const CRTOverlay = () => (
 // ─────────────────────────────────────────────
 const GLYPHS = "\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u2234\u2235\u2295\u2297\u2609\u263D\u2605\u26A1\u2318\u221E\u2299";
 
-
-const useReducedAnimationBudget = () => {
-  const runtime = useMemo(() => getExperienceSettingsRuntime(), []);
-  const isReduced = (snapshot) => snapshot?.effects === 'low' || snapshot?.effectiveMotion === 'reduced';
-  const [reduced, setReduced] = useState(() => isReduced(runtime?.getSnapshot?.()));
-  useEffect(() => runtime?.subscribe?.((snapshot) => setReduced(isReduced(snapshot))), [runtime]);
-  return reduced;
-};
 
 const GlitchText = ({ text, active, speed = 30, className = "" }) => {
   const [display, setDisplay] = useState(text);
