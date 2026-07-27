@@ -1,0 +1,71 @@
+name: Temporary Workbench release-gate integrator
+
+on:
+  workflow_run:
+    workflows:
+      - Liber 333 release gate
+    types:
+      - completed
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  integrate:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'agent/workbench-integration-run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out protected Workbench branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/grimoire-workbench
+          fetch-depth: 0
+
+      - name: Verify exact protected head and synchronize main
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "183eb50bbc6159381f4734e249be7fcb3f5b91d9"
+          git fetch origin main
+          git merge --no-edit origin/main
+
+      - name: Apply Workbench integration
+        run: python scripts/temporary-integrate-workbench.py
+
+      - name: Remove all temporary integration machinery from feature branch
+        run: |
+          rm -f .github/workflows/apply-grimoire-workbench-ui.yml
+          rm -f .github/workflows/temporary-workbench-integrator.yml
+          rm -f .github/workflows/temporary-workbench-comment-integrator.yml
+          rm -f .github/workflows/temporary-workbench-workflow-run-integrator.yml
+          rm -f scripts/temporary-integrate-workbench.py
+
+      - name: Run complete permanent release gate
+        run: npm ci && npm run check
+
+      - name: Commit validated integration
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name "bookthief666"
+          git config user.email "208150485+bookthief666@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Integrate responsive Grimoire Workbench"
+          git push origin HEAD:feature/grimoire-workbench
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Report success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATED_SHA: ${{ steps.commit.outputs.sha }}
+        run: gh issue comment 50 --repo "$GITHUB_REPOSITORY" --body "Guarded Workbench integration succeeded and passed the complete permanent release gate. New feature head: \`$INTEGRATED_SHA\`."
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 50 --repo "$GITHUB_REPOSITORY" --body "Guarded Workbench integration failed before pushing the feature branch. Inspect run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
