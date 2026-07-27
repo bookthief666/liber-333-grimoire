@@ -8,8 +8,10 @@ import {
   MAX_JOURNAL_ENTRIES,
   clearStoredJournalEntries,
   getJournalRecurrenceCount,
+  getMilestoneCrossed,
   getMilestoneForTotal,
   getRecentJournalReadings,
+  prependJournalEntries,
   prependJournalEntry,
   readJournalState,
   removeJournalEntry,
@@ -55,17 +57,21 @@ test('loads the existing unversioned journal array with safe Workbench defaults'
   }]);
 });
 
-test('preserves existing favorite and note metadata during storage migration', () => {
+test('preserves and normalizes consultation metadata during storage migration', () => {
   const storage = new FakeStorage({
     [JOURNAL_STORAGE_KEY]: JSON.stringify([{
       ...legacyEntry,
       favorite: true,
       integrationNote: 'Legacy alias note.\r\nSecond line.',
+      consultationId: ' consultation-1 ',
+      spreadPosition: 'THESIS',
     }]),
   });
   const [entry] = readJournalState(storage).entries;
   assert.equal(entry.favorite, true);
   assert.equal(entry.note, 'Legacy alias note.\nSecond line.');
+  assert.equal(entry.consultationId, 'consultation-1');
+  assert.equal(entry.spreadPosition, 'thesis');
   assert.equal(entry.schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
 });
 
@@ -90,6 +96,20 @@ test('new entries remain newest-first, migrated, and capped at fifty', () => {
   assert.equal(result.at(-1).id, '48');
 });
 
+test('prepends a Triad atomically while preserving requested chapter order', () => {
+  const additions = ['thesis', 'antithesis', 'synthesis'].map((spreadPosition, index) => ({
+    ...legacyEntry,
+    id: `triad-${spreadPosition}`,
+    chapter: [7, 33, 93][index],
+    consultationId: 'triad-consultation',
+    spreadPosition,
+    spreadType: 'Thesis/Antithesis/Synthesis',
+  }));
+  const result = prependJournalEntries([{ ...legacyEntry, id: 'older' }], additions);
+  assert.deepEqual(result.slice(0, 3).map((entry) => entry.spreadPosition), ['thesis', 'antithesis', 'synthesis']);
+  assert.equal(result[3].id, 'older');
+});
+
 test('writes only migrated journal entries', () => {
   const storage = new FakeStorage();
   writeJournalEntries(storage, [legacyEntry]);
@@ -112,10 +132,15 @@ test('removal, recurrence, and recent-reading helpers preserve current semantics
   assert.deepEqual(getRecentJournalReadings(entries, 2).map((entry) => entry.id), ['a', 'b']);
 });
 
-test('milestones remain limited to the four established lifetime totals', () => {
+test('milestones include exact totals and thresholds crossed by atomic batches', () => {
   assert.deepEqual([33, 66, 93, 333].map(getMilestoneForTotal), [33, 66, 93, 333]);
   assert.equal(getMilestoneForTotal(32), null);
   assert.equal(getMilestoneForTotal(334), null);
+  assert.equal(getMilestoneCrossed(32, 35), 33);
+  assert.equal(getMilestoneCrossed(64, 67), 66);
+  assert.equal(getMilestoneCrossed(90, 94), 93);
+  assert.equal(getMilestoneCrossed(330, 334), 333);
+  assert.equal(getMilestoneCrossed(35, 36), null);
 });
 
 test('clear removes saved entries but intentionally preserves the lifetime counter', () => {
