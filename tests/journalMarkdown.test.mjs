@@ -13,7 +13,7 @@ const entries = [{
   id: 'entry-1',
   date: '2026-07-24T23:30:00.000Z',
   question: 'How should I proceed?\nWithout repeating the old pattern?',
-  spreadType: 'triad',
+  spreadType: 'Thesis/Antithesis/Synthesis',
   favorite: true,
   gematria: 333,
   planetary: 'Mercury hour',
@@ -35,8 +35,8 @@ test('serializes a readable provenance-labeled local export', () => {
   });
 
   assert.match(markdown, /# Liber CCCXXXIII — Grimoire Workbench/);
-  assert.match(markdown, new RegExp(`\*\*Format:\*\* ${GRIMOIRE_MARKDOWN_FORMAT}`));
-  assert.match(markdown, new RegExp(`\*\*Version:\*\* ${GRIMOIRE_MARKDOWN_VERSION}`));
+  assert.ok(markdown.includes(`**Format:** ${GRIMOIRE_MARKDOWN_FORMAT}`));
+  assert.ok(markdown.includes(`**Version:** ${GRIMOIRE_MARKDOWN_VERSION}`));
   assert.match(markdown, /\*\*Lifetime reading total:\*\* 44/);
   assert.match(markdown, /\*\*Selection:\*\* Favorites · Triad/);
   assert.match(markdown, /\*\*Spread:\*\* Triad/);
@@ -54,6 +54,23 @@ test('serializes a readable provenance-labeled local export', () => {
   assert.match(markdown, /> Take one action\.\n> Review it tomorrow\./);
   assert.match(markdown, /> How should I proceed\?\n> Without repeating the old pattern\?/);
   assert.equal(markdown.endsWith('\n'), true);
+});
+
+test('hydrates canonical source text and fixed commentary for ordinary saved entries', () => {
+  const markdown = serializeGrimoireMarkdown({
+    entries: [{
+      id: 'ordinary',
+      date: '2026-07-24T23:30:00.000Z',
+      question: 'What is generated through death?',
+      chapter: 1,
+      title: 'THE SABBATH OF THE GOAT',
+      spreadType: 'single',
+      favorite: false,
+    }],
+    exportedAt,
+  });
+  assert.match(markdown, /Cast the Seed into the Field of Night/);
+  assert.match(markdown, /Chapter 1 = Kether/);
 });
 
 test('exports an explicit empty-state document', () => {
