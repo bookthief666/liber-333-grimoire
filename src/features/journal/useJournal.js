@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getJournalBackupFilename,
   mergeJournalBackup,
@@ -10,12 +10,13 @@ import {
   serializeGrimoireMarkdown,
 } from './journalMarkdown.js';
 import { updateGrimoireEntryMetadata } from './grimoireWorkbench.js';
+import { migrateJournalEntries } from './journalSchema.js';
 import {
   clearStoredJournalEntries,
   getJournalRecurrenceCount,
-  getMilestoneForTotal,
+  getMilestoneCrossed,
   getRecentJournalReadings,
-  prependJournalEntry,
+  prependJournalEntries,
   readJournalState,
   removeJournalEntry,
   writeJournalEntries,
@@ -35,9 +36,25 @@ export function useJournal() {
   const [loaded, setLoaded] = useState(false);
   const [totalReadings, setTotalReadings] = useState(0);
   const [milestone, setMilestone] = useState(null);
+  const entriesRef = useRef([]);
+  const totalReadingsRef = useRef(0);
+
+  const commitEntries = useCallback((nextEntries) => {
+    entriesRef.current = nextEntries;
+    setEntries(nextEntries);
+    writeJournalEntries(getLocalStorage(), nextEntries);
+  }, []);
+
+  const commitTotal = useCallback((nextTotal) => {
+    totalReadingsRef.current = nextTotal;
+    setTotalReadings(nextTotal);
+    writeTotalReadings(getLocalStorage(), nextTotal);
+  }, []);
 
   const load = useCallback(async () => {
     const state = readJournalState(getLocalStorage());
+    entriesRef.current = state.entries;
+    totalReadingsRef.current = state.totalReadings;
     setEntries(state.entries);
     setTotalReadings(state.totalReadings);
     setLoaded(true);
@@ -45,35 +62,36 @@ export function useJournal() {
 
   useEffect(() => { load(); }, [load]);
 
-  const save = useCallback(async (newEntries) => {
-    writeJournalEntries(getLocalStorage(), newEntries);
-  }, []);
+  const addEntries = useCallback(async (newEntries) => {
+    const additions = migrateJournalEntries(Array.isArray(newEntries) ? newEntries : []);
+    if (!additions.length) return [];
+
+    const nextEntries = prependJournalEntries(entriesRef.current, additions);
+    const previousTotal = totalReadingsRef.current;
+    const nextTotal = previousTotal + additions.length;
+    commitEntries(nextEntries);
+    commitTotal(nextTotal);
+
+    const crossedMilestone = getMilestoneCrossed(previousTotal, nextTotal);
+    if (crossedMilestone) setMilestone(crossedMilestone);
+    return additions;
+  }, [commitEntries, commitTotal]);
 
   const addEntry = useCallback(async (entry) => {
-    const newEntries = prependJournalEntry(entries, entry);
-    setEntries(newEntries);
-    await save(newEntries);
-
-    const newTotal = totalReadings + 1;
-    setTotalReadings(newTotal);
-    writeTotalReadings(getLocalStorage(), newTotal);
-
-    const nextMilestone = getMilestoneForTotal(newTotal);
-    if (nextMilestone) setMilestone(nextMilestone);
-  }, [entries, save, totalReadings]);
+    const [added = null] = await addEntries([entry]);
+    return added;
+  }, [addEntries]);
 
   const removeEntry = useCallback(async (id) => {
-    const newEntries = removeJournalEntry(entries, id);
-    setEntries(newEntries);
-    await save(newEntries);
-  }, [entries, save]);
+    const nextEntries = removeJournalEntry(entriesRef.current, id);
+    commitEntries(nextEntries);
+  }, [commitEntries]);
 
   const updateEntryMetadata = useCallback(async (id, patch) => {
-    const newEntries = updateGrimoireEntryMetadata(entries, id, patch);
-    setEntries(newEntries);
-    await save(newEntries);
-    return newEntries.find((entry) => entry.id === id) || null;
-  }, [entries, save]);
+    const nextEntries = updateGrimoireEntryMetadata(entriesRef.current, id, patch);
+    commitEntries(nextEntries);
+    return nextEntries.find((entry) => entry.id === id) || null;
+  }, [commitEntries]);
 
   const setFavorite = useCallback(
     (id, favorite) => updateEntryMetadata(id, { favorite }),
@@ -86,6 +104,7 @@ export function useJournal() {
   );
 
   const clearAll = useCallback(async () => {
+    entriesRef.current = [];
     setEntries([]);
     clearStoredJournalEntries(getLocalStorage());
   }, []);
@@ -120,15 +139,13 @@ export function useJournal() {
   const importBackup = useCallback(async (text) => {
     const backup = parseJournalBackup(text);
     const result = mergeJournalBackup({
-      currentEntries: entries,
-      currentTotalReadings: totalReadings,
+      currentEntries: entriesRef.current,
+      currentTotalReadings: totalReadingsRef.current,
       backup,
     });
 
-    setEntries(result.entries);
-    setTotalReadings(result.totalReadings);
-    writeJournalEntries(getLocalStorage(), result.entries);
-    writeTotalReadings(getLocalStorage(), result.totalReadings);
+    commitEntries(result.entries);
+    commitTotal(result.totalReadings);
 
     return {
       ...result,
@@ -136,7 +153,7 @@ export function useJournal() {
       backupEntryCount: backup.entries.length,
       backupSourceVersion: backup.sourceVersion,
     };
-  }, [entries, totalReadings]);
+  }, [commitEntries, commitTotal]);
 
   const getRecurrenceCount = useCallback(
     (chapterNum) => getJournalRecurrenceCount(entries, chapterNum),
@@ -157,6 +174,7 @@ export function useJournal() {
     milestone,
     dismissMilestone,
     addEntry,
+    addEntries,
     removeEntry,
     updateEntryMetadata,
     setFavorite,
