@@ -18,6 +18,7 @@ import { ELEMENT_SYMBOLS, HEBREW_LETTERS, formatChapterNumber, getSephiraColor, 
 import { LIBER_333 } from './data/liber333.js';
 import { PROVENANCE_LABELS, PROVENANCE_NOTES, getCorpusConventionSummary, getCorpusRecordCount } from './data/provenance.js';
 import { PLANETS, useLunarPhase, usePlanetaryTime } from './features/cosmic/cosmicTiming.js';
+import { getExperienceSettingsRuntime } from './features/settings/experienceSettings.js';
 import { TREE_NODE_ORDER, TREE_POS, deriveTreePaths, getVeilChapters, groupChaptersBySephira } from './features/tree/treeModel.js';
 
 // ─────────────────────────────────────────────
@@ -337,14 +338,26 @@ const ParticleCanvas = ({ active, intensity = 1, accentColor = "#dc2626" }) => {
 // ─────────────────────────────────────────────
 //  EVOLVING SIGIL (Enhanced — accumulates from readings)
 // ─────────────────────────────────────────────
+const useReducedAnimationBudget = () => {
+  const runtime = useMemo(() => getExperienceSettingsRuntime(), []);
+  const isReduced = (snapshot) => snapshot?.effects === 'low' || snapshot?.effectiveMotion === 'reduced';
+  const [reduced, setReduced] = useState(() => isReduced(runtime?.getSnapshot?.()));
+  useEffect(() => runtime?.subscribe?.((snapshot) => setReduced(isReduced(snapshot))), [runtime]);
+  return reduced;
+};
+
 const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
                          evolutionRings = 0, accentColor = "#dc2626" }) => {
   const [time, setTime] = useState(0);
+  const reducedAnimation = useReducedAnimationBudget();
   useEffect(() => {
-    if (!spinning) return;
+    if (!spinning || reducedAnimation) {
+      setTime(0);
+      return undefined;
+    }
     const iv = setInterval(() => setTime(t => t + 0.02), 16);
     return () => clearInterval(iv);
-  }, [spinning]);
+  }, [spinning, reducedAnimation]);
 
   const geometry = useMemo(() => {
     if (!input) return null;
@@ -453,10 +466,12 @@ const CRTOverlay = () => (
 // ─────────────────────────────────────────────
 const GLYPHS = "\u0391\u0392\u0393\u0394\u0395\u0396\u0397\u0398\u0399\u039A\u039B\u039C\u039D\u039E\u039F\u03A0\u03A1\u03A3\u03A4\u03A5\u03A6\u03A7\u03A8\u03A9\u2234\u2235\u2295\u2297\u2609\u263D\u2605\u26A1\u2318\u221E\u2299";
 
+
 const GlitchText = ({ text, active, speed = 30, className = "" }) => {
   const [display, setDisplay] = useState(text);
+  const reducedAnimation = useReducedAnimationBudget();
   useEffect(() => {
-    if (!active) { setDisplay(text); return; }
+    if (!active || reducedAnimation) { setDisplay(text); return; }
     let iter = 0;
     const iv = setInterval(() => {
       setDisplay(text.split("").map((c, i) => {
@@ -468,17 +483,25 @@ const GlitchText = ({ text, active, speed = 30, className = "" }) => {
       iter += 1 / 3;
     }, speed);
     return () => clearInterval(iv);
-  }, [text, active, speed]);
+  }, [text, active, speed, reducedAnimation]);
   return <span className={className}>{display}</span>;
 };
 
 // ─────────────────────────────────────────────
 //  TYPEWRITER TEXT
 // ─────────────────────────────────────────────
+
 const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
   const [displayed, setDisplayed] = useState("");
   const [done, setDone] = useState(false);
+  const reducedAnimation = useReducedAnimationBudget();
   useEffect(() => {
+    if (reducedAnimation) {
+      setDisplayed(text);
+      setDone(true);
+      queueMicrotask(() => onComplete?.());
+      return undefined;
+    }
     setDisplayed(""); setDone(false);
     let i = 0;
     const iv = setInterval(() => {
@@ -487,7 +510,7 @@ const TypewriterText = ({ text, speed = 20, onComplete, className = "" }) => {
       if (i >= text.length) { clearInterval(iv); setDone(true); onComplete?.(); }
     }, speed);
     return () => clearInterval(iv);
-  }, [text, speed]);
+  }, [text, speed, reducedAnimation]);
   return (
     <span className={className}>
       {displayed}
@@ -1689,20 +1712,27 @@ const App = () => {
     // Act 3: Receiving (4.5-6s) — contraction
     // Act 4: Silence (6-6.5s) — brief darkness
     // Act 5: Reveal (6.5s) — SLAM
-    const duration = 7000;
+    const duration = window.__LIBER333_EXPERIENCE__?.ceremonyDuration?.(7000) ?? 7000;
+    const ceremonyScale = duration / 7000;
+    const actThresholds = {
+      communing: 2500 * ceremonyScale,
+      receiving: 4500 * ceremonyScale,
+      silence: 6000 * ceremonyScale,
+      reveal: 6500 * ceremonyScale,
+    };
     const start = Date.now();
     const tick = () => {
       const elapsed = Date.now() - start;
       const pct = Math.min((elapsed / duration) * 100, 100);
       setRitualProgress(pct);
 
-      if (elapsed < 2500) setRitualAct(0);
-      else if (elapsed < 4500) {
+      if (elapsed < actThresholds.communing) setRitualAct(0);
+      else if (elapsed < actThresholds.receiving) {
         if (ritualAct !== 1 && audioEnabled) playBell(396);
         setRitualAct(1);
       }
-      else if (elapsed < 6000) setRitualAct(2);
-      else if (elapsed < 6500) setRitualAct(3);
+      else if (elapsed < actThresholds.silence) setRitualAct(2);
+      else if (elapsed < actThresholds.reveal) setRitualAct(3);
       else {
         setRitualAct(4);
         setPhase("revelation");
