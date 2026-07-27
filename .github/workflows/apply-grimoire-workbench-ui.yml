@@ -1,28 +1,34 @@
 name: Apply Grimoire Workbench UI
 
 on:
-  push:
+  pull_request:
     branches:
       - feature/grimoire-workbench
     paths:
-      - .github/workflows/apply-grimoire-workbench-ui.yml
+      - .github/workflows/grimoire-workbench-trigger.txt
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   integrate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Check out Workbench branch
+      - name: Check out protected Workbench branch
         uses: actions/checkout@v4
         with:
           ref: feature/grimoire-workbench
           fetch-depth: 0
 
-      - name: Verify approved parent head
-        run: test "$(git rev-parse HEAD^)" = "2e935a25a2d1d0adb33bb446553f277c953dae52"
+      - name: Verify approved branch lineage
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "d0de2d0c711c2cf38f3147ee3521507109457c7c"
+          test "$(git hash-object src/liber333.jsx)" = "bc0c06ddb38115249fd1d8268bb407f70b529b5a"
+          test "$(git hash-object src/features/journal/grimoireWorkbench.js)" = "9d4cfb60f5140f80563eb79d92d289e75d9b2db9"
 
       - name: Integrate Workbench and regression coverage
         shell: python
@@ -109,19 +115,10 @@ import { readFile } from 'node:fs/promises';
 test('Workbench UI exposes requested local controls and accessible dialog behavior', async () => {
   const source = await readFile(new URL('../src/features/journal/GrimoireWorkbench.jsx', import.meta.url), 'utf8');
   for (const contract of [
-    'role="dialog"',
-    'aria-modal="true"',
-    'Search the Workbench',
-    'Favorites only',
-    'JSON backup',
-    'Markdown: all',
-    'Markdown: shown',
-    'Import JSON',
-    'Private integration note',
-    'Save note',
-    'Recurrence',
-    'appearances / consultations',
-  ]) assert.match(source, new RegExp(contract.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    'role="dialog"', 'aria-modal="true"', 'Search the Workbench', 'Favorites only',
+    'JSON backup', 'Markdown: all', 'Markdown: shown', 'Import JSON',
+    'Private integration note', 'Save note', 'Recurrence', 'appearances / consultations',
+  ]) assert.ok(source.includes(contract), `Missing Workbench contract: ${contract}`);
   assert.match(source, /event\.key === 'Escape'/);
   assert.match(source, /event\.key !== 'Tab'/);
   assert.match(source, /aria-pressed=\{entry\.favorite === true\}/);
@@ -162,10 +159,39 @@ test('reader uses the extracted Workbench and protected journal APIs', async () 
           package['scripts']['test:grimoire-workbench'] = script
           package_path.write_text(json.dumps(package, indent=2) + '\n')
 
-      - name: Run complete release gate
-        run: npm ci && npm run check
+      - name: Run complete release gate with captured diagnostics
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          npm ci 2>&1 | tee /tmp/grimoire-check.log
+          install_status=${PIPESTATUS[0]}
+          if [[ $install_status -eq 0 ]]; then
+            npm run check 2>&1 | tee -a /tmp/grimoire-check.log
+            check_status=${PIPESTATUS[0]}
+          else
+            check_status=$install_status
+          fi
+          echo "status=$check_status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Post exact gate failure
+        if: steps.gate.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### Grimoire Workbench integration gate failed'
+            echo
+            echo '```text'
+            tail -n 180 /tmp/grimoire-check.log
+            echo '```'
+          } > /tmp/grimoire-comment.md
+          gh pr comment 44 --body-file /tmp/grimoire-comment.md
+          exit 1
 
       - name: Commit integrated Workbench
+        if: steps.gate.outputs.status == '0'
         run: |
           set -euo pipefail
           git config user.name "bookthief666"
