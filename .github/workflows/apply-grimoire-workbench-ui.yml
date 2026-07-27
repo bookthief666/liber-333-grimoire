@@ -1,0 +1,176 @@
+name: Apply Grimoire Workbench UI
+
+on:
+  push:
+    branches:
+      - feature/grimoire-workbench
+    paths:
+      - .github/workflows/apply-grimoire-workbench-ui.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out Workbench branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/grimoire-workbench
+          fetch-depth: 0
+
+      - name: Verify approved parent head
+        run: test "$(git rev-parse HEAD^)" = "2e935a25a2d1d0adb33bb446553f277c953dae52"
+
+      - name: Integrate Workbench and regression coverage
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+
+          engine_path = Path('src/features/journal/grimoireWorkbench.js')
+          engine = engine_path.read_text()
+          old = "export function normalizeSpreadType(value) {\n  return String(value ?? '').toLocaleLowerCase('en-US').includes('triad') ? 'triad' : 'single';\n}"
+          new = "export function normalizeSpreadType(value) {\n  const normalized = String(value ?? '').trim().toLocaleLowerCase('en-US');\n  return ['spread', 'triad', 'three-card', 'three card'].some((label) => normalized.includes(label))\n    ? 'triad'\n    : 'single';\n}"
+          if old not in engine:
+            raise SystemExit('normalizeSpreadType target not found')
+          engine_path.write_text(engine.replace(old, new, 1))
+
+          unit_path = Path('tests/grimoireWorkbench.test.mjs')
+          unit = unit_path.read_text()
+          import_marker = '  normalizeGrimoireNote,\n'
+          if import_marker not in unit:
+            raise SystemExit('Workbench import marker not found')
+          unit = unit.replace(import_marker, import_marker + '  normalizeSpreadType,\n', 1)
+          test_marker = "test('normalizes invalid filter values without weakening valid choices', () => {"
+          spread_test = """test('normalizes current and future Triad spread labels', () => {
+  assert.equal(normalizeSpreadType('spread'), 'triad');
+  assert.equal(normalizeSpreadType('TRIAD SPREAD'), 'triad');
+  assert.equal(normalizeSpreadType('three-card'), 'triad');
+  assert.equal(normalizeSpreadType('single'), 'single');
+  assert.equal(normalizeSpreadType(null), 'single');
+});
+
+"""
+          if test_marker not in unit:
+            raise SystemExit('Workbench test marker not found')
+          unit_path.write_text(unit.replace(test_marker, spread_test + test_marker, 1))
+
+          reader_path = Path('src/liber333.jsx')
+          reader = reader_path.read_text()
+          import_line = "import { useJournal } from './features/journal/useJournal.js';"
+          new_import = import_line + "\nimport GrimoireWorkbench from './features/journal/GrimoireWorkbench.jsx';"
+          if new_import not in reader:
+            if import_line not in reader:
+              raise SystemExit('Journal import marker not found')
+            reader = reader.replace(import_line, new_import, 1)
+
+          journal_title = '//  JOURNAL OVERLAY (Enhanced)'
+          tree_title = '//  TREE OF LIFE — interactive map of the complete corpus'
+          journal_title_index = reader.find(journal_title)
+          tree_title_index = reader.find(tree_title)
+          if journal_title_index < 0 or tree_title_index < 0 or tree_title_index <= journal_title_index:
+            raise SystemExit('Journal overlay component boundaries not found')
+          journal_start = reader.rfind('// ─────────────────────────────────────────────', 0, journal_title_index)
+          tree_start = reader.rfind('// ─────────────────────────────────────────────', 0, tree_title_index)
+          if journal_start < 0 or tree_start < 0:
+            raise SystemExit('Journal overlay separators not found')
+          reader = reader[:journal_start] + reader[tree_start:]
+
+          old_render = '''        <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
+          onClose={closeJournal} onDelete={journal.removeEntry}
+          onClear={journal.clearAll} onSelect={viewJournalEntry}
+          onExportBackup={journal.exportBackup} onImportBackup={journal.importBackup}
+          accentColor={accentColor} />'''
+          new_render = '''        <GrimoireWorkbench
+          entries={journal.entries}
+          totalReadings={journal.totalReadings}
+          onClose={closeJournal}
+          onDelete={journal.removeEntry}
+          onClear={journal.clearAll}
+          onSelect={viewJournalEntry}
+          onExportBackup={journal.exportBackup}
+          onExportMarkdown={journal.exportMarkdown}
+          onImportBackup={journal.importBackup}
+          onSetFavorite={journal.setFavorite}
+          onSaveNote={journal.saveNote}
+          accentColor={accentColor}
+        />'''
+          if old_render not in reader:
+            raise SystemExit('Journal overlay render target not found')
+          reader_path.write_text(reader.replace(old_render, new_render, 1))
+
+          ui_test = r'''import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+test('Workbench UI exposes requested local controls and accessible dialog behavior', async () => {
+  const source = await readFile(new URL('../src/features/journal/GrimoireWorkbench.jsx', import.meta.url), 'utf8');
+  for (const contract of [
+    'role="dialog"',
+    'aria-modal="true"',
+    'Search the Workbench',
+    'Favorites only',
+    'JSON backup',
+    'Markdown: all',
+    'Markdown: shown',
+    'Import JSON',
+    'Private integration note',
+    'Save note',
+    'Recurrence',
+    'appearances / consultations',
+  ]) assert.match(source, new RegExp(contract.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(source, /event\.key === 'Escape'/);
+  assert.match(source, /event\.key !== 'Tab'/);
+  assert.match(source, /aria-pressed=\{entry\.favorite === true\}/);
+  assert.match(source, /onExportMarkdown/);
+  assert.match(source, /onSetFavorite/);
+  assert.match(source, /onSaveNote/);
+});
+
+test('Workbench CSS includes desktop, mobile, closed-Fold, focus, and reduced-motion contracts', async () => {
+  const css = await readFile(new URL('../src/features/journal/grimoireWorkbench.css', import.meta.url), 'utf8');
+  assert.match(css, /grid-template-columns: minmax\(250px, 320px\) minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(max-width: 760px\)/);
+  assert.match(css, /@media \(max-width: 430px\)/);
+  assert.match(css, /100dvh/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /overflow-x: auto/);
+});
+
+test('reader uses the extracted Workbench and protected journal APIs', async () => {
+  const source = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
+  assert.match(source, /import GrimoireWorkbench/);
+  assert.match(source, /<GrimoireWorkbench/);
+  assert.match(source, /onExportMarkdown=\{journal\.exportMarkdown\}/);
+  assert.match(source, /onSetFavorite=\{journal\.setFavorite\}/);
+  assert.match(source, /onSaveNote=\{journal\.saveNote\}/);
+  assert.doesNotMatch(source, /const JournalOverlay =/);
+});
+'''
+          Path('tests/grimoireWorkbenchUi.test.mjs').write_text(ui_test)
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text())
+          script = package['scripts']['test:grimoire-workbench']
+          ui_name = 'tests/grimoireWorkbenchUi.test.mjs'
+          if ui_name not in script:
+            script = script.replace('tests/journalMarkdown.test.mjs', f'tests/journalMarkdown.test.mjs {ui_name}')
+          package['scripts']['test:grimoire-workbench'] = script
+          package_path.write_text(json.dumps(package, indent=2) + '\n')
+
+      - name: Run complete release gate
+        run: npm ci && npm run check
+
+      - name: Commit integrated Workbench
+        run: |
+          set -euo pipefail
+          git config user.name "bookthief666"
+          git config user.email "208150485+bookthief666@users.noreply.github.com"
+          git add package.json src/liber333.jsx src/features/journal/grimoireWorkbench.js tests/grimoireWorkbench.test.mjs tests/grimoireWorkbenchUi.test.mjs
+          git diff --cached --check
+          git commit -m "Integrate responsive Grimoire Workbench"
+          git push origin HEAD:feature/grimoire-workbench
