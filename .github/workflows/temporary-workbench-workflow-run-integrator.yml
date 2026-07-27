@@ -13,19 +13,39 @@ permissions:
 
 jobs:
   integrate:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'agent/workbench-integration-run'
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Detect the exact integration trigger
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_NUMBER="$(jq -r '.workflow_run.pull_requests[0].number // empty' "$GITHUB_EVENT_PATH")"
+          HEAD_BRANCH="$(jq -r '.workflow_run.head_branch // empty' "$GITHUB_EVENT_PATH")"
+          echo "workflow_run PR=$PR_NUMBER head_branch=$HEAD_BRANCH"
+          if [[ "$PR_NUMBER" == "50" || "$HEAD_BRANCH" == "agent/workbench-integration-run" ]]; then
+            echo "matched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "matched=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report integration start
+        if: steps.target.outputs.matched == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 50 --repo "$GITHUB_REPOSITORY" --body "Trusted release-gate handoff recognized PR #50 and started the guarded Workbench integration. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
       - name: Check out protected Workbench branch
+        if: steps.target.outputs.matched == 'true'
         uses: actions/checkout@v4
         with:
           ref: feature/grimoire-workbench
           fetch-depth: 0
 
       - name: Verify exact protected head and synchronize main
+        if: steps.target.outputs.matched == 'true'
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "183eb50bbc6159381f4734e249be7fcb3f5b91d9"
@@ -33,9 +53,11 @@ jobs:
           git merge --no-edit origin/main
 
       - name: Apply Workbench integration
+        if: steps.target.outputs.matched == 'true'
         run: python scripts/temporary-integrate-workbench.py
 
       - name: Remove all temporary integration machinery from feature branch
+        if: steps.target.outputs.matched == 'true'
         run: |
           rm -f .github/workflows/apply-grimoire-workbench-ui.yml
           rm -f .github/workflows/temporary-workbench-integrator.yml
@@ -44,9 +66,11 @@ jobs:
           rm -f scripts/temporary-integrate-workbench.py
 
       - name: Run complete permanent release gate
+        if: steps.target.outputs.matched == 'true'
         run: npm ci && npm run check
 
       - name: Commit validated integration
+        if: steps.target.outputs.matched == 'true'
         id: commit
         run: |
           set -euo pipefail
@@ -59,13 +83,14 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Report success
+        if: steps.target.outputs.matched == 'true' && success()
         env:
           GH_TOKEN: ${{ github.token }}
           INTEGRATED_SHA: ${{ steps.commit.outputs.sha }}
         run: gh issue comment 50 --repo "$GITHUB_REPOSITORY" --body "Guarded Workbench integration succeeded and passed the complete permanent release gate. New feature head: \`$INTEGRATED_SHA\`."
 
       - name: Report failure
-        if: failure()
+        if: steps.target.outputs.matched == 'true' && failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh issue comment 50 --repo "$GITHUB_REPOSITORY" --body "Guarded Workbench integration failed before pushing the feature branch. Inspect run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
