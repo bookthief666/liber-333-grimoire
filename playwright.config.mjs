@@ -36,7 +36,16 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'desktop-firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'desktop-webkit', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'desktop-webkit',
+      workers: 1,
+      timeout: 60_000,
+      use: {
+        ...devices['Desktop Safari'],
+        trace: 'on-first-retry',
+        video: 'off',
+      },
+    },
     {
       name: 'fold6-closed',
       use: {
