@@ -40,7 +40,7 @@ test.describe('Grimoire Workbench', () => {
   test('persists favorite state through a reload', async ({ page }) => {
     let { dialog } = await openWorkbench(page);
     const discipline = dialog.locator('article').filter({ hasText: 'What does discipline require now?' });
-    const favorite = discipline.getByRole('button', { name: 'Add to favorites' });
+    const favorite = discipline.locator('.grimoire-favorite-button');
     await activate(favorite);
     await expect(favorite).toHaveAttribute('aria-pressed', 'true');
 
