@@ -176,11 +176,9 @@ export default function GrimoireWorkbench({
   };
 
   const closeNoteEditor = useCallback(() => {
+    const trigger = editingTriggerRef.current;
+    if (trigger && document.contains(trigger)) trigger.focus();
     setEditingId(null);
-    requestAnimationFrame(() => {
-      const trigger = editingTriggerRef.current;
-      if (trigger && document.contains(trigger)) trigger.focus();
-    });
   }, []);
 
   useEffect(() => {
