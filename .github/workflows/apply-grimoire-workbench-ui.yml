@@ -23,55 +23,29 @@ jobs:
           ref: feature/grimoire-workbench
           fetch-depth: 0
 
-      - name: Verify approved branch lineage
+      - name: Verify exact approved branch state
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "d0de2d0c711c2cf38f3147ee3521507109457c7c"
+          test "$(git rev-parse HEAD^)" = "f236129728c7afd2939eef80ff681593628c83a0"
           test "$(git hash-object src/liber333.jsx)" = "bc0c06ddb38115249fd1d8268bb407f70b529b5a"
-          test "$(git hash-object src/features/journal/grimoireWorkbench.js)" = "9d4cfb60f5140f80563eb79d92d289e75d9b2db9"
+          test "$(git hash-object src/features/journal/GrimoireWorkbench.jsx)" = "d0e2ff02919bce0d4e9a1909ad14e387652ff28e"
+          test "$(git hash-object src/features/journal/useJournal.js)" = "247ee6ede0c62b6f5c5ded52a3b93ab046078564"
+          test "$(git hash-object tests/grimoireWorkbenchUi.test.mjs)" = "ff54d3d2799bad2a397f53d0e262a5ed4d871ea3"
 
-      - name: Integrate Workbench and regression coverage
+      - name: Integrate Workbench and atomic consultation saves
         shell: python
         run: |
           from pathlib import Path
-          import json
-
-          engine_path = Path('src/features/journal/grimoireWorkbench.js')
-          engine = engine_path.read_text()
-          old = "export function normalizeSpreadType(value) {\n  return String(value ?? '').toLocaleLowerCase('en-US').includes('triad') ? 'triad' : 'single';\n}"
-          new = "export function normalizeSpreadType(value) {\n  const normalized = String(value ?? '').trim().toLocaleLowerCase('en-US');\n  return ['spread', 'triad', 'three-card', 'three card'].some((label) => normalized.includes(label))\n    ? 'triad'\n    : 'single';\n}"
-          if old not in engine:
-            raise SystemExit('normalizeSpreadType target not found')
-          engine_path.write_text(engine.replace(old, new, 1))
-
-          unit_path = Path('tests/grimoireWorkbench.test.mjs')
-          unit = unit_path.read_text()
-          import_marker = '  normalizeGrimoireNote,\n'
-          if import_marker not in unit:
-            raise SystemExit('Workbench import marker not found')
-          unit = unit.replace(import_marker, import_marker + '  normalizeSpreadType,\n', 1)
-          test_marker = "test('normalizes invalid filter values without weakening valid choices', () => {"
-          spread_test = """test('normalizes current and future Triad spread labels', () => {
-  assert.equal(normalizeSpreadType('spread'), 'triad');
-  assert.equal(normalizeSpreadType('TRIAD SPREAD'), 'triad');
-  assert.equal(normalizeSpreadType('three-card'), 'triad');
-  assert.equal(normalizeSpreadType('single'), 'single');
-  assert.equal(normalizeSpreadType(null), 'single');
-});
-
-"""
-          if test_marker not in unit:
-            raise SystemExit('Workbench test marker not found')
-          unit_path.write_text(unit.replace(test_marker, spread_test + test_marker, 1))
 
           reader_path = Path('src/liber333.jsx')
           reader = reader_path.read_text()
+
           import_line = "import { useJournal } from './features/journal/useJournal.js';"
-          new_import = import_line + "\nimport GrimoireWorkbench from './features/journal/GrimoireWorkbench.jsx';"
-          if new_import not in reader:
+          workbench_import = "import GrimoireWorkbench from './features/journal/GrimoireWorkbench.jsx';"
+          if workbench_import not in reader:
             if import_line not in reader:
               raise SystemExit('Journal import marker not found')
-            reader = reader.replace(import_line, new_import, 1)
+            reader = reader.replace(import_line, import_line + "\n" + workbench_import, 1)
 
           journal_title = '//  JOURNAL OVERLAY (Enhanced)'
           tree_title = '//  TREE OF LIFE — interactive map of the complete corpus'
@@ -85,79 +59,105 @@ jobs:
             raise SystemExit('Journal overlay separators not found')
           reader = reader[:journal_start] + reader[tree_start:]
 
+          old_save = '''  // ── Save reading ──
+          const saveReading = useCallback(async () => {
+            if (!drawnChapter || saved) return;
+            for (const ch of drawnChapters) {
+              await journal.addEntry({
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                date: new Date().toISOString(),
+                question,
+                chapter: ch.chapter,
+                title: ch.title,
+                gematria: gematriaResult?.simple || 0,
+                interpretation: oracle.text || null,
+                spreadType: isSpread ? "Thesis/Antithesis/Synthesis" : "single",
+                planetary: planetary?.planet,
+                lunar: lunar?.name,
+              });
+            }
+            setSaved(true);
+            haptic(30);
+          }, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);'''
+
+          new_save = '''  // ── Save reading ──
+          const saveReading = useCallback(async () => {
+            if (!drawnChapter || saved) return;
+
+            const date = new Date().toISOString();
+            const consultationId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            const spreadPositions = isSpread
+              ? ["thesis", "antithesis", "synthesis"]
+              : ["single"];
+            const entriesToSave = drawnChapters.map((ch, index) => {
+              const spreadPosition = spreadPositions[index] || "single";
+              return {
+                id: `${consultationId}-${spreadPosition}`,
+                date,
+                consultationId,
+                spreadPosition,
+                question,
+                chapter: ch.chapter,
+                title: ch.title,
+                gematria: gematriaResult?.simple || 0,
+                interpretation: oracle.text || null,
+                spreadType: isSpread ? "triad" : "single",
+                planetary: planetary?.planet,
+                lunar: lunar?.name,
+              };
+            });
+
+            await journal.addEntries(entriesToSave);
+            setSaved(true);
+            haptic(30);
+          }, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);'''
+
+          if old_save not in reader:
+            raise SystemExit('Sequential saveReading target not found')
+          reader = reader.replace(old_save, new_save, 1)
+
           old_render = '''        <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
-          onClose={closeJournal} onDelete={journal.removeEntry}
-          onClear={journal.clearAll} onSelect={viewJournalEntry}
-          onExportBackup={journal.exportBackup} onImportBackup={journal.importBackup}
-          accentColor={accentColor} />'''
+            onClose={closeJournal} onDelete={journal.removeEntry}
+            onClear={journal.clearAll} onSelect={viewJournalEntry}
+            onExportBackup={journal.exportBackup} onImportBackup={journal.importBackup}
+            accentColor={accentColor} />'''
           new_render = '''        <GrimoireWorkbench
-          entries={journal.entries}
-          totalReadings={journal.totalReadings}
-          onClose={closeJournal}
-          onDelete={journal.removeEntry}
-          onClear={journal.clearAll}
-          onSelect={viewJournalEntry}
-          onExportBackup={journal.exportBackup}
-          onExportMarkdown={journal.exportMarkdown}
-          onImportBackup={journal.importBackup}
-          onSetFavorite={journal.setFavorite}
-          onSaveNote={journal.saveNote}
-          accentColor={accentColor}
-        />'''
+            entries={journal.entries}
+            totalReadings={journal.totalReadings}
+            onClose={closeJournal}
+            onDelete={journal.removeEntry}
+            onClear={journal.clearAll}
+            onSelect={viewJournalEntry}
+            onExportBackup={journal.exportBackup}
+            onExportMarkdown={journal.exportMarkdown}
+            onImportBackup={journal.importBackup}
+            onSetFavorite={journal.setFavorite}
+            onSaveNote={journal.saveNote}
+            accentColor={accentColor}
+          />'''
           if old_render not in reader:
             raise SystemExit('Journal overlay render target not found')
-          reader_path.write_text(reader.replace(old_render, new_render, 1))
+          reader = reader.replace(old_render, new_render, 1)
 
-          ui_test = r'''import test from 'node:test';
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+          required = [
+            workbench_import,
+            '<GrimoireWorkbench',
+            'onExportMarkdown={journal.exportMarkdown}',
+            'onSetFavorite={journal.setFavorite}',
+            'onSaveNote={journal.saveNote}',
+            'journal.addEntries(entriesToSave)',
+            'consultationId',
+            'spreadPosition',
+          ]
+          for contract in required:
+            if contract not in reader:
+              raise SystemExit(f'Missing integrated reader contract: {contract}')
+          if 'const JournalOverlay =' in reader:
+            raise SystemExit('Legacy JournalOverlay still present')
+          if 'journal.addEntry({' in reader:
+            raise SystemExit('Sequential journal save still present')
 
-test('Workbench UI exposes requested local controls and accessible dialog behavior', async () => {
-  const source = await readFile(new URL('../src/features/journal/GrimoireWorkbench.jsx', import.meta.url), 'utf8');
-  for (const contract of [
-    'role="dialog"', 'aria-modal="true"', 'Search the Workbench', 'Favorites only',
-    'JSON backup', 'Markdown: all', 'Markdown: shown', 'Import JSON',
-    'Private integration note', 'Save note', 'Recurrence', 'appearances / consultations',
-  ]) assert.ok(source.includes(contract), `Missing Workbench contract: ${contract}`);
-  assert.match(source, /event\.key === 'Escape'/);
-  assert.match(source, /event\.key !== 'Tab'/);
-  assert.match(source, /aria-pressed=\{entry\.favorite === true\}/);
-  assert.match(source, /onExportMarkdown/);
-  assert.match(source, /onSetFavorite/);
-  assert.match(source, /onSaveNote/);
-});
-
-test('Workbench CSS includes desktop, mobile, closed-Fold, focus, and reduced-motion contracts', async () => {
-  const css = await readFile(new URL('../src/features/journal/grimoireWorkbench.css', import.meta.url), 'utf8');
-  assert.match(css, /grid-template-columns: minmax\(250px, 320px\) minmax\(0, 1fr\)/);
-  assert.match(css, /@media \(max-width: 760px\)/);
-  assert.match(css, /@media \(max-width: 430px\)/);
-  assert.match(css, /100dvh/);
-  assert.match(css, /:focus-visible/);
-  assert.match(css, /prefers-reduced-motion/);
-  assert.match(css, /overflow-x: auto/);
-});
-
-test('reader uses the extracted Workbench and protected journal APIs', async () => {
-  const source = await readFile(new URL('../src/liber333.jsx', import.meta.url), 'utf8');
-  assert.match(source, /import GrimoireWorkbench/);
-  assert.match(source, /<GrimoireWorkbench/);
-  assert.match(source, /onExportMarkdown=\{journal\.exportMarkdown\}/);
-  assert.match(source, /onSetFavorite=\{journal\.setFavorite\}/);
-  assert.match(source, /onSaveNote=\{journal\.saveNote\}/);
-  assert.doesNotMatch(source, /const JournalOverlay =/);
-});
-'''
-          Path('tests/grimoireWorkbenchUi.test.mjs').write_text(ui_test)
-
-          package_path = Path('package.json')
-          package = json.loads(package_path.read_text())
-          script = package['scripts']['test:grimoire-workbench']
-          ui_name = 'tests/grimoireWorkbenchUi.test.mjs'
-          if ui_name not in script:
-            script = script.replace('tests/journalMarkdown.test.mjs', f'tests/journalMarkdown.test.mjs {ui_name}')
-          package['scripts']['test:grimoire-workbench'] = script
-          package_path.write_text(json.dumps(package, indent=2) + '\n')
+          reader_path.write_text(reader)
 
       - name: Run complete release gate with captured diagnostics
         id: gate
@@ -190,13 +190,14 @@ test('reader uses the extracted Workbench and protected journal APIs', async () 
           gh pr comment 44 --body-file /tmp/grimoire-comment.md
           exit 1
 
-      - name: Commit integrated Workbench
+      - name: Commit integrated Workbench and remove temporary machinery
         if: steps.gate.outputs.status == '0'
         run: |
           set -euo pipefail
           git config user.name "bookthief666"
           git config user.email "208150485+bookthief666@users.noreply.github.com"
-          git add package.json src/liber333.jsx src/features/journal/grimoireWorkbench.js tests/grimoireWorkbench.test.mjs tests/grimoireWorkbenchUi.test.mjs
+          git rm .github/workflows/apply-grimoire-workbench-ui.yml
+          git add src/liber333.jsx
           git diff --cached --check
           git commit -m "Integrate responsive Grimoire Workbench"
           git push origin HEAD:feature/grimoire-workbench
