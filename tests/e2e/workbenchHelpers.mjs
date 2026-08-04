@@ -104,8 +104,12 @@ export function sampleJournalEntries() {
 
 export async function seedJournal(page, { entries = sampleJournalEntries(), totalReadings = 44 } = {}) {
   await page.addInitScript(({ journalKey, totalKey, entries: seededEntries, total }) => {
-    localStorage.setItem(journalKey, JSON.stringify(seededEntries));
-    localStorage.setItem(totalKey, String(total));
+    if (localStorage.getItem(journalKey) === null) {
+      localStorage.setItem(journalKey, JSON.stringify(seededEntries));
+    }
+    if (localStorage.getItem(totalKey) === null) {
+      localStorage.setItem(totalKey, String(total));
+    }
   }, { journalKey: JOURNAL_KEY, totalKey: TOTAL_KEY, entries, total: totalReadings });
 }
 
