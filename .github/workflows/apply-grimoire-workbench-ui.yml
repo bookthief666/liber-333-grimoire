@@ -26,7 +26,7 @@ jobs:
       - name: Verify exact approved branch state
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "f236129728c7afd2939eef80ff681593628c83a0"
+          test "$(git rev-parse HEAD^)" = "b34d13f91fd7e7f05bea267ef81f625103a72d61"
           test "$(git hash-object src/liber333.jsx)" = "bc0c06ddb38115249fd1d8268bb407f70b529b5a"
           test "$(git hash-object src/features/journal/GrimoireWorkbench.jsx)" = "d0e2ff02919bce0d4e9a1909ad14e387652ff28e"
           test "$(git hash-object src/features/journal/useJournal.js)" = "247ee6ede0c62b6f5c5ded52a3b93ab046078564"
@@ -59,26 +59,12 @@ jobs:
             raise SystemExit('Journal overlay separators not found')
           reader = reader[:journal_start] + reader[tree_start:]
 
-          old_save = '''  // ── Save reading ──
-          const saveReading = useCallback(async () => {
-            if (!drawnChapter || saved) return;
-            for (const ch of drawnChapters) {
-              await journal.addEntry({
-                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-                date: new Date().toISOString(),
-                question,
-                chapter: ch.chapter,
-                title: ch.title,
-                gematria: gematriaResult?.simple || 0,
-                interpretation: oracle.text || null,
-                spreadType: isSpread ? "Thesis/Antithesis/Synthesis" : "single",
-                planetary: planetary?.planet,
-                lunar: lunar?.name,
-              });
-            }
-            setSaved(true);
-            haptic(30);
-          }, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);'''
+          save_start_marker = '  // ── Save reading ──'
+          reset_marker = '\n\n  // ── Reset ──'
+          save_start = reader.find(save_start_marker)
+          save_end = reader.find(reset_marker, save_start)
+          if save_start < 0 or save_end < 0:
+            raise SystemExit('saveReading structural markers not found')
 
           new_save = '''  // ── Save reading ──
           const saveReading = useCallback(async () => {
@@ -111,33 +97,35 @@ jobs:
             setSaved(true);
             haptic(30);
           }, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);'''
+          reader = reader[:save_start] + new_save + reader[save_end:]
 
-          if old_save not in reader:
-            raise SystemExit('Sequential saveReading target not found')
-          reader = reader.replace(old_save, new_save, 1)
+          render_start_marker = '      {/* Journal Overlay */}'
+          milestone_marker = '      {/* Milestone Overlay */}'
+          render_start = reader.find(render_start_marker)
+          render_end = reader.find(milestone_marker, render_start)
+          if render_start < 0 or render_end < 0:
+            raise SystemExit('Journal render structural markers not found')
 
-          old_render = '''        <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
-            onClose={closeJournal} onDelete={journal.removeEntry}
-            onClear={journal.clearAll} onSelect={viewJournalEntry}
-            onExportBackup={journal.exportBackup} onImportBackup={journal.importBackup}
-            accentColor={accentColor} />'''
-          new_render = '''        <GrimoireWorkbench
-            entries={journal.entries}
-            totalReadings={journal.totalReadings}
-            onClose={closeJournal}
-            onDelete={journal.removeEntry}
-            onClear={journal.clearAll}
-            onSelect={viewJournalEntry}
-            onExportBackup={journal.exportBackup}
-            onExportMarkdown={journal.exportMarkdown}
-            onImportBackup={journal.importBackup}
-            onSetFavorite={journal.setFavorite}
-            onSaveNote={journal.saveNote}
-            accentColor={accentColor}
-          />'''
-          if old_render not in reader:
-            raise SystemExit('Journal overlay render target not found')
-          reader = reader.replace(old_render, new_render, 1)
+          new_render = '''      {/* Journal Overlay */}
+          {journalOpen && (
+            <GrimoireWorkbench
+              entries={journal.entries}
+              totalReadings={journal.totalReadings}
+              onClose={closeJournal}
+              onDelete={journal.removeEntry}
+              onClear={journal.clearAll}
+              onSelect={viewJournalEntry}
+              onExportBackup={journal.exportBackup}
+              onExportMarkdown={journal.exportMarkdown}
+              onImportBackup={journal.importBackup}
+              onSetFavorite={journal.setFavorite}
+              onSaveNote={journal.saveNote}
+              accentColor={accentColor}
+            />
+          )}
+
+          '''
+          reader = reader[:render_start] + new_render + reader[render_end:]
 
           required = [
             workbench_import,
