@@ -26,11 +26,12 @@ jobs:
       - name: Verify exact approved branch state
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "b34d13f91fd7e7f05bea267ef81f625103a72d61"
+          test "$(git rev-parse HEAD^)" = "819b82c4a8fc1d604f964b92b29524e57fbd8a9a"
           test "$(git hash-object src/liber333.jsx)" = "bc0c06ddb38115249fd1d8268bb407f70b529b5a"
           test "$(git hash-object src/features/journal/GrimoireWorkbench.jsx)" = "d0e2ff02919bce0d4e9a1909ad14e387652ff28e"
           test "$(git hash-object src/features/journal/useJournal.js)" = "247ee6ede0c62b6f5c5ded52a3b93ab046078564"
           test "$(git hash-object tests/grimoireWorkbenchUi.test.mjs)" = "ff54d3d2799bad2a397f53d0e262a5ed4d871ea3"
+          test "$(git hash-object tests/journalMarkdown.test.mjs)" = "345a04375f9ad904df3cff9d8feee70b39bc2a0d"
 
       - name: Integrate Workbench and atomic consultation saves
         shell: python
