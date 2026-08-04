@@ -120,6 +120,8 @@ export async function visitApp(page) {
 
 export async function openWorkbench(page) {
   const trigger = page.getByRole('button', { name: /GRIMOIRE/i }).first();
+  await trigger.focus();
+  await expect(trigger).toBeFocused();
   await activate(trigger);
   const dialog = page.getByRole('dialog', { name: /Grimoire Workbench/i });
   await expect(dialog).toBeVisible();
