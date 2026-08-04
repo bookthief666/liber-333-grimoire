@@ -1,0 +1,104 @@
+name: Repair Workbench note focus
+
+on:
+  pull_request:
+    branches:
+      - feature/grimoire-workbench
+    paths:
+      - .github/workflows/workbench-focus-trigger.txt
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out protected Workbench branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/grimoire-workbench
+          fetch-depth: 0
+
+      - name: Verify exact source state
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "cbafc29ca0ef1c2a2d5422bda7380ea0aa71e3d0"
+          test "$(git hash-object src/features/journal/GrimoireWorkbench.jsx)" = "d0e2ff02919bce0d4e9a1909ad14e387652ff28e"
+
+      - name: Restore focus after closing note editor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/features/journal/GrimoireWorkbench.jsx')
+          source = path.read_text()
+
+          replacements = [
+            (
+              "import { useEffect, useMemo, useRef, useState } from 'react';",
+              "import { useCallback, useEffect, useMemo, useRef, useState } from 'react';",
+            ),
+            (
+              "  const editingIdRef = useRef(null);\n  const onCloseRef = useRef(onClose);",
+              "  const editingIdRef = useRef(null);\n  const editingTriggerRef = useRef(null);\n  const onCloseRef = useRef(onClose);",
+            ),
+            (
+              "  const resetFilters = () => {\n    setFilters(DEFAULT_GRIMOIRE_FILTERS);\n    requestAnimationFrame(() => searchRef.current?.focus());\n  };",
+              "  const resetFilters = () => {\n    setFilters(DEFAULT_GRIMOIRE_FILTERS);\n    requestAnimationFrame(() => searchRef.current?.focus());\n  };\n\n  const closeNoteEditor = useCallback(() => {\n    setEditingId(null);\n    requestAnimationFrame(() => {\n      const trigger = editingTriggerRef.current;\n      if (trigger && document.contains(trigger)) trigger.focus();\n    });\n  }, []);",
+            ),
+            (
+              "        if (editingIdRef.current) {\n          event.preventDefault();\n          setEditingId(null);\n          return;\n        }",
+              "        if (editingIdRef.current) {\n          event.preventDefault();\n          closeNoteEditor();\n          return;\n        }",
+            ),
+            (
+              "    return () => {\n      dialog.removeEventListener('keydown', onKeyDown);\n      if (previous && document.contains(previous)) previous.focus?.();\n    };\n  }, []);",
+              "    return () => {\n      dialog.removeEventListener('keydown', onKeyDown);\n      if (previous && document.contains(previous)) previous.focus?.();\n    };\n  }, [closeNoteEditor]);",
+            ),
+            (
+              "                          <button type=\"button\" onClick={() => setEditingId(editing ? null : entry.id)}>\n                            {editing ? 'Close note' : entry.note ? 'Edit note' : 'Add note'}\n                          </button>",
+              "                          <button\n                            type=\"button\"\n                            onClick={(event) => {\n                              if (editing) {\n                                closeNoteEditor();\n                                return;\n                              }\n                              editingTriggerRef.current = event.currentTarget;\n                              setEditingId(entry.id);\n                            }}\n                          >\n                            {editing ? 'Close note' : entry.note ? 'Edit note' : 'Add note'}\n                          </button>",
+            ),
+            (
+              "                      {editing && <NoteEditor entry={entry} onSave={onSaveNote} onCancel={() => setEditingId(null)} />}",
+              "                      {editing && <NoteEditor entry={entry} onSave={onSaveNote} onCancel={closeNoteEditor} />}",
+            ),
+          ]
+
+          for old, new in replacements:
+            if source.count(old) != 1:
+              raise SystemExit(f'Expected exactly one source match, found {source.count(old)}: {old[:80]}')
+            source = source.replace(old, new, 1)
+
+          required = [
+            'editingTriggerRef',
+            'const closeNoteEditor = useCallback',
+            'editingTriggerRef.current = event.currentTarget',
+            'onCancel={closeNoteEditor}',
+            '}, [closeNoteEditor]);',
+          ]
+          for contract in required:
+            if contract not in source:
+              raise SystemExit(f'Missing focus contract: {contract}')
+
+          path.write_text(source)
+
+      - name: Run complete release gate
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run check
+
+      - name: Commit source repair and remove temporary workflow
+        run: |
+          set -euo pipefail
+          git config user.name "bookthief666"
+          git config user.email "208150485+bookthief666@users.noreply.github.com"
+          git rm .github/workflows/repair-workbench-note-focus.yml
+          git add src/features/journal/GrimoireWorkbench.jsx
+          git diff --cached --check
+          git commit -m "Restore note editor trigger focus"
+          git push origin HEAD:feature/grimoire-workbench
