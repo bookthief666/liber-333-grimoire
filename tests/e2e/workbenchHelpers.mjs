@@ -71,7 +71,7 @@ export function sampleJournalEntries() {
       schemaVersion: 2,
       date: '2026-07-18T12:00:00.000Z',
       question: 'How should I integrate the recurring contradiction?',
-      chapter: 93,
+      chapter: 3,
       title: 'THE OYSTER',
       gematria: 777,
       interpretation: 'Hold the contradiction until a third movement appears.',
