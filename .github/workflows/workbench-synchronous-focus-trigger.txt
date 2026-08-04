@@ -1,2 +1,3 @@
 Trigger the exact-head synchronous Workbench note-focus repair.
 Base workflow commit: 25f6f120da2ea638df0755ae5f8a741a40867e5e
+Retry: synchronize exact focus repair trigger.
