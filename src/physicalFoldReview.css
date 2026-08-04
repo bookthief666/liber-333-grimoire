@@ -1,0 +1,144 @@
+/* Physical Galaxy Z Fold 6 review refinements.
+   Loaded after the base product and Workbench styles so these rules remain
+   narrowly scoped to the closed-phone viewport observed on real hardware. */
+
+@media (max-width: 430px) {
+  .nav-rail {
+    padding-right: 4.75rem !important;
+    scroll-padding-inline: 1rem 4.75rem;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-rail > button {
+    scroll-snap-align: start;
+  }
+
+  .grimoire-workbench-header {
+    gap: 0.6rem;
+    padding: max(0.7rem, env(safe-area-inset-top)) 0.75rem 0.58rem;
+  }
+
+  .grimoire-eyebrow {
+    margin-bottom: 0.22rem;
+    font-size: 0.52rem;
+    letter-spacing: 0.18em;
+  }
+
+  .grimoire-workbench-header h2 {
+    font-size: clamp(1.45rem, 8vw, 1.8rem);
+  }
+
+  .grimoire-workbench-header p:last-child {
+    margin-top: 0.3rem;
+    font-size: 0.58rem;
+  }
+
+  .grimoire-close {
+    min-width: 2.45rem;
+    min-height: 2.45rem;
+  }
+
+  .grimoire-workbench-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    overflow: visible;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .grimoire-workbench-toolbar button {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.42rem 0.3rem;
+    white-space: normal;
+    font-size: 0.56rem;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+  }
+
+  .grimoire-status {
+    padding: 0.48rem 0.75rem;
+    font-size: 0.6rem;
+  }
+
+  .grimoire-workbench-controls,
+  .grimoire-results {
+    padding-inline: 0.75rem;
+  }
+
+  .grimoire-workbench-controls {
+    padding-block: 0.72rem;
+  }
+
+  .grimoire-search-row input,
+  .grimoire-filter-grid input,
+  .grimoire-filter-grid select {
+    min-width: 0;
+    min-height: 2.45rem;
+    padding: 0.48rem 0.55rem;
+  }
+
+  .grimoire-filter-group {
+    margin-top: 0.72rem;
+  }
+
+  .grimoire-segments {
+    margin-top: 0.35rem;
+  }
+
+  .grimoire-segment {
+    min-height: 2.3rem;
+  }
+
+  .grimoire-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin-top: 0.68rem;
+  }
+
+  .grimoire-filter-grid label {
+    min-width: 0;
+    gap: 0.28rem;
+  }
+
+  .grimoire-favorites-toggle {
+    min-height: 2.4rem;
+    margin-top: 0.65rem;
+  }
+
+  .grimoire-recurrence {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+  }
+
+  .grimoire-section-heading h3 {
+    font-size: 0.92rem;
+  }
+
+  .grimoire-results {
+    padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
+  }
+
+  .grimoire-results-heading {
+    padding-top: 0.68rem;
+  }
+
+  .grimoire-empty {
+    min-height: 11rem;
+  }
+}
+
+@media (max-width: 350px) {
+  .grimoire-workbench-toolbar,
+  .grimoire-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
