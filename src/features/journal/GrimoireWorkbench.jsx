@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatChapterNumber } from '../../data/correspondences.js';
 import {
   DEFAULT_GRIMOIRE_FILTERS,
@@ -156,6 +156,7 @@ export default function GrimoireWorkbench({
   const importInputRef = useRef(null);
   const searchRef = useRef(null);
   const editingIdRef = useRef(null);
+  const editingTriggerRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const [filters, setFilters] = useState(DEFAULT_GRIMOIRE_FILTERS);
   const [status, setStatus] = useState(null);
@@ -173,6 +174,14 @@ export default function GrimoireWorkbench({
     setFilters(DEFAULT_GRIMOIRE_FILTERS);
     requestAnimationFrame(() => searchRef.current?.focus());
   };
+
+  const closeNoteEditor = useCallback(() => {
+    setEditingId(null);
+    requestAnimationFrame(() => {
+      const trigger = editingTriggerRef.current;
+      if (trigger && document.contains(trigger)) trigger.focus();
+    });
+  }, []);
 
   useEffect(() => {
     editingIdRef.current = editingId;
@@ -192,7 +201,7 @@ export default function GrimoireWorkbench({
       if (event.key === 'Escape') {
         if (editingIdRef.current) {
           event.preventDefault();
-          setEditingId(null);
+          closeNoteEditor();
           return;
         }
         event.preventDefault();
@@ -219,7 +228,7 @@ export default function GrimoireWorkbench({
       dialog.removeEventListener('keydown', onKeyDown);
       if (previous && document.contains(previous)) previous.focus?.();
     };
-  }, []);
+  }, [closeNoteEditor]);
 
   useEffect(() => {
     if (!clearArmed) return undefined;
@@ -460,7 +469,17 @@ export default function GrimoireWorkbench({
                           >
                             {entry.favorite ? '★' : '☆'}
                           </button>
-                          <button type="button" onClick={() => setEditingId(editing ? null : entry.id)}>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              if (editing) {
+                                closeNoteEditor();
+                                return;
+                              }
+                              editingTriggerRef.current = event.currentTarget;
+                              setEditingId(entry.id);
+                            }}
+                          >
                             {editing ? 'Close note' : entry.note ? 'Edit note' : 'Add note'}
                           </button>
                           <button type="button" className="danger-text" aria-label={`Delete saved consultation for ${entry.title || `chapter ${entry.chapter}`}`} onClick={() => onDelete?.(entry.id)}>Delete</button>
@@ -468,7 +487,7 @@ export default function GrimoireWorkbench({
                       </div>
 
                       {!editing && entry.note && <p className="grimoire-entry-note">{entry.note}</p>}
-                      {editing && <NoteEditor entry={entry} onSave={onSaveNote} onCancel={() => setEditingId(null)} />}
+                      {editing && <NoteEditor entry={entry} onSave={onSaveNote} onCancel={closeNoteEditor} />}
                     </article>
                   );
                 })}
