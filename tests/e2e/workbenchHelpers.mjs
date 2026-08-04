@@ -71,6 +71,7 @@ export function sampleJournalEntries() {
       schemaVersion: 2,
       date: '2026-07-18T12:00:00.000Z',
       question: 'How should I integrate the recurring contradiction?',
+      // Chapter 3 is the canonical corpus record for THE OYSTER.
       chapter: 3,
       title: 'THE OYSTER',
       gematria: 777,
