@@ -1,0 +1,79 @@
+name: Liber 333 browser QA
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'tests/e2e/**'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/browser-qa.yml'
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: Optional exact HTTPS vercel.app preview URL. Leave blank to test the local production build.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-qa:
+    name: Playwright browser and Fold matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_url || '' }}
+
+    steps:
+      - name: Check out tested tree
+        uses: actions/checkout@v4
+
+      - name: Validate optional preview URL
+        if: env.PLAYWRIGHT_BASE_URL != ''
+        run: |
+          case "$PLAYWRIGHT_BASE_URL" in
+            https://*.vercel.app|https://*.vercel.app/) ;;
+            *) echo "Preview URL must be an HTTPS vercel.app URL." >&2; exit 1 ;;
+          esac
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Install Playwright test runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.54.1
+
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run permanent release gate
+        run: npm run check
+
+      - name: Run browser and Fold matrix
+        run: npx playwright test
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa-${{ github.run_number }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14

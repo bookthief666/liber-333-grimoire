@@ -19,6 +19,8 @@ const chapter = (number) => LIBER_333.find((item) => item.chapter === number);
 
 const entry = (overrides = {}) => ({
   id: 'entry-1',
+  consultationId: 'consultation-1',
+  spreadPosition: 'single',
   date: '2026-07-24T01:00:00.000Z',
   question: 'What remains unfinished?',
   chapter: 8,
@@ -53,10 +55,12 @@ test('backup creation and parsing round-trip through the versioned v2 envelope',
   assert.equal(parsed.entries[0].schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
   assert.equal(parsed.entries[0].favorite, true);
   assert.equal(parsed.entries[0].note, 'A private integration note.');
+  assert.equal(parsed.entries[0].consultationId, 'consultation-1');
+  assert.equal(parsed.entries[0].spreadPosition, 'single');
   assert.ok(text.endsWith('\n'));
 });
 
-test('version 1 backups import with safe Workbench metadata defaults', () => {
+test('version 1 backups ignore accidental v2 fields and import safe Workbench defaults', () => {
   const legacy = {
     format: JOURNAL_BACKUP_FORMAT,
     version: 1,
@@ -73,6 +77,10 @@ test('version 1 backups import with safe Workbench metadata defaults', () => {
       spreadType: 'single',
       planetary: null,
       lunar: null,
+      favorite: 'legacy-noise',
+      note: { ignored: true },
+      consultationId: 333,
+      spreadPosition: 'unknown',
     }],
   };
 
@@ -82,6 +90,8 @@ test('version 1 backups import with safe Workbench metadata defaults', () => {
   assert.equal(parsed.entries[0].schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
   assert.equal(parsed.entries[0].favorite, false);
   assert.equal(parsed.entries[0].note, '');
+  assert.equal('consultationId' in parsed.entries[0], false);
+  assert.equal('spreadPosition' in parsed.entries[0], false);
 });
 
 test('backup filenames are readable and date-stable', () => {
@@ -129,6 +139,14 @@ test('invalid JSON, formats, future versions, chapters, metadata, and duplicate 
     entries: [entry({ note: 333 })],
     totalReadings: 1,
   }), /Integration note must be text/);
+  assert.throws(() => createJournalBackup({
+    entries: [entry({ consultationId: 333 })],
+    totalReadings: 1,
+  }), /Consultation ID must be text/);
+  assert.throws(() => createJournalBackup({
+    entries: [entry({ spreadPosition: 'middle' })],
+    totalReadings: 1,
+  }), /Spread position must be/);
   assert.throws(() => createJournalBackup({
     entries: [entry({ id: 'same' }), entry({ id: 'same', chapter: 44 })],
     totalReadings: 2,
@@ -210,6 +228,8 @@ test('optional fields remain nullable while Workbench fields receive stable defa
       spreadType: '',
       favorite: undefined,
       note: undefined,
+      consultationId: undefined,
+      spreadPosition: undefined,
     })],
     totalReadings: 1,
   });
@@ -221,5 +241,7 @@ test('optional fields remain nullable while Workbench fields receive stable defa
   assert.equal(backup.entries[0].title, chapter(8).title);
   assert.equal(backup.entries[0].favorite, false);
   assert.equal(backup.entries[0].note, '');
+  assert.equal('consultationId' in backup.entries[0], false);
+  assert.equal('spreadPosition' in backup.entries[0], false);
   assert.equal(backup.entries[0].schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
 });

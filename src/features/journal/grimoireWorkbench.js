@@ -1,3 +1,4 @@
+import { LIBER_333 } from '../../data/liber333.js';
 import {
   JOURNAL_NOTE_LIMIT,
   normalizeJournalNote,
@@ -18,9 +19,14 @@ export const DEFAULT_GRIMOIRE_FILTERS = Object.freeze({
 
 const SPREAD_FILTERS = new Set(['all', 'single', 'triad']);
 const SORT_ORDERS = new Set(['newest', 'oldest']);
+const CHAPTER_BY_NUMBER = new Map(LIBER_333.map((chapter) => [chapter.chapter, chapter]));
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function explicitText(value) {
+  return typeof value === 'string' && value.trim() ? value : null;
 }
 
 function normalizeText(value) {
@@ -33,8 +39,9 @@ function normalizeText(value) {
 }
 
 function normalizeChapterNumber(value) {
+  if (value === undefined || value === null || value === '') return null;
   const number = Number(value);
-  return Number.isInteger(number) && number >= 0 ? number : null;
+  return Number.isInteger(number) && CHAPTER_BY_NUMBER.has(number) ? number : null;
 }
 
 function normalizeDateBoundary(value, { endOfDay = false } = {}) {
@@ -53,7 +60,17 @@ function normalizeDateBoundary(value, { endOfDay = false } = {}) {
 }
 
 export function normalizeSpreadType(value) {
-  return String(value ?? '').toLocaleLowerCase('en-US').includes('triad') ? 'triad' : 'single';
+  const normalized = String(value ?? '').trim().toLocaleLowerCase('en-US');
+  const isTriad = normalized === 'spread'
+    || normalized.includes('triad')
+    || normalized.includes('three-card')
+    || normalized.includes('three card')
+    || (
+      normalized.includes('thesis')
+      && normalized.includes('antithesis')
+      && normalized.includes('synthesis')
+    );
+  return isTriad ? 'triad' : 'single';
 }
 
 export function normalizeGrimoireNote(value) {
@@ -75,43 +92,79 @@ export function normalizeGrimoireFilters(filters = {}) {
 }
 
 function chapterRecord(value, fallbackTitle = null) {
-  if (Number.isInteger(value)) return { chapter: value, title: fallbackTitle };
-  if (!isPlainObject(value)) return null;
-  const chapter = normalizeChapterNumber(value.chapter ?? value.number);
+  const source = Number.isInteger(value) ? { chapter: value } : value;
+  if (!isPlainObject(source)) return null;
+  const chapter = normalizeChapterNumber(source.chapter ?? source.number);
   if (chapter === null) return null;
+
+  const canonical = CHAPTER_BY_NUMBER.get(chapter) || {};
+  const explicit = {
+    title: explicitText(source.title) || explicitText(fallbackTitle),
+    sourceText: explicitText(source.sourceText ?? source.text),
+    commentary: explicitText(source.fixedCommentary ?? source.commentary),
+    interpretation: explicitText(source.oracleInterpretation ?? source.interpretation),
+  };
+
   return {
     chapter,
-    title: typeof value.title === 'string' && value.title.trim() ? value.title.trim() : fallbackTitle,
-    sourceText: typeof value.sourceText === 'string' ? value.sourceText : value.text,
-    commentary: value.fixedCommentary ?? value.commentary ?? null,
-    interpretation: value.oracleInterpretation ?? value.interpretation ?? null,
+    title: explicit.title || explicitText(canonical.title),
+    sourceText: explicit.sourceText || explicitText(canonical.text),
+    commentary: explicit.commentary || explicitText(canonical.commentary),
+    interpretation: explicit.interpretation,
+    _explicit: {
+      title: Boolean(explicit.title),
+      sourceText: Boolean(explicit.sourceText),
+      commentary: Boolean(explicit.commentary),
+      interpretation: Boolean(explicit.interpretation),
+    },
   };
+}
+
+function mergeChapterRecords(current, incoming) {
+  if (!current) return incoming;
+  const merged = {
+    ...current,
+    _explicit: { ...current._explicit },
+  };
+  for (const field of ['title', 'sourceText', 'commentary', 'interpretation']) {
+    if (incoming._explicit?.[field]) {
+      merged[field] = incoming[field];
+      merged._explicit[field] = true;
+    } else if (!merged[field] && incoming[field]) {
+      merged[field] = incoming[field];
+    }
+  }
+  return merged;
 }
 
 export function getEntryChapterRecords(entry) {
   if (!isPlainObject(entry)) return [];
-  const records = [];
+  const byChapter = new Map();
   const append = (value, fallbackTitle = null) => {
     const record = chapterRecord(value, fallbackTitle);
-    if (record) records.push(record);
+    if (!record) return;
+    byChapter.set(record.chapter, mergeChapterRecords(byChapter.get(record.chapter), record));
   };
 
-  append(entry.chapter, typeof entry.title === 'string' ? entry.title : null);
+  append({
+    chapter: entry.chapter,
+    title: entry.title,
+    sourceText: entry.sourceText,
+    fixedCommentary: entry.fixedCommentary,
+    commentary: entry.commentary,
+    oracleInterpretation: entry.oracleInterpretation,
+    interpretation: entry.interpretation,
+  });
+
   for (const key of ['chapters', 'triad', 'selectedChapters']) {
     if (Array.isArray(entry[key])) entry[key].forEach((value) => append(value));
   }
 
-  const seen = new Set();
-  return records.filter((record) => {
-    const key = `${record.chapter}:${record.title || ''}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return [...byChapter.values()].map(({ _explicit, ...record }) => record);
 }
 
 export function getEntryChapterNumbers(entry) {
-  return [...new Set(getEntryChapterRecords(entry).map((record) => record.chapter))];
+  return getEntryChapterRecords(entry).map((record) => record.chapter);
 }
 
 function buildSearchDocument(entry) {
@@ -128,6 +181,7 @@ function buildSearchDocument(entry) {
     entry?.planetary,
     entry?.lunar,
     entry?.spreadType,
+    entry?.spreadPosition,
     entry?.gematria,
   ];
 
@@ -151,11 +205,11 @@ export function entryMatchesGrimoireFilters(entry, filters = DEFAULT_GRIMOIRE_FI
   if (normalized.favoritesOnly && entry.favorite !== true) return false;
   if (normalized.chapter !== null && !getEntryChapterNumbers(entry).includes(normalized.chapter)) return false;
 
-  const timestamp = Date.parse(entry.date);
+  const entryTimestamp = Date.parse(entry.date);
   const from = normalizeDateBoundary(normalized.from);
   const to = normalizeDateBoundary(normalized.to, { endOfDay: true });
-  if (from !== null && (Number.isNaN(timestamp) || timestamp < from)) return false;
-  if (to !== null && (Number.isNaN(timestamp) || timestamp > to)) return false;
+  if (from !== null && (Number.isNaN(entryTimestamp) || entryTimestamp < from)) return false;
+  if (to !== null && (Number.isNaN(entryTimestamp) || entryTimestamp > to)) return false;
 
   const query = normalizeText(normalized.query);
   if (query) {
@@ -200,13 +254,32 @@ export function updateGrimoireEntryMetadata(entries, id, patch = {}) {
   return found ? updated : [...entries];
 }
 
+export function getGrimoireConsultationKey(entry) {
+  const explicit = explicitText(entry?.consultationId);
+  if (explicit) return `consultation:${explicit}`;
+
+  if (normalizeSpreadType(entry?.spreadType) === 'triad') {
+    const parsed = Date.parse(entry?.date);
+    const minute = Number.isNaN(parsed) ? 'unknown-time' : new Date(parsed).toISOString().slice(0, 16);
+    return [
+      'legacy-triad',
+      normalizeText(entry?.question),
+      minute,
+      normalizeText(entry?.gematria),
+    ].join(':');
+  }
+
+  const id = explicitText(entry?.id);
+  return `entry:${id || `${normalizeText(entry?.question)}:${timestamp(entry)}`}`;
+}
+
 export function buildGrimoireRecurrence(entries) {
   if (!Array.isArray(entries)) return [];
   const summary = new Map();
 
   entries.forEach((entry) => {
     const records = getEntryChapterRecords(entry);
-    const consultationChapters = new Set();
+    const consultationKey = getGrimoireConsultationKey(entry);
 
     records.forEach((record) => {
       const current = summary.get(record.chapter) || {
@@ -217,6 +290,8 @@ export function buildGrimoireRecurrence(entries) {
         favoriteConsultations: 0,
         latestDate: null,
         entryIds: [],
+        consultationKeys: new Set(),
+        favoriteKeys: new Set(),
       };
 
       current.appearances += 1;
@@ -226,20 +301,25 @@ export function buildGrimoireRecurrence(entries) {
       const entryTimestamp = timestamp(entry);
       if (entryTimestamp > timestamp({ date: current.latestDate })) current.latestDate = entry.date;
 
-      if (!consultationChapters.has(record.chapter)) {
-        consultationChapters.add(record.chapter);
+      if (!current.consultationKeys.has(consultationKey)) {
+        current.consultationKeys.add(consultationKey);
         current.consultations += 1;
-        if (entry?.favorite === true) current.favoriteConsultations += 1;
+      }
+      if (entry?.favorite === true && !current.favoriteKeys.has(consultationKey)) {
+        current.favoriteKeys.add(consultationKey);
+        current.favoriteConsultations += 1;
       }
 
       summary.set(record.chapter, current);
     });
   });
 
-  return [...summary.values()].sort((left, right) => (
-    right.appearances - left.appearances
-    || right.consultations - left.consultations
-    || timestamp({ date: right.latestDate }) - timestamp({ date: left.latestDate })
-    || left.chapter - right.chapter
-  ));
+  return [...summary.values()]
+    .map(({ consultationKeys, favoriteKeys, ...item }) => item)
+    .sort((left, right) => (
+      right.appearances - left.appearances
+      || right.consultations - left.consultations
+      || timestamp({ date: right.latestDate }) - timestamp({ date: left.latestDate })
+      || left.chapter - right.chapter
+    ));
 }

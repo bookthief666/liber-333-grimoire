@@ -104,6 +104,7 @@ function NoteEditor({ entry, onSave, onCancel }) {
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
+            event.stopPropagation();
             onCancel();
           }
           if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -154,6 +155,8 @@ export default function GrimoireWorkbench({
   const dialogRef = useRef(null);
   const importInputRef = useRef(null);
   const searchRef = useRef(null);
+  const editingIdRef = useRef(null);
+  const onCloseRef = useRef(onClose);
   const [filters, setFilters] = useState(DEFAULT_GRIMOIRE_FILTERS);
   const [status, setStatus] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -172,6 +175,14 @@ export default function GrimoireWorkbench({
   };
 
   useEffect(() => {
+    editingIdRef.current = editingId;
+  }, [editingId]);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
     const previous = document.activeElement;
@@ -179,13 +190,13 @@ export default function GrimoireWorkbench({
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
-        if (editingId) {
+        if (editingIdRef.current) {
           event.preventDefault();
           setEditingId(null);
           return;
         }
         event.preventDefault();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -208,7 +219,7 @@ export default function GrimoireWorkbench({
       dialog.removeEventListener('keydown', onKeyDown);
       if (previous && document.contains(previous)) previous.focus?.();
     };
-  }, [editingId, onClose]);
+  }, []);
 
   useEffect(() => {
     if (!clearArmed) return undefined;

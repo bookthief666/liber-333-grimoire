@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  JOURNAL_CONSULTATION_ID_LIMIT,
   JOURNAL_ENTRY_SCHEMA_VERSION,
   JOURNAL_NOTE_LIMIT,
   migrateJournalEntries,
@@ -23,14 +24,28 @@ test('migrates legacy entries without losing unknown reading data', () => {
   });
 });
 
-test('normalizes legacy note aliases and preserves favorites', () => {
+test('normalizes legacy note aliases, favorites, and grouped-consultation metadata', () => {
   const migrated = migrateJournalEntry({
     id: 'legacy',
     favorite: true,
     integrationNote: 'First line.\r\nSecond line.',
+    consultationId: ' consultation-333 ',
+    spreadPosition: 'SYNTHESIS',
   });
   assert.equal(migrated.favorite, true);
   assert.equal(migrated.note, 'First line.\nSecond line.');
+  assert.equal(migrated.consultationId, 'consultation-333');
+  assert.equal(migrated.spreadPosition, 'synthesis');
+});
+
+test('drops invalid consultation metadata and bounds valid IDs', () => {
+  const migrated = migrateJournalEntry({
+    id: 'legacy',
+    consultationId: 'x'.repeat(JOURNAL_CONSULTATION_ID_LIMIT + 10),
+    spreadPosition: 'unknown',
+  });
+  assert.equal(migrated.consultationId.length, JOURNAL_CONSULTATION_ID_LIMIT);
+  assert.equal('spreadPosition' in migrated, false);
 });
 
 test('storage migration drops non-object values and safely truncates oversized legacy notes', () => {

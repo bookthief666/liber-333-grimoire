@@ -29,9 +29,15 @@ export function readJournalState(storage) {
   return { entries, totalReadings };
 }
 
+export function prependJournalEntries(entries, additions) {
+  const migratedAdditions = migrateJournalEntries(additions);
+  const migratedEntries = migrateJournalEntries(entries);
+  return [...migratedAdditions, ...migratedEntries].slice(0, MAX_JOURNAL_ENTRIES);
+}
+
 export function prependJournalEntry(entries, entry) {
   const migrated = migrateJournalEntry(entry);
-  return migrated ? [migrated, ...migrateJournalEntries(entries)].slice(0, MAX_JOURNAL_ENTRIES) : migrateJournalEntries(entries);
+  return migrated ? prependJournalEntries(entries, [migrated]) : migrateJournalEntries(entries);
 }
 
 export function removeJournalEntry(entries, id) {
@@ -48,6 +54,12 @@ export function getRecentJournalReadings(entries, limit = 5) {
 
 export function getMilestoneForTotal(totalReadings) {
   return JOURNAL_MILESTONES.includes(totalReadings) ? totalReadings : null;
+}
+
+export function getMilestoneCrossed(previousTotal, nextTotal) {
+  const previous = Number.isInteger(previousTotal) ? previousTotal : 0;
+  const next = Number.isInteger(nextTotal) ? nextTotal : previous;
+  return [...JOURNAL_MILESTONES].reverse().find((milestone) => milestone > previous && milestone <= next) || null;
 }
 
 export function writeJournalEntries(storage, entries) {

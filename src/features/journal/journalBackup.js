@@ -1,6 +1,7 @@
 import { LIBER_333 } from '../../data/liber333.js';
 import { MAX_JOURNAL_ENTRIES } from './journalStorage.js';
 import {
+  JOURNAL_CONSULTATION_ID_LIMIT,
   JOURNAL_ENTRY_SCHEMA_VERSION,
   JOURNAL_NOTE_LIMIT,
   migrateJournalEntries,
@@ -15,6 +16,7 @@ export const JOURNAL_BACKUP_LIMITS = Object.freeze({
   fileBytes: 2 * 1024 * 1024,
   entries: MAX_JOURNAL_ENTRIES,
   idChars: 128,
+  consultationIdChars: JOURNAL_CONSULTATION_ID_LIMIT,
   questionChars: 4000,
   interpretationChars: 50000,
   noteChars: JOURNAL_NOTE_LIMIT,
@@ -23,6 +25,7 @@ export const JOURNAL_BACKUP_LIMITS = Object.freeze({
 });
 
 const CHAPTER_BY_NUMBER = new Map(LIBER_333.map((chapter) => [chapter.chapter, chapter]));
+const SPREAD_POSITIONS = new Set(['single', 'thesis', 'antithesis', 'synthesis']);
 
 export class JournalBackupError extends Error {
   constructor(message, code = 'invalid_journal_backup') {
@@ -74,7 +77,17 @@ function normalizeNote(value) {
   }
 }
 
-export function normalizeJournalEntry(entry) {
+function normalizeSpreadPosition(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = requireString(value, 'Spread position', JOURNAL_BACKUP_LIMITS.labelChars)
+    .toLocaleLowerCase('en-US');
+  if (!SPREAD_POSITIONS.has(normalized)) {
+    throw new JournalBackupError('Spread position must be single, thesis, antithesis, or synthesis.');
+  }
+  return normalized;
+}
+
+export function normalizeJournalEntry(entry, { sourceVersion = JOURNAL_BACKUP_VERSION } = {}) {
   if (!isPlainObject(entry)) throw new JournalBackupError('Each journal entry must be an object.');
 
   const id = requireString(entry.id, 'Entry ID', JOURNAL_BACKUP_LIMITS.idChars);
@@ -86,7 +99,7 @@ export function normalizeJournalEntry(entry) {
   }
   const chapter = CHAPTER_BY_NUMBER.get(entry.chapter);
 
-  return {
+  const normalized = {
     id,
     date,
     question,
@@ -98,12 +111,25 @@ export function normalizeJournalEntry(entry) {
     planetary: optionalString(entry.planetary, 'Planetary label', JOURNAL_BACKUP_LIMITS.labelChars),
     lunar: optionalString(entry.lunar, 'Lunar label', JOURNAL_BACKUP_LIMITS.labelChars),
     schemaVersion: JOURNAL_ENTRY_SCHEMA_VERSION,
-    favorite: normalizeFavorite(entry.favorite),
-    note: normalizeNote(entry.note ?? entry.integrationNote),
+    favorite: sourceVersion === 1 ? false : normalizeFavorite(entry.favorite),
+    note: sourceVersion === 1 ? '' : normalizeNote(entry.note ?? entry.integrationNote),
   };
+
+  if (sourceVersion !== 1) {
+    const consultationId = optionalString(
+      entry.consultationId,
+      'Consultation ID',
+      JOURNAL_BACKUP_LIMITS.consultationIdChars,
+    );
+    const spreadPosition = normalizeSpreadPosition(entry.spreadPosition);
+    if (consultationId) normalized.consultationId = consultationId;
+    if (spreadPosition) normalized.spreadPosition = spreadPosition;
+  }
+
+  return normalized;
 }
 
-function normalizeEntries(entries) {
+function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = {}) {
   if (!Array.isArray(entries)) throw new JournalBackupError('Backup entries must be an array.');
   if (entries.length > JOURNAL_BACKUP_LIMITS.entries) {
     throw new JournalBackupError(`A backup may contain at most ${JOURNAL_BACKUP_LIMITS.entries} entries.`);
@@ -111,7 +137,7 @@ function normalizeEntries(entries) {
 
   const ids = new Set();
   return entries.map((entry) => {
-    const normalized = normalizeJournalEntry(entry);
+    const normalized = normalizeJournalEntry(entry, { sourceVersion });
     if (ids.has(normalized.id)) throw new JournalBackupError(`Backup contains duplicate entry ID ${normalized.id}.`);
     ids.add(normalized.id);
     return normalized;
@@ -133,7 +159,7 @@ function normalizeExportedAt(value) {
 }
 
 export function createJournalBackup({ entries, totalReadings, exportedAt = new Date() }) {
-  const normalizedEntries = normalizeEntries(entries);
+  const normalizedEntries = normalizeEntries(entries, { sourceVersion: JOURNAL_BACKUP_VERSION });
   const exportedAtIso = exportedAt instanceof Date
     ? exportedAt.toISOString()
     : normalizeExportedAt(exportedAt);
@@ -179,7 +205,7 @@ export function parseJournalBackup(input) {
     );
   }
 
-  const entries = normalizeEntries(parsed.entries);
+  const entries = normalizeEntries(parsed.entries, { sourceVersion: parsed.version });
   return {
     format: JOURNAL_BACKUP_FORMAT,
     version: JOURNAL_BACKUP_VERSION,
