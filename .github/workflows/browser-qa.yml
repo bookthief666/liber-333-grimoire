@@ -1,0 +1,97 @@
+name: Settings Browser QA
+
+on:
+  pull_request:
+    branches:
+      - feature/settings-accessibility-performance
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: Optional exact liber-333 Preview URL. Leave blank to test the local production build.
+        required: false
+        type: string
+      expected_feature_sha:
+        description: Approved PR #38 feature SHA.
+        required: true
+        default: e8daae0ee445a2ef3f0a1e96a8f506fdaeacdd23
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: settings-browser-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-qa:
+    name: Playwright browser matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      APPROVED_FEATURE_SHA: e8daae0ee445a2ef3f0a1e96a8f506fdaeacdd23
+      PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_url || '' }}
+
+    steps:
+      - name: Check out QA test branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'agent/settings-browser-qa' || '' }}
+          fetch-depth: 0
+
+      - name: Assemble and verify the approved PR #38 test tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/settings-accessibility-performance
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            git merge --no-commit --no-ff origin/feature/settings-accessibility-performance || {
+              git merge --abort || true
+              exit 1
+            }
+            test "${{ inputs.expected_feature_sha }}" = "$APPROVED_FEATURE_SHA"
+            if [[ -n "${PLAYWRIGHT_BASE_URL}" ]]; then
+              case "$PLAYWRIGHT_BASE_URL" in
+                https://*.vercel.app|https://*.vercel.app/) ;;
+                *) echo "Preview URL must be an HTTPS vercel.app deployment URL." >&2; exit 1 ;;
+              esac
+            fi
+          fi
+
+          git cat-file -e "${APPROVED_FEATURE_SHA}^{commit}"
+          git merge-base --is-ancestor "$APPROVED_FEATURE_SHA" HEAD
+          echo "Approved feature base: $APPROVED_FEATURE_SHA"
+          echo "Test tree: $(git rev-parse HEAD)"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci
+
+      - name: Install browser-test dependencies
+        run: npm install --no-save --package-lock=false @playwright/test@1.54.1 @axe-core/playwright@4.10.2
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run permanent release gate
+        run: npm run check
+
+      - name: Run Playwright browser QA
+        run: npx playwright test
+
+      - name: Upload Playwright report and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: settings-browser-qa-${{ github.run_number }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14

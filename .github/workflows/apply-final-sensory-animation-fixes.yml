@@ -1,0 +1,326 @@
+name: Apply Final Sensory And Sigil Fixes
+
+on:
+  pull_request:
+    branches:
+      - feature/settings-accessibility-performance
+    paths:
+      - .github/workflows/apply-final-sensory-animation-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/settings-accessibility-performance
+          fetch-depth: 0
+
+      - name: Verify approved starting head
+        run: test "$(git rev-parse HEAD)" = "e8daae0ee445a2ef3f0a1e96a8f506fdaeacdd23"
+
+      - name: Stop reduced-mode sigil timing
+        shell: python
+        run: |
+          from pathlib import Path
+          from textwrap import dedent
+
+          path = Path('src/liber333.jsx')
+          text = path.read_text()
+
+          hook_start = text.index('const useReducedAnimationBudget = () => {')
+          hook_end = text.index('const GlitchText =', hook_start)
+          hook = text[hook_start:hook_end]
+          text = text[:hook_start] + text[hook_end:]
+
+          sigil_start = text.index('const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true,')
+          text = text[:sigil_start] + hook + text[sigil_start:]
+
+          old = dedent('''
+            const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
+                                     evolutionRings = 0, accentColor = "#dc2626" }) => {
+              const [time, setTime] = useState(0);
+              useEffect(() => {
+                if (!spinning) return;
+                const iv = setInterval(() => setTime(t => t + 0.02), 16);
+                return () => clearInterval(iv);
+              }, [spinning]);
+          ''')
+          new = dedent('''
+            const AnimatedSigil = ({ input, size = 200, spinning = true, glowing = true, 
+                                     evolutionRings = 0, accentColor = "#dc2626" }) => {
+              const [time, setTime] = useState(0);
+              const reducedAnimation = useReducedAnimationBudget();
+              useEffect(() => {
+                if (!spinning || reducedAnimation) {
+                  setTime(0);
+                  return undefined;
+                }
+                const iv = setInterval(() => setTime(t => t + 0.02), 16);
+                return () => clearInterval(iv);
+              }, [spinning, reducedAnimation]);
+          ''')
+          if old not in text:
+            raise SystemExit('AnimatedSigil timer block not found')
+          path.write_text(text.replace(old, new, 1))
+
+      - name: Drop audio sources scheduled while Sound is off
+        shell: python
+        run: |
+          from pathlib import Path
+          from textwrap import dedent
+
+          path = Path('src/features/settings/experienceSettings.js')
+          text = path.read_text()
+          start = text.index('function installSensoryGuards(windowObject, navigatorObject, getSettings) {')
+          end = text.index('export function createExperienceSettingsRuntime({', start)
+          replacement = dedent('''
+            function installSensoryGuards(windowObject, navigatorObject, getSettings) {
+              const cleanups = [];
+              const contexts = new Set();
+              const pendingSuspends = new WeakMap();
+              const patchSymbol = Symbol.for('liber333.experience.audio.patch');
+              let previousSound = Boolean(getSettings().sound);
+
+              const resumeWhenSettled = (context) => {
+                const resumeIfNeeded = () => {
+                  if (getSettings().sound && context?.state !== 'closed' && context?.state !== 'running') {
+                    return context?.resume?.().catch?.(() => {});
+                  }
+                  return undefined;
+                };
+                const pending = pendingSuspends.get(context);
+                if (pending) pending.finally(resumeIfNeeded);
+                else resumeIfNeeded();
+              };
+
+              const suspendContext = (context) => {
+                if (!context || context.state === 'closed') return Promise.resolve();
+                const existing = pendingSuspends.get(context);
+                if (existing) return existing;
+                let pending;
+                try {
+                  pending = Promise.resolve(context.suspend?.()).catch(() => {});
+                } catch {
+                  pending = Promise.resolve();
+                }
+                pendingSuspends.set(context, pending);
+                pending.finally(() => {
+                  if (pendingSuspends.get(context) === pending) pendingSuspends.delete(context);
+                  if (getSettings().sound) resumeWhenSettled(context);
+                });
+                return pending;
+              };
+
+              const discardSource = (source) => {
+                try { source?.stop?.(0); } catch { /* An unstarted source may reject stop(). */ }
+                try { source?.disconnect?.(); } catch { /* Disconnection is best-effort. */ }
+              };
+
+              for (const name of ['AudioContext', 'webkitAudioContext']) {
+                const Constructor = windowObject?.[name];
+                const prototype = Constructor?.prototype;
+                if (!prototype || prototype[patchSymbol]) continue;
+
+                const originalResume = prototype.resume;
+                const originalCreateGain = prototype.createGain;
+                const originalSourceFactories = new Map();
+
+                const resume = function controlledResume(...args) {
+                  contexts.add(this);
+                  if (!getSettings().sound) return Promise.resolve();
+                  return originalResume?.apply(this, args);
+                };
+
+                const createGain = typeof originalCreateGain === 'function'
+                  ? function controlledCreateGain(...args) {
+                      contexts.add(this);
+                      const node = originalCreateGain.apply(this, args);
+                      if (!getSettings().sound && this?.state !== 'closed') {
+                        queueMicrotask(() => suspendContext(this));
+                      }
+                      return node;
+                    }
+                  : originalCreateGain;
+
+                try {
+                  prototype.resume = resume;
+                  if (typeof originalCreateGain === 'function') prototype.createGain = createGain;
+
+                  for (const methodName of ['createOscillator', 'createBufferSource']) {
+                    const originalFactory = prototype[methodName];
+                    if (typeof originalFactory !== 'function') continue;
+                    originalSourceFactories.set(methodName, originalFactory);
+                    prototype[methodName] = function controlledCreateSource(...args) {
+                      contexts.add(this);
+                      const blockedAtCreation = !getSettings().sound;
+                      const source = originalFactory.apply(this, args);
+                      if (!source || typeof source.start !== 'function') return source;
+                      const originalStart = source.start.bind(source);
+                      source.start = (...startArgs) => {
+                        if (blockedAtCreation || !getSettings().sound) {
+                          discardSource(source);
+                          return undefined;
+                        }
+                        return originalStart(...startArgs);
+                      };
+                      return source;
+                    };
+                  }
+
+                  prototype[patchSymbol] = true;
+                  cleanups.push(() => {
+                    if (prototype.resume === resume) prototype.resume = originalResume;
+                    if (typeof originalCreateGain === 'function' && prototype.createGain === createGain) {
+                      prototype.createGain = originalCreateGain;
+                    }
+                    originalSourceFactories.forEach((originalFactory, methodName) => {
+                      prototype[methodName] = originalFactory;
+                    });
+                    try { delete prototype[patchSymbol]; } catch { /* non-critical */ }
+                  });
+                } catch {
+                  // Some browser prototypes are non-writable. The root setting still communicates state.
+                }
+              }
+
+              const synth = windowObject?.speechSynthesis;
+              if (synth?.speak) {
+                const originalSpeak = synth.speak.bind(synth);
+                const guardedSpeak = (utterance) => {
+                  if (!getSettings().voice) {
+                    synth.cancel?.();
+                    queueMicrotask(() => {
+                      try {
+                        utterance?.onerror?.({ error: 'canceled', type: 'error', target: utterance });
+                      } catch {
+                        // An utterance callback must never compromise the settings runtime.
+                      }
+                    });
+                    return undefined;
+                  }
+                  return originalSpeak(utterance);
+                };
+                try {
+                  synth.speak = guardedSpeak;
+                  cleanups.push(() => { if (synth.speak === guardedSpeak) synth.speak = originalSpeak; });
+                } catch {
+                  // Speech synthesis may expose read-only methods.
+                }
+              }
+
+              const originalVibrate = navigatorObject?.vibrate?.bind(navigatorObject);
+              if (originalVibrate) {
+                const guardedVibrate = (pattern) => (getSettings().haptics ? originalVibrate(pattern) : false);
+                try {
+                  Object.defineProperty(navigatorObject, 'vibrate', { configurable: true, value: guardedVibrate });
+                  cleanups.push(() => {
+                    try { Object.defineProperty(navigatorObject, 'vibrate', { configurable: true, value: originalVibrate }); } catch { /* non-critical */ }
+                  });
+                } catch {
+                  // Navigator methods may not be configurable.
+                }
+              }
+
+              return {
+                onSettingsChanged(settings) {
+                  if (!settings.sound) {
+                    contexts.forEach((context) => suspendContext(context));
+                  } else if (!previousSound) {
+                    contexts.forEach((context) => resumeWhenSettled(context));
+                  }
+                  previousSound = Boolean(settings.sound);
+                  if (!settings.voice) synth?.cancel?.();
+                },
+                destroy() {
+                  cleanups.reverse().forEach((cleanup) => cleanup());
+                },
+              };
+            }
+
+          ''')
+          path.write_text(text[:start] + replacement + text[end:])
+
+      - name: Add deterministic source-drop coverage
+        shell: python
+        run: |
+          from pathlib import Path
+          from textwrap import dedent
+
+          path = Path('tests/experienceSettings.test.mjs')
+          text = path.read_text()
+          marker = "test('blocked speech schedules an utterance error so speaking state can settle', async () => {"
+          if marker not in text:
+            raise SystemExit('source-drop test marker not found')
+          test = dedent('''
+            test('audio sources created or started while Sound is off are discarded instead of queued', async () => {
+              let starts = 0;
+              let disconnects = 0;
+              class FakeAudioContext {
+                constructor() { this.state = 'running'; }
+                createGain() { return {}; }
+                createOscillator() {
+                  return {
+                    start() { starts += 1; },
+                    stop() {},
+                    disconnect() { disconnects += 1; },
+                  };
+                }
+                suspend() { this.state = 'suspended'; return Promise.resolve(); }
+                resume() { this.state = 'running'; return Promise.resolve(); }
+              }
+              const runtime = createExperienceSettingsRuntime({
+                windowObject: { AudioContext: FakeAudioContext, dispatchEvent() {} },
+                documentObject: null,
+                navigatorObject: null,
+                storage: memoryStorage(),
+              });
+              const context = new FakeAudioContext();
+              context.createGain();
+              runtime.setSettings({ sound: false });
+              const mutedSource = context.createOscillator();
+              mutedSource.start();
+              assert.equal(starts, 0);
+              assert.equal(disconnects, 1);
+
+              runtime.setSettings({ sound: true });
+              await Promise.resolve();
+              mutedSource.start();
+              assert.equal(starts, 0);
+
+              const audibleSource = context.createOscillator();
+              audibleSource.start();
+              assert.equal(starts, 1);
+              runtime.destroy();
+            });
+
+          ''')
+          text = text.replace(marker, test + marker, 1)
+
+          contract = "assert.match(reader, /if \\(reducedAnimation\\) \\{/);"
+          if contract not in text:
+            raise SystemExit('animation contract marker not found')
+          text = text.replace(
+              contract,
+              contract + "\n  assert.match(reader, /if \\(!spinning \\|\\| reducedAnimation\\)/);\n  assert.match(runtime, /createOscillator/);\n  assert.match(runtime, /blockedAtCreation/);",
+              1,
+          )
+          path.write_text(text)
+
+      - name: Run complete release gate
+        run: npm ci && npm run check
+
+      - name: Commit and push exact repair
+        run: |
+          set -euo pipefail
+          git config user.name "bookthief666"
+          git config user.email "208150485+bookthief666@users.noreply.github.com"
+          git add src/liber333.jsx src/features/settings/experienceSettings.js tests/experienceSettings.test.mjs
+          git diff --cached --check
+          git commit -m "Stop reduced sigil and muted audio queues"
+          git push origin HEAD:feature/settings-accessibility-performance
