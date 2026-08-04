@@ -1,2 +1,3 @@
 Trigger the exact-head Grimoire Workbench integration for PR #44.
-Base integrator commit: b34d13f91fd7e7f05bea267ef81f625103a72d61
+Base integrator commit: 4f779e3f1d6a3776b0670ad328a9999f0cffd973
+Retry: structural marker integration.
