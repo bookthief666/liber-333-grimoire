@@ -82,6 +82,7 @@ test.describe('Grimoire Workbench', () => {
     await page.keyboard.press('Escape');
     await expect(discipline.getByLabel('Private integration note')).toBeHidden();
     await expect(dialog).toBeVisible();
+    await expect(discipline.getByRole('button', { name: 'Add note' })).toBeFocused();
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
