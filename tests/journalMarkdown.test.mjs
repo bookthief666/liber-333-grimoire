@@ -21,7 +21,7 @@ const entries = [{
   chapters: [
     { chapter: 7, title: 'THE DINOSAURS', sourceText: 'Source seven.' },
     { chapter: 33, title: 'BAAPHOMET', commentary: 'Fixed commentary thirty-three.' },
-    { chapter: 93, title: 'THE OYSTER', interpretation: 'Oracle layer ninety-three.' },
+    { chapter: 3, title: 'THE OYSTER', interpretation: 'Oracle layer three.' },
   ],
   note: 'Take one action.\nReview it tomorrow.',
 }];
@@ -43,13 +43,13 @@ test('serializes a readable provenance-labeled local export', () => {
   assert.match(markdown, /\*\*Favorite:\*\* Yes/);
   assert.match(markdown, /Chapter 7 — THE DINOSAURS/);
   assert.match(markdown, /Chapter 33 — BAAPHOMET/);
-  assert.match(markdown, /Chapter 93 — THE OYSTER/);
+  assert.match(markdown, /Chapter 3 — THE OYSTER/);
   assert.match(markdown, /#### Source text/);
   assert.match(markdown, /> Source seven\./);
   assert.match(markdown, /#### Fixed editorial commentary/);
   assert.match(markdown, /> Fixed commentary thirty-three\./);
   assert.match(markdown, /#### Oracle interpretation/);
-  assert.match(markdown, /> Oracle layer ninety-three\./);
+  assert.match(markdown, /> Oracle layer three\./);
   assert.match(markdown, /#### Private integration note/);
   assert.match(markdown, /> Take one action\.\n> Review it tomorrow\./);
   assert.match(markdown, /> How should I proceed\?\n> Without repeating the old pattern\?/);
