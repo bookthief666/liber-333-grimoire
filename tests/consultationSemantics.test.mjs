@@ -109,9 +109,10 @@ test('retains a complete legacy Triad across a minute boundary at the cap', () =
     '2026-08-05T03:01:00.100Z',
     '2026-08-05T03:00:59.500Z',
   ]);
+  const legacyIds = new Set(legacy.map((entry) => entry.id));
   const olderSingles = Array.from({ length: 49 }, (_, index) => single(`legacy-older-${index}`));
   const result = retainCompleteJournalConsultations([...legacy, ...olderSingles], 50);
-  assert.equal(result.entries.filter((entry) => entry.id.startsWith('legacy-')).length, 3);
+  assert.equal(result.entries.filter((entry) => legacyIds.has(entry.id)).length, 3);
   assert.equal(result.entries.length, 50);
 });
 
