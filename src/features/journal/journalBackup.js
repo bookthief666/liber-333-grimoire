@@ -1,4 +1,8 @@
 import { LIBER_333 } from '../../data/liber333.js';
+import {
+  countJournalConsultations,
+  retainCompleteJournalConsultations,
+} from './consultationSemantics.js';
 import { MAX_JOURNAL_ENTRIES } from './journalStorage.js';
 import {
   JOURNAL_CONSULTATION_ID_LIMIT,
@@ -144,11 +148,11 @@ function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = 
   });
 }
 
-function normalizeTotalReadings(value, entryCount) {
+function normalizeTotalReadings(value, entries) {
   if (!Number.isInteger(value) || value < 0 || value > JOURNAL_BACKUP_LIMITS.totalReadings) {
     throw new JournalBackupError(`Lifetime reading total must be an integer from 0 to ${JOURNAL_BACKUP_LIMITS.totalReadings.toLocaleString('en-US')}.`);
   }
-  return Math.max(value, entryCount);
+  return Math.max(value, countJournalConsultations(entries));
 }
 
 function normalizeExportedAt(value) {
@@ -168,7 +172,7 @@ export function createJournalBackup({ entries, totalReadings, exportedAt = new D
     format: JOURNAL_BACKUP_FORMAT,
     version: JOURNAL_BACKUP_VERSION,
     exportedAt: exportedAtIso,
-    totalReadings: normalizeTotalReadings(totalReadings, normalizedEntries.length),
+    totalReadings: normalizeTotalReadings(totalReadings, normalizedEntries),
     entries: normalizedEntries,
   };
 }
@@ -211,7 +215,7 @@ export function parseJournalBackup(input) {
     version: JOURNAL_BACKUP_VERSION,
     sourceVersion: parsed.version,
     exportedAt: normalizeExportedAt(parsed.exportedAt),
-    totalReadings: normalizeTotalReadings(parsed.totalReadings, entries.length),
+    totalReadings: normalizeTotalReadings(parsed.totalReadings, entries),
     entries,
   };
 }
@@ -230,21 +234,26 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   const migratedCurrent = migrateJournalEntries(currentEntries);
   const existingIds = new Set(migratedCurrent.map((entry) => entry?.id).filter((id) => typeof id === 'string'));
   const importedEntries = backup.entries.filter((entry) => !existingIds.has(entry.id));
-  const mergedEntries = [...migratedCurrent, ...importedEntries]
-    .sort((left, right) => timestamp(right) - timestamp(left))
-    .slice(0, MAX_JOURNAL_ENTRIES);
+  const sortedEntries = [...migratedCurrent, ...importedEntries]
+    .sort((left, right) => timestamp(right) - timestamp(left));
+  const retention = retainCompleteJournalConsultations(sortedEntries, MAX_JOURNAL_ENTRIES);
+  const mergedEntries = retention.entries;
+  const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
+  const retainedImportedEntries = importedEntries.filter((entry) => retainedIds.has(entry.id));
 
   const totalReadings = Math.max(
     Number.isInteger(currentTotalReadings) ? currentTotalReadings : 0,
     backup.totalReadings,
-    mergedEntries.length,
+    countJournalConsultations(mergedEntries),
   );
 
   return {
     entries: mergedEntries,
     totalReadings,
-    importedCount: importedEntries.length,
+    importedCount: retainedImportedEntries.length,
+    importedConsultationCount: countJournalConsultations(retainedImportedEntries),
     duplicateCount: backup.entries.length - importedEntries.length,
-    omittedByCap: Math.max(0, migratedCurrent.length + importedEntries.length - mergedEntries.length),
+    omittedByCap: retention.omittedEntries,
+    omittedConsultationCount: retention.omittedConsultations,
   };
 }
