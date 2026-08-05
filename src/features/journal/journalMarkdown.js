@@ -1,4 +1,8 @@
-import { getEntryChapterRecords, normalizeSpreadType } from './grimoireWorkbench.js';
+import {
+  getEntryChapterRecords,
+  getGrimoireConsultationKey,
+  normalizeSpreadType,
+} from './grimoireWorkbench.js';
 
 export const GRIMOIRE_MARKDOWN_FORMAT = 'liber-333-grimoire-markdown';
 export const GRIMOIRE_MARKDOWN_VERSION = 1;
@@ -33,6 +37,11 @@ function appendOptionalSection(lines, heading, value) {
   const text = normalizeText(value);
   if (!text) return;
   lines.push('', `#### ${heading}`, '', quoteMarkdown(text));
+}
+
+export function countGrimoireConsultations(entries) {
+  if (!Array.isArray(entries)) return 0;
+  return new Set(entries.map((entry) => getGrimoireConsultationKey(entry))).size;
 }
 
 function entryMarkdown(entry, index) {
@@ -76,15 +85,19 @@ export function serializeGrimoireMarkdown({
   filterDescription = null,
 } = {}) {
   const safeEntries = Array.isArray(entries) ? entries : [];
+  const consultationCount = countGrimoireConsultations(safeEntries);
   const lines = [
     `# ${normalizeText(title) || 'Liber CCCXXXIII — Grimoire Workbench'}`,
     '',
     `- **Format:** ${GRIMOIRE_MARKDOWN_FORMAT}`,
     `- **Version:** ${GRIMOIRE_MARKDOWN_VERSION}`,
     `- **Generated:** ${formatDate(exportedAt)}`,
-    `- **Exported consultations:** ${safeEntries.length}`,
+    `- **Exported consultations:** ${consultationCount}`,
   ];
 
+  if (safeEntries.length !== consultationCount) {
+    lines.push(`- **Exported entries:** ${safeEntries.length}`);
+  }
   if (Number.isInteger(totalReadings) && totalReadings >= 0) {
     lines.push(`- **Lifetime reading total:** ${Math.max(totalReadings, safeEntries.length)}`);
   }
