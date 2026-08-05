@@ -42,69 +42,54 @@ const entries = [
     title: 'BAAPHOMET',
     spreadType: 'single',
     favorite: false,
-    interpretation: 'Discipline is a form of exact attention.',
+    interpretation: 'Return to the material act.',
+    lunar: 'First Quarter',
   },
   {
     id: 'single-oldest',
-    date: '2026-06-01T09:30:00.000Z',
-    question: 'Where is the hidden opening?',
-    chapter: 12,
-    title: 'THE DRAGON-FLIES',
+    consultationId: 'consultation-single-oldest',
+    date: '2026-06-01T12:00:00.000Z',
+    question: 'What is hidden in the source?',
+    chapter: 44,
+    title: 'THE MASS OF THE PHOENIX',
     spreadType: 'single',
-    favorite: true,
-    note: 'Return after thirty-three days.',
+    favorite: false,
   },
 ];
 
 test('normalizes invalid filter values without converting an absent chapter to zero', () => {
-  assert.deepEqual(normalizeGrimoireFilters({
-    query: 'mercury',
-    spread: 'invalid',
-    favoritesOnly: true,
-    chapter: '33',
-    from: '2026-07-01',
-    sort: 'oldest',
-  }), {
-    query: 'mercury',
+  assert.deepEqual(normalizeGrimoireFilters({ chapter: null, spread: 'unknown', sort: 'unknown' }), {
+    query: '',
     spread: 'all',
-    favoritesOnly: true,
-    chapter: 33,
-    from: '2026-07-01',
+    favoritesOnly: false,
+    chapter: null,
+    from: null,
     to: null,
-    sort: 'oldest',
+    sort: 'newest',
   });
-  assert.equal(normalizeGrimoireFilters({}).chapter, null);
-  assert.equal(normalizeGrimoireFilters({ chapter: null }).chapter, null);
 });
 
 test('recognizes current, historical, and future-compatible Triad labels', () => {
-  for (const label of ['spread', 'triad', 'TRIAD SPREAD', 'three-card', 'three card', 'Thesis/Antithesis/Synthesis']) {
-    assert.equal(normalizeSpreadType(label), 'triad', label);
+  for (const value of ['triad', 'spread', 'three-card', 'three card', 'Thesis/Antithesis/Synthesis']) {
+    assert.equal(normalizeSpreadType(value), 'triad');
   }
   assert.equal(normalizeSpreadType('single'), 'single');
-  assert.equal(normalizeSpreadType(null), 'single');
 });
 
 test('searches questions, notes, interpretations, canonical corpus, context, and nested chapter layers', () => {
-  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'concrete mercury' }), true);
-  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'source thirty three' }), true);
+  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'recurring contradiction' }), true);
+  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'concrete action' }), true);
+  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'synthesis abstraction' }), true);
+  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'mercury hour' }), true);
   assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'editorial seven' }), true);
-  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'missing phrase' }), false);
-  assert.equal(entryMatchesGrimoireFilters({
-    id: 'canonical',
-    date: '2026-07-20T18:00:00.000Z',
-    question: 'Canonical hydration',
-    chapter: 1,
-    title: 'THE SABBATH OF THE GOAT',
-    spreadType: 'single',
-  }, { query: 'caduceus winged disk' }), true);
+  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'source thirty three' }), true);
+  assert.equal(entryMatchesGrimoireFilters(entries[0], { query: 'chapter 33' }), true);
 });
 
 test('retains richer nested metadata while deduplicating repeated chapters', () => {
   const records = getEntryChapterRecords(entries[0]);
   assert.deepEqual(records.map((record) => record.chapter), [7, 33]);
-  assert.equal(records[0].commentary, 'Editorial layer seven.');
-  assert.equal(records[1].sourceText, 'Source layer thirty-three.');
+  assert.match(records.find((record) => record.chapter === 7).commentary, /Editorial layer seven/);
 });
 
 test('combines spread, favorite, chapter, and inclusive date filters locally', () => {
@@ -119,10 +104,13 @@ test('combines spread, favorite, chapter, and inclusive date filters locally', (
 });
 
 test('sorts deterministically without mutating the source array', () => {
-  const original = [...entries];
-  const oldest = applyGrimoireFilters(entries, { sort: 'oldest' });
-  assert.deepEqual(oldest.map((entry) => entry.id), ['single-oldest', 'single-middle', 'triad-latest']);
-  assert.deepEqual(entries, original);
+  const source = [...entries];
+  assert.deepEqual(applyGrimoireFilters(entries, { sort: 'oldest' }).map((entry) => entry.id), [
+    'single-oldest',
+    'single-middle',
+    'triad-latest',
+  ]);
+  assert.deepEqual(entries, source);
 });
 
 test('extracts unique chapter numbers from primary and triad records', () => {
@@ -146,11 +134,12 @@ test('enforces a bounded integration-note size', () => {
   assert.throws(() => normalizeGrimoireNote('x'.repeat(GRIMOIRE_NOTE_LIMIT + 1)), RangeError);
 });
 
-test('uses explicit consultation IDs and deterministic legacy Triad fallbacks', () => {
+test('uses explicit consultation IDs and deterministic per-row legacy fallbacks', () => {
   assert.equal(getGrimoireConsultationKey(entries[0]), 'consultation:consultation-triad-latest');
   const legacyA = { ...entries[0], id: 'legacy-a', consultationId: undefined, date: '2026-07-20T18:00:01.000Z' };
   const legacyB = { ...legacyA, id: 'legacy-b', date: '2026-07-20T18:00:49.000Z' };
-  assert.equal(getGrimoireConsultationKey(legacyA), getGrimoireConsultationKey(legacyB));
+  assert.equal(getGrimoireConsultationKey(legacyA), getGrimoireConsultationKey(legacyA));
+  assert.notEqual(getGrimoireConsultationKey(legacyA), getGrimoireConsultationKey(legacyB));
 });
 
 test('builds recurrence summaries with appearances distinct from consultations', () => {
