@@ -34,6 +34,18 @@ test('counts a three-entry Triad as one consultation', () => {
   assert.equal(groupJournalEntriesByConsultation([...triad, single('one')]).length, 2);
 });
 
+test('groups legacy Triad rows without explicit consultation IDs', () => {
+  const legacy = triad.map(({ consultationId, spreadPosition, ...entry }, index) => ({
+    ...entry,
+    id: `legacy-${index}`,
+    spreadType: 'Thesis/Antithesis/Synthesis',
+    date: `2026-08-05T03:00:${String(10 + index).padStart(2, '0')}.000Z`,
+  }));
+
+  assert.equal(countJournalConsultations(legacy), 1);
+  assert.equal(groupJournalEntriesByConsultation(legacy).length, 1);
+});
+
 test('counts only consultation identities absent from the existing journal', () => {
   assert.equal(countNewJournalConsultations([single('one')], [...triad, single('one')]), 1);
   assert.equal(countNewJournalConsultations([...triad], triad), 0);
