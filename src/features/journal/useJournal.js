@@ -57,10 +57,17 @@ export function useJournal() {
 
   const load = useCallback(async () => {
     const state = readJournalState(getLocalStorage());
+    const normalizedTotal = Math.max(
+      state.totalReadings,
+      countJournalConsultations(state.entries),
+    );
     entriesRef.current = state.entries;
-    totalReadingsRef.current = state.totalReadings;
+    totalReadingsRef.current = normalizedTotal;
     setEntries(state.entries);
-    setTotalReadings(state.totalReadings);
+    setTotalReadings(normalizedTotal);
+    if (normalizedTotal !== state.totalReadings) {
+      writeTotalReadings(getLocalStorage(), normalizedTotal);
+    }
     setLoaded(true);
   }, []);
 
