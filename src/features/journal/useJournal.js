@@ -6,6 +6,7 @@ import {
   serializeJournalBackup,
 } from './journalBackup.js';
 import {
+  countGrimoireConsultations,
   getGrimoireMarkdownFilename,
   serializeGrimoireMarkdown,
 } from './journalMarkdown.js';
@@ -121,16 +122,20 @@ export function useJournal() {
 
   const exportMarkdown = useCallback(({ selectedEntries = entries, filterDescription = null } = {}) => {
     const exportedAt = new Date();
+    const safeSelectedEntries = Array.isArray(selectedEntries) ? selectedEntries : [];
     const filtered = selectedEntries !== entries || Boolean(filterDescription);
+    const consultationCount = countGrimoireConsultations(safeSelectedEntries);
     return {
       filename: getGrimoireMarkdownFilename(exportedAt, { filtered }),
       content: serializeGrimoireMarkdown({
-        entries: selectedEntries,
+        entries: safeSelectedEntries,
         totalReadings,
         exportedAt,
         filterDescription,
       }),
-      entryCount: Array.isArray(selectedEntries) ? selectedEntries.length : 0,
+      entryCount: consultationCount,
+      consultationCount,
+      recordCount: safeSelectedEntries.length,
       totalReadings,
       filtered,
     };
