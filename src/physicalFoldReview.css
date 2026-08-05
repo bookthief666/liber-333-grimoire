@@ -3,6 +3,13 @@
    few properties that intentionally replace existing mobile rules use
    explicit precedence. */
 
+/* Product-shell guidance belongs to the underlying reading surface. Once the
+   Workbench owns the screen as an aria-modal dialog, those fixed controls must
+   not pierce the modal, overlap tools, or remain in the pointer/focus layer. */
+.liber-product-shell:has(.grimoire-workbench-layer) .liber-context-tools {
+  display: none !important;
+}
+
 @media (max-width: 430px) {
   .nav-rail {
     padding-right: 4.75rem !important;
