@@ -1,3 +1,4 @@
+import { retainCompleteJournalConsultations } from './consultationSemantics.js';
 import { migrateJournalEntries, migrateJournalEntry } from './journalSchema.js';
 
 export const JOURNAL_STORAGE_KEY = 'liber333_journal';
@@ -32,7 +33,10 @@ export function readJournalState(storage) {
 export function prependJournalEntries(entries, additions) {
   const migratedAdditions = migrateJournalEntries(additions);
   const migratedEntries = migrateJournalEntries(entries);
-  return [...migratedAdditions, ...migratedEntries].slice(0, MAX_JOURNAL_ENTRIES);
+  return retainCompleteJournalConsultations(
+    [...migratedAdditions, ...migratedEntries],
+    MAX_JOURNAL_ENTRIES,
+  ).entries;
 }
 
 export function prependJournalEntry(entries, entry) {
