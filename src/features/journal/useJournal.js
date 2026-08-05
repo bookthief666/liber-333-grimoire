@@ -121,7 +121,7 @@ export function useJournal() {
     return {
       filename: getJournalBackupFilename(exportedAt),
       content: serializeJournalBackup({ entries, totalReadings, exportedAt }),
-      entryCount: entries.length,
+      entryCount: consultationCount,
       consultationCount,
       recordCount: entries.length,
       totalReadings,
@@ -141,7 +141,7 @@ export function useJournal() {
         exportedAt,
         filterDescription,
       }),
-      entryCount: safeSelectedEntries.length,
+      entryCount: consultationCount,
       consultationCount,
       recordCount: safeSelectedEntries.length,
       totalReadings,
