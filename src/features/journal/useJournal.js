@@ -6,7 +6,10 @@ import {
   serializeJournalBackup,
 } from './journalBackup.js';
 import {
-  countGrimoireConsultations,
+  countJournalConsultations,
+  countNewJournalConsultations,
+} from './consultationSemantics.js';
+import {
   getGrimoireMarkdownFilename,
   serializeGrimoireMarkdown,
 } from './journalMarkdown.js';
@@ -67,9 +70,11 @@ export function useJournal() {
     const additions = migrateJournalEntries(Array.isArray(newEntries) ? newEntries : []);
     if (!additions.length) return [];
 
-    const nextEntries = prependJournalEntries(entriesRef.current, additions);
+    const previousEntries = entriesRef.current;
+    const consultationDelta = countNewJournalConsultations(previousEntries, additions);
+    const nextEntries = prependJournalEntries(previousEntries, additions);
     const previousTotal = totalReadingsRef.current;
-    const nextTotal = previousTotal + additions.length;
+    const nextTotal = previousTotal + consultationDelta;
     commitEntries(nextEntries);
     commitTotal(nextTotal);
 
@@ -112,10 +117,13 @@ export function useJournal() {
 
   const exportBackup = useCallback(() => {
     const exportedAt = new Date();
+    const consultationCount = countJournalConsultations(entries);
     return {
       filename: getJournalBackupFilename(exportedAt),
       content: serializeJournalBackup({ entries, totalReadings, exportedAt }),
       entryCount: entries.length,
+      consultationCount,
+      recordCount: entries.length,
       totalReadings,
     };
   }, [entries, totalReadings]);
@@ -124,7 +132,7 @@ export function useJournal() {
     const exportedAt = new Date();
     const safeSelectedEntries = Array.isArray(selectedEntries) ? selectedEntries : [];
     const filtered = selectedEntries !== entries || Boolean(filterDescription);
-    const consultationCount = countGrimoireConsultations(safeSelectedEntries);
+    const consultationCount = countJournalConsultations(safeSelectedEntries);
     return {
       filename: getGrimoireMarkdownFilename(exportedAt, { filtered }),
       content: serializeGrimoireMarkdown({
@@ -133,7 +141,7 @@ export function useJournal() {
         exportedAt,
         filterDescription,
       }),
-      entryCount: consultationCount,
+      entryCount: safeSelectedEntries.length,
       consultationCount,
       recordCount: safeSelectedEntries.length,
       totalReadings,
@@ -156,6 +164,7 @@ export function useJournal() {
       ...result,
       backupExportedAt: backup.exportedAt,
       backupEntryCount: backup.entries.length,
+      backupConsultationCount: countJournalConsultations(backup.entries),
       backupSourceVersion: backup.sourceVersion,
     };
   }, [commitEntries, commitTotal]);
