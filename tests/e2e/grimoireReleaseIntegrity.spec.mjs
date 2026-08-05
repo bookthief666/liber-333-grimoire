@@ -33,28 +33,45 @@ test.describe('Grimoire release integrity', () => {
     await expect(dialog.getByText('3 saved consultations', { exact: true })).toBeVisible();
   });
 
-  test('requires confirmation, lets Escape cancel, and deletes a complete Triad without changing lifetime totals', async ({ page }) => {
+  test('requires the exact armed row to confirm complete-Triad deletion', async ({ page }) => {
     const { dialog } = await openWorkbench(page);
-    const triad = dialog.locator('article').filter({ hasText: 'How should I integrate the recurring contradiction?' }).first();
-    const deleteButton = triad.locator('button.danger-text');
+    const triadRows = dialog.locator('article').filter({ hasText: 'How should I integrate the recurring contradiction?' });
+    await expect(triadRows).toHaveCount(3);
 
-    await activate(deleteButton);
+    const firstDelete = triadRows.nth(0).locator('button.danger-text');
+    const siblingDelete = triadRows.nth(1).locator('button.danger-text');
+    const thirdDelete = triadRows.nth(2).locator('button.danger-text');
 
-    await expect(deleteButton).toHaveAttribute('data-delete-armed', 'true');
-    await expect(deleteButton).toHaveText('Confirm Triad delete');
+    await activate(firstDelete);
+
+    await expect(firstDelete).toHaveAttribute('data-delete-armed', 'true');
+    await expect(firstDelete).toHaveText('Confirm Triad delete');
+    await expect(siblingDelete).toHaveAttribute('data-delete-armed', 'false');
+    await expect(siblingDelete).toHaveText('Delete');
+    await expect(thirdDelete).toHaveAttribute('data-delete-armed', 'false');
     await expect(dialog.getByText(/removes all 3 entries and their private notes/i)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Confirm deletion of the complete Triad consultation/i })).toHaveCount(1);
     expect(await readJournal(page)).toHaveLength(5);
 
+    await activate(siblingDelete);
+
+    expect(await readJournal(page)).toHaveLength(5);
+    await expect(firstDelete).toHaveAttribute('data-delete-armed', 'false');
+    await expect(firstDelete).toHaveText('Delete');
+    await expect(siblingDelete).toHaveAttribute('data-delete-armed', 'true');
+    await expect(siblingDelete).toHaveText('Confirm Triad delete');
+    await expect(dialog.getByRole('button', { name: /Confirm deletion of the complete Triad consultation/i })).toHaveCount(1);
+
     await page.keyboard.press('Escape');
-    await expect(deleteButton).toHaveAttribute('data-delete-armed', 'false');
-    await expect(deleteButton).toHaveText('Delete');
-    await expect(deleteButton).toBeFocused();
+    await expect(siblingDelete).toHaveAttribute('data-delete-armed', 'false');
+    await expect(siblingDelete).toHaveText('Delete');
+    await expect(siblingDelete).toBeFocused();
     await expect(dialog.getByText('Deletion cancelled.', { exact: true })).toBeVisible();
     expect(await readJournal(page)).toHaveLength(5);
 
-    await activate(deleteButton);
-    await expect(deleteButton).toHaveText('Confirm Triad delete');
-    await activate(deleteButton);
+    await activate(firstDelete);
+    await expect(firstDelete).toHaveText('Confirm Triad delete');
+    await activate(firstDelete);
 
     const stored = await readJournal(page);
     expect(stored).toHaveLength(2);
@@ -90,5 +107,29 @@ test.describe('Grimoire release integrity', () => {
     await expect(dialog.getByText(/confirmation expired/i)).toBeVisible();
     expect(await readJournal(page)).toHaveLength(5);
     expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, JOURNAL_KEY)).toBe(5);
+  });
+
+  test('does not let a saved note close timer dismiss a newly opened editor', async ({ page }) => {
+    const { dialog } = await openWorkbench(page);
+    const discipline = dialog.locator('article').filter({ hasText: 'What does discipline require now?' });
+    const opening = dialog.locator('article').filter({ hasText: 'Where is the hidden opening?' });
+
+    await activate(discipline.getByRole('button', { name: 'Add note' }));
+    await discipline.getByLabel('Private integration note').fill('Save this first note.');
+    await activate(discipline.getByRole('button', { name: 'Save note' }));
+    await expect(discipline.getByText('Saved.', { exact: true })).toBeVisible();
+
+    await activate(opening.getByRole('button', { name: 'Add note' }));
+    const nextEditor = opening.getByLabel('Private integration note');
+    await nextEditor.fill('This second draft must remain open.');
+
+    await page.waitForTimeout(550);
+
+    await expect(nextEditor).toBeVisible();
+    await expect(nextEditor).toHaveValue('This second draft must remain open.');
+    await expect(opening.getByText('Unsaved changes', { exact: true })).toBeVisible();
+    const stored = await readJournal(page);
+    expect(stored.find((entry) => entry.id === 'single-discipline')?.note).toBe('Save this first note.');
+    expect(stored.find((entry) => entry.id === 'single-opening')?.note).toBe('');
   });
 });
