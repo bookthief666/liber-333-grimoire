@@ -152,6 +152,19 @@ function validateExplicitConsultationGroups(entries, sourceVersion) {
 
   entries.forEach((entry) => {
     const position = entry.spreadPosition || null;
+    const spreadType = normalizeJournalSpreadType(entry.spreadType);
+    if (spreadType === 'triad' && !entry.consultationId) {
+      throw new JournalBackupError(
+        `Entry ${entry.id} has a Triad spread label without a consultation ID.`,
+        'invalid_consultation_group',
+      );
+    }
+    if (spreadType === 'triad' && !TRIAD_POSITIONS.has(position)) {
+      throw new JournalBackupError(
+        `Entry ${entry.id} has a Triad spread label without a thesis, antithesis, or synthesis position.`,
+        'invalid_consultation_group',
+      );
+    }
     if (TRIAD_POSITIONS.has(position) && !entry.consultationId) {
       throw new JournalBackupError(
         `Entry ${entry.id} has a Triad position without a consultation ID.`,
