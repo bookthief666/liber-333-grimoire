@@ -50,9 +50,18 @@ function normalizeDateBoundary(value, { endOfDay = false } = {}) {
   if (!text) return null;
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    const suffix = endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z';
-    const timestamp = Date.parse(`${text}${suffix}`);
-    return Number.isNaN(timestamp) ? null : timestamp;
+    const [year, month, day] = text.split('-').map(Number);
+    const boundary = new Date(0);
+    boundary.setFullYear(year, month - 1, day);
+    boundary.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+
+    if (
+      boundary.getFullYear() !== year
+      || boundary.getMonth() !== month - 1
+      || boundary.getDate() !== day
+    ) return null;
+
+    return boundary.getTime();
   }
 
   const timestamp = Date.parse(text);
