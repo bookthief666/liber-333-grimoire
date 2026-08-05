@@ -97,12 +97,15 @@ Imports remain deliberately non-destructive:
 2. validate every entry and explicit consultation group before any local mutation;
 3. restore the canonical chapter title from the bundled corpus;
 4. normalize entry schema, consultation metadata, favorite state, and integration note;
-5. keep the existing local entry—including its local favorite/note—when an imported ID already exists;
-6. add only unique imported entries;
-7. sort the merged journal newest-first;
-8. retain complete consultations within the 50-entry limit;
-9. report newly imported consultation identities separately from imported entry rows;
-10. preserve the highest value among the current lifetime total, backup lifetime total, and merged consultation count.
+5. keep the existing local row—including its local favorite/note—when an imported entry ID already exists;
+6. for explicit v2 consultations, also keep the local row for an existing `consultationId + spreadPosition` even when the backup uses a different row ID;
+7. allow a valid backup to complete a partial local Triad only by supplying its genuinely missing positions;
+8. revalidate every explicit consultation touched by the merge and reject incompatible consultation-ID reuse before any local mutation;
+9. add only the remaining unique imported entries;
+10. sort the merged journal newest-first;
+11. retain complete consultations within the 50-entry limit;
+12. report newly imported consultation identities separately from imported entry rows;
+13. preserve the highest value among the current lifetime total, backup lifetime total, and merged consultation count.
 
 Import does not erase or replace the current journal. A separate destructive restore mode remains intentionally omitted.
 
@@ -118,7 +121,7 @@ Import does not erase or replace the current journal. A separate destructive res
 - labels: 100 characters;
 - lifetime reading total: 10,000,000.
 
-Malformed JSON, unknown formats, unsupported versions, duplicate IDs inside the backup, invalid dates, invalid Workbench metadata, malformed explicit consultation groups, oversized notes, and unknown chapter numbers are rejected before local storage changes.
+Malformed JSON, unknown formats, unsupported versions, duplicate IDs inside the backup, invalid dates, invalid Workbench metadata, malformed explicit consultation groups, incompatible consultation-ID collisions, oversized notes, and unknown chapter numbers are rejected before local storage changes.
 
 ## Privacy
 
@@ -137,6 +140,11 @@ The regression suite protects:
 - sequence-aware legacy Triad grouping across minute boundaries;
 - three-row chunking of repeated legacy Triads;
 - strict rejection of missing/extra rows, duplicate/missing positions, missing IDs, mixed labels, and inconsistent shared fields;
+- local precedence by entry ID and by explicit consultation position;
+- safe completion of partial local Triads when row IDs differ;
+- rejection of incompatible Single/Triad consultation-ID reuse;
+- rejection of row-ID collisions that would leave a partial imported Triad;
+- post-merge exportability of retained explicit consultations;
 - consultation-safe deletion;
 - complete-Triad retention at the 50-entry boundary;
 - favorite and note validation;
