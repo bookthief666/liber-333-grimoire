@@ -2,9 +2,25 @@
 
 ## Purpose
 
-The Grimoire Workbench turns locally saved consultations into a private study and integration surface. The Workbench remains local-first and does not transmit journal search terms, filters, favorites, notes, recurrence analysis, or exports to a server.
+The Grimoire Workbench turns locally saved consultations into a private study and integration surface. Search terms, filters, favorites, notes, recurrence analysis, JSON backups, and Markdown exports remain on the user's device.
 
-The versioned JSON backup remains the canonical machine-restorable format. Markdown is a separate human-readable export.
+The versioned JSON backup is the canonical machine-restorable format. Markdown is a separate human-readable export.
+
+## Data model
+
+A **consultation** is one completed Oracle reading:
+
+- a Single consultation stores one journal entry;
+- a Triad consultation stores three entries—Thesis, Antithesis, and Synthesis—with one shared `consultationId` and timestamp.
+
+An **entry** is one persisted chapter position. An **appearance** is one chapter occurrence. These terms are deliberately distinct:
+
+- lifetime reading totals count consultations;
+- recurrence reports chapter appearances and distinct consultations;
+- storage and backup limits count entries;
+- exports report consultation and entry counts separately when they differ.
+
+Historical lifetime totals are never reduced. New atomic batches advance the total only for consultation identities not already present in the local journal.
 
 ## Foundation modules
 
@@ -12,37 +28,64 @@ The versioned JSON backup remains the canonical machine-restorable format. Markd
 
 Pure functions provide:
 
-- normalized full-text matching across questions, titles, notes, stored interpretations, contextual labels, and optional nested chapter layers;
-- combined Single/Triad, favorite, chapter, inclusive date-range, and sort filters;
+- normalized full-text matching across questions, canonical chapter titles and text, commentary, notes, stored interpretations, and contextual labels;
+- combined Single/Triad, favorite, chapter, inclusive local-calendar date, and sort filters;
 - immutable favorite and integration-note updates;
-- bounded note normalization;
-- chapter extraction from current single-entry data and future nested triad records;
-- recurrence summaries that distinguish total chapter appearances from the number of consultations in which the chapter appeared.
+- chapter extraction and corpus hydration;
+- recurrence summaries that distinguish appearances from consultations;
+- stable consultation keys, including deterministic fallback grouping for legacy Triad rows.
 
-The functions do not read storage, mutate entries, or perform network requests.
+### `consultationSemantics.js`
+
+Shared consultation invariants provide:
+
+- unique consultation counting;
+- counting only newly added consultation identities;
+- grouping stored rows by consultation;
+- complete-group retention at the 50-entry boundary so a Triad is never truncated into a partial consultation.
+
+### `journalSchema.js` and `journalStorage.js`
+
+The journal schema migrates legacy rows to schema version 2 with safe favorite and note defaults. Storage remains newest-first, local, best-effort, and capped at 50 entries while retaining only complete consultation groups.
+
+### `journalBackup.js`
+
+JSON backup version 2:
+
+- accepts and migrates version 1 backups;
+- validates every row before local mutation;
+- restores canonical chapter titles;
+- preserves local entries on ID collisions;
+- retains complete consultations under the 50-entry cap;
+- preserves the highest historical lifetime total while using consultation count—not row count—as the minimum valid total.
 
 ### `journalMarkdown.js`
 
 The Markdown serializer provides:
 
-- generated-at metadata and exported/lifetime counts;
+- generated-at metadata;
+- consultation and entry counts;
+- consultation-based lifetime totals;
 - optional filtered-selection description;
 - explicit question, source-selection, source-text, fixed-commentary, Oracle-interpretation, and private-note labels;
 - planetary and lunar context when stored;
 - stable full and filtered filenames;
 - an explicit reminder that JSON, not Markdown, is the canonical restorable backup.
 
-The serializer operates entirely in memory. Download wiring belongs to the journal feature layer.
+### `GrimoireWorkbench.jsx`
 
-## Next implementation stages
+The extracted modal UI provides local search, filters, recurrence navigation, favorites, private notes, JSON import/export, Markdown export, destructive-clear confirmation, keyboard focus containment, layered Escape behavior, and responsive desktop/Fold layouts.
 
-1. Revise the journal-entry schema compatibly to add `favorite` and `note` defaults.
-2. Revise backup validation and migration without weakening all-or-nothing rejection or local-entry precedence.
-3. Add journal hook methods for favorite/note updates and Markdown export.
-4. Extract the Grimoire UI from the large reader component into a focused feature boundary.
-5. Build search/filter controls, note editing, recurrence navigation, and responsive Fold layouts.
-6. Add Playwright and installed-PWA coverage before merge.
+## Validation
+
+The permanent release gate covers schema migration, consultation counting, complete-group retention, search/filter behavior, recurrence, JSON round trips, Markdown serialization, local-calendar date boundaries, grouped-Triad metadata, production build validation, and built-output smoke testing.
+
+Playwright covers Chromium, Firefox, WebKit, Fold closed, Fold unfolded, local persistence, offline restart, downloads, favorites, notes, focus restoration, modal isolation, and horizontal-overflow protection.
+
+## Known follow-up work
+
+The current visible list remains entry-oriented. A later consultation-level presentation should group Triad positions into one expandable card and define consultation-level favorite, note, delete, reopen, recent-context, and Markdown-section behavior. That follow-up must not weaken the storage, backup, or consultation-count invariants established here.
 
 ## Protected behavior
 
-The Workbench must not change deterministic Single/Triad selection, corpus data or digest, Oracle wording/schema/provider/rate limits, source text, fixed commentary, existing journal lifetime totals, local-first data ownership, or the Astral Void identity.
+The Workbench must not change deterministic Single/Triad selection, corpus data or digest, Oracle wording/schema/provider/rate limits, source text, fixed commentary, historical journal lifetime totals, local-first data ownership, or the Astral Void identity.
