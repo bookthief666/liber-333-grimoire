@@ -55,9 +55,12 @@ test('reader uses the extracted Workbench and atomic consultation batch wiring',
   assert.doesNotMatch(source, /const JournalOverlay =/);
 });
 
-test('journal hook exposes one atomic batch write and crossed-milestone handling', async () => {
+test('journal hook increments lifetime totals by consultation identity and handles crossed milestones', async () => {
   const source = await readFile(new URL('../src/features/journal/useJournal.js', import.meta.url), 'utf8');
   assert.match(source, /const addEntries = useCallback/);
+  assert.match(source, /countNewJournalConsultations\(previousEntries, additions\)/);
+  assert.match(source, /previousTotal \+ consultationDelta/);
+  assert.doesNotMatch(source, /previousTotal \+ additions\.length/);
   assert.match(source, /getMilestoneCrossed/);
   assert.match(source, /entriesRef\.current/);
   assert.match(source, /totalReadingsRef\.current/);
