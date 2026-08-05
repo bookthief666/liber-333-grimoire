@@ -311,6 +311,32 @@ function timestamp(entry) {
   return Number.isNaN(value) ? 0 : value;
 }
 
+function explicitConsultationPosition(entry) {
+  if (!entry?.consultationId) return null;
+  if (entry.spreadPosition) return entry.spreadPosition;
+  return normalizeJournalSpreadType(entry.spreadType) === 'single' ? 'single' : null;
+}
+
+function explicitConsultationPositionKey(entry) {
+  const position = explicitConsultationPosition(entry);
+  return position ? `${entry.consultationId}\u0000${position}` : null;
+}
+
+function validateTouchedExplicitConsultations(entries, consultationIds) {
+  consultationIds.forEach((consultationId) => {
+    const group = entries.filter((entry) => entry.consultationId === consultationId);
+    try {
+      validateExplicitConsultationGroups(group, JOURNAL_BACKUP_VERSION);
+    } catch (error) {
+      if (!(error instanceof JournalBackupError)) throw error;
+      throw new JournalBackupError(
+        `Imported consultation ${consultationId} conflicts with existing local consultation data. ${error.message}`,
+        'consultation_collision',
+      );
+    }
+  });
+}
+
 export function mergeJournalBackup({ currentEntries, currentTotalReadings, backup }) {
   if (!Array.isArray(currentEntries)) throw new JournalBackupError('Current journal entries must be an array.');
   if (!isPlainObject(backup) || backup.format !== JOURNAL_BACKUP_FORMAT || backup.version !== JOURNAL_BACKUP_VERSION) {
@@ -319,9 +345,21 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
 
   const migratedCurrent = migrateJournalEntries(currentEntries);
   const existingIds = new Set(migratedCurrent.map((entry) => entry?.id).filter((id) => typeof id === 'string'));
-  const importedEntries = backup.entries.filter((entry) => !existingIds.has(entry.id));
+  const existingConsultationPositions = new Set(
+    migratedCurrent.map(explicitConsultationPositionKey).filter(Boolean),
+  );
+  const importedEntries = backup.entries.filter((entry) => {
+    if (existingIds.has(entry.id)) return false;
+    const consultationPosition = explicitConsultationPositionKey(entry);
+    return !consultationPosition || !existingConsultationPositions.has(consultationPosition);
+  });
+  const touchedExplicitConsultationIds = new Set(
+    importedEntries.map((entry) => entry.consultationId).filter(Boolean),
+  );
   const sortedEntries = [...migratedCurrent, ...importedEntries]
     .sort((left, right) => timestamp(right) - timestamp(left));
+  validateTouchedExplicitConsultations(sortedEntries, touchedExplicitConsultationIds);
+
   const retention = retainCompleteJournalConsultations(sortedEntries, MAX_JOURNAL_ENTRIES);
   const mergedEntries = retention.entries;
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
