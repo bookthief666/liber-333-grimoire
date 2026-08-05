@@ -1,4 +1,7 @@
-import { retainCompleteJournalConsultations } from './consultationSemantics.js';
+import {
+  groupJournalEntriesByConsultation,
+  retainCompleteJournalConsultations,
+} from './consultationSemantics.js';
 import { migrateJournalEntries, migrateJournalEntry } from './journalSchema.js';
 
 export const JOURNAL_STORAGE_KEY = 'liber333_journal';
@@ -45,7 +48,17 @@ export function prependJournalEntry(entries, entry) {
 }
 
 export function removeJournalEntry(entries, id) {
-  return entries.filter((entry) => entry.id !== id);
+  if (!Array.isArray(entries)) return [];
+  const group = groupJournalEntriesByConsultation(entries)
+    .find((consultation) => consultation.entries.some((entry) => entry?.id === id));
+  if (!group) return [...entries];
+
+  const ids = new Set(
+    group.entries
+      .map((entry) => entry?.id)
+      .filter((entryId) => typeof entryId === 'string'),
+  );
+  return entries.filter((entry) => !ids.has(entry?.id));
 }
 
 export function getJournalRecurrenceCount(entries, chapterNum) {
