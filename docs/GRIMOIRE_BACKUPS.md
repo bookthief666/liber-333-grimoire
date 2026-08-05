@@ -53,11 +53,11 @@ No provider key, browser identifier, rate-limit record, hidden prompt, applicati
 
 ## Consultation and entry semantics
 
-A Single consultation stores one entry. A Triad consultation stores three entries with the same `consultationId` and timestamp.
+A Single consultation stores one entry. A Triad consultation stores exactly three entries with the same `consultationId`, question, timestamp, and Gematria value, and exactly one each of `thesis`, `antithesis`, and `synthesis`.
 
 `totalReadings` counts consultations, not stored rows. New exports and imports therefore use the number of distinct consultation identities as the minimum valid lifetime total. Historical totals are preserved and are never reduced.
 
-The local journal remains capped at 50 entries. Retention is consultation-safe: if the remaining capacity cannot contain every row of a consultation, the entire older consultation is omitted instead of leaving a partial Triad.
+The local journal remains capped at 50 entries. Retention is consultation-safe: if the remaining capacity cannot contain every row of a consultation, the entire older consultation is omitted instead of leaving a partial Triad. Deleting any Triad position in the Workbench also removes the complete consultation group.
 
 ## Backward compatibility
 
@@ -72,23 +72,37 @@ A valid version 1 entry is migrated during parsing to entry schema version 2 wit
 }
 ```
 
-Version 1 Triad rows do not contain explicit consultation IDs. The migration layer uses the established legacy grouping fallback based on Triad spread identity, normalized question, minute-level timestamp, and Gematria value.
+Version 1 Triad rows do not contain explicit consultation IDs. They are grouped as ordered adjacent sequences, using normalized question, Gematria, planetary/lunar context, a bounded timestamp tolerance, and three-row chunking. This keeps one historical Triad together when its rows cross a minute boundary while preventing repeated identical Triads from collapsing into one consultation.
 
 Version 2 is always produced by new exports. Future unsupported versions are rejected rather than guessed.
+
+## Strict v2 consultation validation
+
+Before export or import, explicit schema-v2 groups are validated as a whole:
+
+- a Single consultation with an explicit ID must contain exactly one entry;
+- a Triad must contain exactly three entries;
+- Thesis, Antithesis, and Synthesis must each appear exactly once;
+- every Triad row must carry a Triad spread label;
+- Triad positions cannot appear without an explicit consultation ID;
+- shared question, timestamp, and Gematria fields must be internally consistent.
+
+Malformed two-row or four-row Triads, duplicate/missing positions, mixed Single/Triad labels, and inconsistent shared fields are rejected before local storage changes.
 
 ## Import behavior
 
 Imports remain deliberately non-destructive:
 
 1. validate the backup format and supported version;
-2. validate every entry before any local mutation;
+2. validate every entry and explicit consultation group before any local mutation;
 3. restore the canonical chapter title from the bundled corpus;
 4. normalize entry schema, consultation metadata, favorite state, and integration note;
 5. keep the existing local entry—including its local favorite/note—when an imported ID already exists;
 6. add only unique imported entries;
 7. sort the merged journal newest-first;
 8. retain complete consultations within the 50-entry limit;
-9. preserve the highest value among the current lifetime total, backup lifetime total, and merged consultation count.
+9. report newly imported consultation identities separately from imported entry rows;
+10. preserve the highest value among the current lifetime total, backup lifetime total, and merged consultation count.
 
 Import does not erase or replace the current journal. A separate destructive restore mode remains intentionally omitted.
 
@@ -104,7 +118,7 @@ Import does not erase or replace the current journal. A separate destructive res
 - labels: 100 characters;
 - lifetime reading total: 10,000,000.
 
-Malformed JSON, unknown formats, unsupported versions, duplicate IDs inside the backup, invalid dates, invalid Workbench metadata, oversized notes, and unknown chapter numbers are rejected before local storage changes.
+Malformed JSON, unknown formats, unsupported versions, duplicate IDs inside the backup, invalid dates, invalid Workbench metadata, malformed explicit consultation groups, oversized notes, and unknown chapter numbers are rejected before local storage changes.
 
 ## Privacy
 
@@ -120,6 +134,10 @@ The regression suite protects:
 - version 1 migration;
 - entry-schema defaults;
 - consultation-based lifetime totals;
+- sequence-aware legacy Triad grouping across minute boundaries;
+- three-row chunking of repeated legacy Triads;
+- strict rejection of missing/extra rows, duplicate/missing positions, missing IDs, mixed labels, and inconsistent shared fields;
+- consultation-safe deletion;
 - complete-Triad retention at the 50-entry boundary;
 - favorite and note validation;
 - canonical title restoration;
