@@ -17,23 +17,37 @@ import {
 
 const chapter = (number) => LIBER_333.find((item) => item.chapter === number);
 
-const entry = (overrides = {}) => ({
-  id: 'entry-1',
-  consultationId: 'consultation-1',
-  spreadPosition: 'single',
-  date: '2026-07-24T01:00:00.000Z',
-  question: 'What remains unfinished?',
-  chapter: 8,
-  title: 'Client title is replaced',
-  gematria: 314,
-  interpretation: 'A retained interpretation.',
-  spreadType: 'single',
-  planetary: 'Mercury',
-  lunar: 'Full Moon',
-  favorite: true,
-  note: 'A private integration note.',
+const entry = (overrides = {}) => {
+  const id = overrides.id ?? 'entry-1';
+  const hasConsultationId = Object.prototype.hasOwnProperty.call(overrides, 'consultationId');
+  return {
+    id,
+    consultationId: hasConsultationId ? overrides.consultationId : `consultation-${id}`,
+    spreadPosition: 'single',
+    date: '2026-07-24T01:00:00.000Z',
+    question: 'What remains unfinished?',
+    chapter: 8,
+    title: 'Client title is replaced',
+    gematria: 314,
+    interpretation: 'A retained interpretation.',
+    spreadType: 'single',
+    planetary: 'Mercury',
+    lunar: 'Full Moon',
+    favorite: true,
+    note: 'A private integration note.',
+    ...overrides,
+  };
+};
+
+const triadEntries = (overrides = {}) => ['thesis', 'antithesis', 'synthesis'].map((spreadPosition, index) => entry({
+  id: `triad-${spreadPosition}`,
+  consultationId: 'consultation-triad',
+  spreadPosition,
+  spreadType: 'triad',
+  chapter: [1, 2, 3][index],
+  date: '2026-07-26T03:00:00.000Z',
   ...overrides,
-});
+}));
 
 test('backup creation and parsing round-trip through the versioned v2 envelope', () => {
   const exportedAt = new Date('2026-07-24T02:00:00.000Z');
@@ -55,7 +69,7 @@ test('backup creation and parsing round-trip through the versioned v2 envelope',
   assert.equal(parsed.entries[0].schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
   assert.equal(parsed.entries[0].favorite, true);
   assert.equal(parsed.entries[0].note, 'A private integration note.');
-  assert.equal(parsed.entries[0].consultationId, 'consultation-1');
+  assert.equal(parsed.entries[0].consultationId, 'consultation-entry-1');
   assert.equal(parsed.entries[0].spreadPosition, 'single');
   assert.ok(text.endsWith('\n'));
 });
@@ -101,13 +115,14 @@ test('backup filenames are readable and date-stable', () => {
   );
 });
 
-test('lifetime totals cannot be lower than the number of saved entries', () => {
+test('lifetime totals use consultations rather than stored Triad rows as their minimum', () => {
   const backup = createJournalBackup({
-    entries: [entry({ id: 'a' }), entry({ id: 'b', chapter: 44 })],
+    entries: [...triadEntries(), entry({ id: 'single-after-triad', chapter: 44 })],
     totalReadings: 1,
     exportedAt: new Date('2026-07-24T02:00:00.000Z'),
   });
 
+  assert.equal(backup.entries.length, 4);
   assert.equal(backup.totalReadings, 2);
 });
 
@@ -190,6 +205,7 @@ test('import merge is non-destructive, deduplicates by ID, and preserves local m
   assert.equal(duplicate.favorite, true);
   assert.equal(duplicate.note, 'A private integration note.');
   assert.equal(result.importedCount, 1);
+  assert.equal(result.importedConsultationCount, 1);
   assert.equal(result.duplicateCount, 1);
   assert.equal(result.totalReadings, 100);
 });
@@ -216,7 +232,28 @@ test('merged backups remain newest-first and respect the fifty-entry cap', () =>
   assert.equal(result.entries[0].id, 'imported-29');
   assert.equal(result.entries.at(-1).id, 'current-10');
   assert.equal(result.omittedByCap, 10);
+  assert.equal(result.omittedConsultationCount, 10);
   assert.equal(result.totalReadings, 60);
+});
+
+test('merge retention never leaves a partial Triad at the fifty-entry boundary', () => {
+  const currentEntries = Array.from({ length: 49 }, (_, index) => entry({
+    id: `older-${index}`,
+    date: new Date(Date.UTC(2026, 6, 1, 0, index)).toISOString(),
+  }));
+  const backup = createJournalBackup({
+    entries: triadEntries(),
+    totalReadings: 50,
+    exportedAt: new Date('2026-07-26T04:00:00.000Z'),
+  });
+
+  const result = mergeJournalBackup({ currentEntries, currentTotalReadings: 49, backup });
+  const retainedTriad = result.entries.filter((item) => item.consultationId === 'consultation-triad');
+
+  assert.equal(result.entries.length, MAX_JOURNAL_ENTRIES);
+  assert.deepEqual(retainedTriad.map((item) => item.spreadPosition), ['thesis', 'antithesis', 'synthesis']);
+  assert.equal(result.omittedByCap, 2);
+  assert.equal(result.omittedConsultationCount, 2);
 });
 
 test('optional fields remain nullable while Workbench fields receive stable defaults', () => {
