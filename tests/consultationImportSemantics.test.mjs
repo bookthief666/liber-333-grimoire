@@ -200,6 +200,31 @@ test('rejects explicit v2 Triads with missing rows', () => {
   );
 });
 
+test('rejects v2 Triad labels without explicit consultation IDs', () => {
+  const malformed = triad.slice(0, 2).map(({ consultationId, spreadPosition, ...entry }, index) => ({
+    ...entry,
+    id: `idless-v2-triad-${index}`,
+  }));
+
+  assert.throws(
+    () => parseJournalBackup(backupEnvelope(malformed)),
+    (error) => error instanceof JournalBackupError
+      && error.code === 'invalid_consultation_group'
+      && /Triad spread label without a consultation ID/.test(error.message),
+  );
+});
+
+test('rejects v2 Triad labels without explicit spread positions', () => {
+  const malformed = triad.map(({ spreadPosition, ...entry }) => entry);
+
+  assert.throws(
+    () => createJournalBackup({ entries: malformed, totalReadings: 1 }),
+    (error) => error instanceof JournalBackupError
+      && error.code === 'invalid_consultation_group'
+      && /without a thesis, antithesis, or synthesis position/.test(error.message),
+  );
+});
+
 test('rejects explicit v2 Triads with duplicate or missing positions', () => {
   const malformed = triad.map((entry, index) => ({
     ...entry,
