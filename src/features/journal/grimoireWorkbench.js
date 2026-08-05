@@ -1,11 +1,18 @@
 import { LIBER_333 } from '../../data/liber333.js';
 import {
+  assignJournalConsultationKeys,
+  getJournalConsultationKey,
+  normalizeJournalSpreadType,
+} from './consultationIdentity.js';
+import {
   JOURNAL_NOTE_LIMIT,
   normalizeJournalNote,
   patchJournalEntryMetadata,
 } from './journalSchema.js';
 
 export const GRIMOIRE_NOTE_LIMIT = JOURNAL_NOTE_LIMIT;
+export const normalizeSpreadType = normalizeJournalSpreadType;
+export const getGrimoireConsultationKey = getJournalConsultationKey;
 
 export const DEFAULT_GRIMOIRE_FILTERS = Object.freeze({
   query: '',
@@ -66,20 +73,6 @@ function normalizeDateBoundary(value, { endOfDay = false } = {}) {
 
   const timestamp = Date.parse(text);
   return Number.isNaN(timestamp) ? null : timestamp;
-}
-
-export function normalizeSpreadType(value) {
-  const normalized = String(value ?? '').trim().toLocaleLowerCase('en-US');
-  const isTriad = normalized === 'spread'
-    || normalized.includes('triad')
-    || normalized.includes('three-card')
-    || normalized.includes('three card')
-    || (
-      normalized.includes('thesis')
-      && normalized.includes('antithesis')
-      && normalized.includes('synthesis')
-    );
-  return isTriad ? 'triad' : 'single';
 }
 
 export function normalizeGrimoireNote(value) {
@@ -263,32 +256,14 @@ export function updateGrimoireEntryMetadata(entries, id, patch = {}) {
   return found ? updated : [...entries];
 }
 
-export function getGrimoireConsultationKey(entry) {
-  const explicit = explicitText(entry?.consultationId);
-  if (explicit) return `consultation:${explicit}`;
-
-  if (normalizeSpreadType(entry?.spreadType) === 'triad') {
-    const parsed = Date.parse(entry?.date);
-    const minute = Number.isNaN(parsed) ? 'unknown-time' : new Date(parsed).toISOString().slice(0, 16);
-    return [
-      'legacy-triad',
-      normalizeText(entry?.question),
-      minute,
-      normalizeText(entry?.gematria),
-    ].join(':');
-  }
-
-  const id = explicitText(entry?.id);
-  return `entry:${id || `${normalizeText(entry?.question)}:${timestamp(entry)}`}`;
-}
-
 export function buildGrimoireRecurrence(entries) {
   if (!Array.isArray(entries)) return [];
   const summary = new Map();
+  const assignedConsultationKeys = assignJournalConsultationKeys(entries);
 
-  entries.forEach((entry) => {
+  entries.forEach((entry, index) => {
     const records = getEntryChapterRecords(entry);
-    const consultationKey = getGrimoireConsultationKey(entry);
+    const consultationKey = assignedConsultationKeys[index] || getJournalConsultationKey(entry);
 
     records.forEach((record) => {
       const current = summary.get(record.chapter) || {
