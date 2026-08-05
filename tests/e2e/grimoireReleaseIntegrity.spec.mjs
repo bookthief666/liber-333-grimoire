@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import {
   JOURNAL_KEY,
   TOTAL_KEY,
+  activate,
   openWorkbench,
   readJournal,
   seedJournal,
@@ -26,7 +27,7 @@ test.describe('Grimoire release integrity', () => {
     await expect(resultsHeading).toContainText('3 consultations');
     await expect(resultsHeading).toContainText('5 entries shown');
 
-    await dialog.getByRole('button', { name: 'Triad', exact: true }).click();
+    await activate(dialog.getByRole('button', { name: 'Triad', exact: true }));
     await expect(resultsHeading).toContainText('1 consultation');
     await expect(resultsHeading).toContainText('3 entries shown');
     await expect(dialog.getByText('3 saved consultations', { exact: true })).toBeVisible();
@@ -37,8 +38,7 @@ test.describe('Grimoire release integrity', () => {
     const triad = dialog.locator('article').filter({ hasText: 'How should I integrate the recurring contradiction?' }).first();
     const deleteButton = triad.locator('button.danger-text');
 
-    await deleteButton.scrollIntoViewIfNeeded();
-    await deleteButton.click();
+    await activate(deleteButton);
 
     await expect(deleteButton).toHaveAttribute('data-delete-armed', 'true');
     await expect(deleteButton).toHaveText('Confirm Triad delete');
@@ -52,9 +52,9 @@ test.describe('Grimoire release integrity', () => {
     await expect(dialog.getByText('Deletion cancelled.', { exact: true })).toBeVisible();
     expect(await readJournal(page)).toHaveLength(5);
 
-    await deleteButton.click();
+    await activate(deleteButton);
     await expect(deleteButton).toHaveText('Confirm Triad delete');
-    await deleteButton.click();
+    await activate(deleteButton);
 
     const stored = await readJournal(page);
     expect(stored).toHaveLength(2);
@@ -65,7 +65,7 @@ test.describe('Grimoire release integrity', () => {
     await expect(dialog.getByText('2 entries shown', { exact: true }).first()).toBeVisible();
 
     const downloadPromise = page.waitForEvent('download');
-    await dialog.getByRole('button', { name: 'JSON backup' }).click();
+    await activate(dialog.getByRole('button', { name: 'JSON backup' }));
     const download = await downloadPromise;
     const backup = JSON.parse(await readFile(await download.path(), 'utf8'));
     expect(backup.totalReadings).toBe(44);
@@ -80,8 +80,7 @@ test.describe('Grimoire release integrity', () => {
     const triad = dialog.locator('article').filter({ hasText: 'How should I integrate the recurring contradiction?' }).first();
     const deleteButton = triad.locator('button.danger-text');
 
-    await deleteButton.scrollIntoViewIfNeeded();
-    await deleteButton.click();
+    await activate(deleteButton);
     await expect(deleteButton).toHaveAttribute('data-delete-armed', 'true');
 
     await page.waitForTimeout(5_200);
