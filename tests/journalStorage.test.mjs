@@ -119,7 +119,7 @@ test('writes only migrated journal entries', () => {
   assert.equal(written.note, '');
 });
 
-test('removal, recurrence, and recent-reading helpers preserve current semantics', () => {
+test('single removal, recurrence, and recent-reading helpers preserve current semantics', () => {
   const entries = [
     { id: 'a', chapter: 8 },
     { id: 'b', chapter: 8 },
@@ -130,6 +130,31 @@ test('removal, recurrence, and recent-reading helpers preserve current semantics
   assert.deepEqual(removeJournalEntry(entries, 'b').map((entry) => entry.id), ['a', 'c', 'd']);
   assert.equal(getJournalRecurrenceCount(entries, 8), 2);
   assert.deepEqual(getRecentJournalReadings(entries, 2).map((entry) => entry.id), ['a', 'b']);
+});
+
+test('deleting one explicit Triad position removes the complete consultation', () => {
+  const triad = ['thesis', 'antithesis', 'synthesis'].map((spreadPosition, index) => ({
+    ...legacyEntry,
+    id: `delete-triad-${spreadPosition}`,
+    consultationId: 'delete-triad',
+    spreadPosition,
+    spreadType: 'triad',
+    chapter: index + 1,
+  }));
+  const result = removeJournalEntry([...triad, { ...legacyEntry, id: 'survivor' }], triad[1].id);
+  assert.deepEqual(result.map((entry) => entry.id), ['survivor']);
+});
+
+test('deleting one legacy Triad row removes its adjacent sequence group', () => {
+  const legacyTriad = ['2026-07-01T00:00:59.500Z', '2026-07-01T00:01:00.100Z', '2026-07-01T00:01:00.700Z']
+    .map((date, index) => ({
+      ...legacyEntry,
+      id: `legacy-triad-${index}`,
+      date,
+      spreadType: 'Thesis/Antithesis/Synthesis',
+    }));
+  const result = removeJournalEntry([...legacyTriad, { ...legacyEntry, id: 'survivor' }], legacyTriad[0].id);
+  assert.deepEqual(result.map((entry) => entry.id), ['survivor']);
 });
 
 test('milestones include exact totals and thresholds crossed by atomic batches', () => {
