@@ -1,5 +1,8 @@
 import { LIBER_333 } from '../../data/liber333.js';
-import { normalizeJournalSpreadType } from './consultationIdentity.js';
+import {
+  assignJournalConsultationKeys,
+  normalizeJournalSpreadType,
+} from './consultationIdentity.js';
 import {
   countJournalConsultations,
   countNewJournalConsultations,
@@ -32,7 +35,8 @@ export const JOURNAL_BACKUP_LIMITS = Object.freeze({
 
 const CHAPTER_BY_NUMBER = new Map(LIBER_333.map((chapter) => [chapter.chapter, chapter]));
 const SPREAD_POSITIONS = new Set(['single', 'thesis', 'antithesis', 'synthesis']);
-const TRIAD_POSITIONS = new Set(['thesis', 'antithesis', 'synthesis']);
+const TRIAD_POSITION_LIST = Object.freeze(['thesis', 'antithesis', 'synthesis']);
+const TRIAD_POSITIONS = new Set(TRIAD_POSITION_LIST);
 
 export class JournalBackupError extends Error {
   constructor(message, code = 'invalid_journal_backup') {
@@ -230,6 +234,44 @@ function validateExplicitConsultationGroups(entries, sourceVersion) {
   });
 }
 
+function upgradeVersion1Triads(entries) {
+  const consultationKeys = assignJournalConsultationKeys(entries);
+  const groupedIndexes = new Map();
+
+  entries.forEach((entry, index) => {
+    if (normalizeJournalSpreadType(entry.spreadType) !== 'triad') return;
+    const key = consultationKeys[index];
+    const indexes = groupedIndexes.get(key) || [];
+    indexes.push(index);
+    groupedIndexes.set(key, indexes);
+  });
+
+  const upgraded = entries.map((entry) => ({ ...entry }));
+  let consultationOrdinal = 0;
+
+  groupedIndexes.forEach((indexes) => {
+    if (indexes.length !== TRIAD_POSITION_LIST.length) return;
+    consultationOrdinal += 1;
+    const first = upgraded[indexes[0]];
+    const consultationId = `v1-${consultationOrdinal}-${first.id}`
+      .slice(0, JOURNAL_BACKUP_LIMITS.consultationIdChars);
+
+    indexes.forEach((entryIndex, positionIndex) => {
+      upgraded[entryIndex] = {
+        ...upgraded[entryIndex],
+        consultationId,
+        spreadType: 'triad',
+        spreadPosition: TRIAD_POSITION_LIST[positionIndex],
+        date: first.date,
+        question: first.question,
+        gematria: first.gematria,
+      };
+    });
+  });
+
+  return upgraded;
+}
+
 function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = {}) {
   if (!Array.isArray(entries)) throw new JournalBackupError('Backup entries must be an array.');
   if (entries.length > JOURNAL_BACKUP_LIMITS.entries) {
@@ -243,8 +285,11 @@ function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = 
     ids.add(normalized.id);
     return normalized;
   });
-  validateExplicitConsultationGroups(normalizedEntries, sourceVersion);
-  return normalizedEntries;
+  const upgradedEntries = sourceVersion === 1
+    ? upgradeVersion1Triads(normalizedEntries)
+    : normalizedEntries;
+  validateExplicitConsultationGroups(upgradedEntries, JOURNAL_BACKUP_VERSION);
+  return upgradedEntries;
 }
 
 function normalizeTotalReadings(value, entries) {
