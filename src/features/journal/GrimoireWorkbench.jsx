@@ -83,15 +83,24 @@ function SegmentedButton({ active, children, onClick, ariaLabel }) {
 function NoteEditor({ entry, onSave, onCancel }) {
   const [draft, setDraft] = useState(entry.note || '');
   const [state, setState] = useState('idle');
+  const closeTimerRef = useRef(null);
   const original = entry.note || '';
   const dirty = draft !== original;
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+  }, []);
 
   const save = async () => {
     setState('saving');
     try {
       await onSave(entry.id, draft);
       setState('saved');
-      setTimeout(() => onCancel(), 450);
+      if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
+        onCancel();
+      }, 450);
     } catch {
       setState('error');
     }
@@ -281,13 +290,17 @@ export default function GrimoireWorkbench({
   useEffect(() => {
     if (!pendingDelete) return undefined;
     const armedKey = pendingDelete.key;
+    const armedEntryId = pendingDelete.entryId;
     const timeout = setTimeout(() => {
-      if (pendingDeleteRef.current?.key !== armedKey) return;
+      if (
+        pendingDeleteRef.current?.key !== armedKey
+        || pendingDeleteRef.current?.entryId !== armedEntryId
+      ) return;
       pendingDeleteRef.current = null;
       pendingDeleteTriggerRef.current = null;
       setPendingDelete(null);
       setStatus((current) => (
-        current?.deleteKey === armedKey
+        current?.deleteKey === armedKey && current?.deleteEntryId === armedEntryId
           ? { type: 'info', text: 'Deletion confirmation expired. No saved entries were removed.' }
           : current
       ));
@@ -366,7 +379,7 @@ export default function GrimoireWorkbench({
     const isTriad = entryCount > 1 || normalizeSpreadType(entry.spreadType) === 'triad';
     const armed = pendingDeleteRef.current;
 
-    if (armed?.key !== group.key) {
+    if (armed?.key !== group.key || armed?.entryId !== entry.id) {
       const next = { key: group.key, entryId: entry.id, entryCount, isTriad };
       pendingDeleteRef.current = next;
       pendingDeleteTriggerRef.current = event.currentTarget;
@@ -375,6 +388,7 @@ export default function GrimoireWorkbench({
       setStatus({
         type: 'info',
         deleteKey: group.key,
+        deleteEntryId: entry.id,
         text: isTriad
           ? `Press Confirm Triad delete within five seconds. This removes all ${entryCount} entries and their private notes. Lifetime total remains.`
           : 'Press Confirm delete within five seconds. This removes the saved entry and its private note. Lifetime total remains.',
@@ -564,7 +578,7 @@ export default function GrimoireWorkbench({
                   const editing = editingId === entry.id;
                   const group = consultationByEntryId.get(entry.id) || { key: `entry:${entry.id}`, entries: [entry] };
                   const triadDelete = group.entries.length > 1 || normalizeSpreadType(entry.spreadType) === 'triad';
-                  const deleteArmed = pendingDelete?.key === group.key;
+                  const deleteArmed = pendingDelete?.key === group.key && pendingDelete?.entryId === entry.id;
                   const deleteText = deleteArmed
                     ? (triadDelete ? 'Confirm Triad delete' : 'Confirm delete')
                     : 'Delete';
