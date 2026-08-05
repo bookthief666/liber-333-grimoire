@@ -109,6 +109,27 @@ test.describe('Grimoire release integrity', () => {
     expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)).length, JOURNAL_KEY)).toBe(5);
   });
 
+  test('cancels note auto-close when editing resumes during the saved window', async ({ page }) => {
+    const { dialog } = await openWorkbench(page);
+    const discipline = dialog.locator('article').filter({ hasText: 'What does discipline require now?' });
+
+    await activate(discipline.getByRole('button', { name: 'Add note' }));
+    const editor = discipline.getByLabel('Private integration note');
+    await editor.fill('Save this note first.');
+    await activate(discipline.getByRole('button', { name: 'Save note' }));
+    await expect(discipline.getByText('Saved.', { exact: true })).toBeVisible();
+
+    await editor.fill('Save this note first. Continue with an unsaved revision.');
+    await expect(discipline.getByText('Unsaved changes', { exact: true })).toBeVisible();
+    await page.waitForTimeout(550);
+
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveValue('Save this note first. Continue with an unsaved revision.');
+    await expect(discipline.getByText('Unsaved changes', { exact: true })).toBeVisible();
+    const stored = await readJournal(page);
+    expect(stored.find((entry) => entry.id === 'single-discipline')?.note).toBe('Save this note first.');
+  });
+
   test('does not let a saved note close timer dismiss a newly opened editor', async ({ page }) => {
     const { dialog } = await openWorkbench(page);
     const discipline = dialog.locator('article').filter({ hasText: 'What does discipline require now?' });
