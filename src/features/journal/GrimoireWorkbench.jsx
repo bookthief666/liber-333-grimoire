@@ -8,6 +8,10 @@ import {
   normalizeGrimoireFilters,
   normalizeSpreadType,
 } from './grimoireWorkbench.js';
+import {
+  countJournalConsultations,
+  groupJournalEntriesByConsultation,
+} from './consultationSemantics.js';
 import { JOURNAL_NOTE_LIMIT } from './journalSchema.js';
 import './grimoireWorkbench.css';
 
@@ -17,6 +21,10 @@ const STATUS_COLORS = {
   working: '#9aa0c4',
   info: '#9aa0c4',
 };
+
+function pluralize(count, singular, plural = `${singular}s`) {
+  return count === 1 ? singular : plural;
+}
 
 function downloadTextFile(payload, type) {
   if (!payload?.content || !payload?.filename) throw new Error('The export could not be prepared.');
@@ -157,15 +165,32 @@ export default function GrimoireWorkbench({
   const searchRef = useRef(null);
   const editingIdRef = useRef(null);
   const editingTriggerRef = useRef(null);
+  const pendingDeleteRef = useRef(null);
+  const pendingDeleteTriggerRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const [filters, setFilters] = useState(DEFAULT_GRIMOIRE_FILTERS);
   const [status, setStatus] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [clearArmed, setClearArmed] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const safeEntries = Array.isArray(entries) ? entries : [];
+  const safeTotalReadings = Number.isInteger(totalReadings) && totalReadings >= 0 ? totalReadings : 0;
 
   const filteredEntries = useMemo(() => applyGrimoireFilters(safeEntries, filters), [safeEntries, filters]);
   const recurrence = useMemo(() => buildGrimoireRecurrence(safeEntries), [safeEntries]);
+  const consultationGroups = useMemo(() => groupJournalEntriesByConsultation(safeEntries), [safeEntries]);
+  const consultationByEntryId = useMemo(() => {
+    const groups = new Map();
+    consultationGroups.forEach((group) => {
+      group.entries.forEach((entry) => groups.set(entry.id, group));
+    });
+    return groups;
+  }, [consultationGroups]);
+  const savedConsultationCount = consultationGroups.length;
+  const filteredConsultationCount = useMemo(
+    () => countJournalConsultations(filteredEntries),
+    [filteredEntries],
+  );
   const activeFilters = describeFilters(filters);
   const hasActiveFilters = activeFilters !== 'All saved consultations';
 
@@ -179,6 +204,20 @@ export default function GrimoireWorkbench({
     const trigger = editingTriggerRef.current;
     if (trigger && document.contains(trigger)) trigger.focus();
     setEditingId(null);
+  }, []);
+
+  const cancelPendingDelete = useCallback(({ announce = true, restoreFocus = true } = {}) => {
+    const armed = pendingDeleteRef.current;
+    if (!armed) return false;
+    const trigger = pendingDeleteTriggerRef.current;
+    pendingDeleteRef.current = null;
+    pendingDeleteTriggerRef.current = null;
+    setPendingDelete(null);
+    if (announce) setStatus({ type: 'info', text: 'Deletion cancelled.' });
+    if (restoreFocus && trigger && document.contains(trigger)) {
+      requestAnimationFrame(() => trigger.focus());
+    }
+    return true;
   }, []);
 
   useEffect(() => {
@@ -200,6 +239,11 @@ export default function GrimoireWorkbench({
         if (editingIdRef.current) {
           event.preventDefault();
           closeNoteEditor();
+          return;
+        }
+        if (pendingDeleteRef.current) {
+          event.preventDefault();
+          cancelPendingDelete();
           return;
         }
         event.preventDefault();
@@ -226,7 +270,7 @@ export default function GrimoireWorkbench({
       dialog.removeEventListener('keydown', onKeyDown);
       if (previous && document.contains(previous)) previous.focus?.();
     };
-  }, [closeNoteEditor]);
+  }, [cancelPendingDelete, closeNoteEditor]);
 
   useEffect(() => {
     if (!clearArmed) return undefined;
@@ -234,11 +278,33 @@ export default function GrimoireWorkbench({
     return () => clearTimeout(timeout);
   }, [clearArmed]);
 
+  useEffect(() => {
+    if (!pendingDelete) return undefined;
+    const armedKey = pendingDelete.key;
+    const timeout = setTimeout(() => {
+      if (pendingDeleteRef.current?.key !== armedKey) return;
+      pendingDeleteRef.current = null;
+      pendingDeleteTriggerRef.current = null;
+      setPendingDelete(null);
+      setStatus((current) => (
+        current?.deleteKey === armedKey
+          ? { type: 'info', text: 'Deletion confirmation expired. No saved entries were removed.' }
+          : current
+      ));
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, [pendingDelete]);
+
   const exportBackup = () => {
     try {
       const payload = onExportBackup?.();
       downloadTextFile(payload, 'application/json;charset=utf-8');
-      setStatus({ type: 'success', text: `Exported ${payload.entryCount} saved consultation${payload.entryCount === 1 ? '' : 's'} as JSON.` });
+      const consultationCount = payload.consultationCount ?? payload.entryCount ?? 0;
+      const recordCount = payload.recordCount ?? consultationCount;
+      setStatus({
+        type: 'success',
+        text: `Exported ${consultationCount} ${pluralize(consultationCount, 'consultation')} and ${recordCount} ${pluralize(recordCount, 'entry', 'entries')} as JSON.`,
+      });
     } catch (error) {
       setStatus({ type: 'error', text: error?.message || 'The JSON backup could not be exported.' });
     }
@@ -250,7 +316,12 @@ export default function GrimoireWorkbench({
         ? { selectedEntries: filteredEntries, filterDescription: activeFilters }
         : undefined);
       downloadTextFile(payload, 'text/markdown;charset=utf-8');
-      setStatus({ type: 'success', text: `Exported ${payload.entryCount} consultation${payload.entryCount === 1 ? '' : 's'} as Markdown.` });
+      const consultationCount = payload.consultationCount ?? payload.entryCount ?? 0;
+      const recordCount = payload.recordCount ?? consultationCount;
+      setStatus({
+        type: 'success',
+        text: `Exported ${consultationCount} ${pluralize(consultationCount, 'consultation')} and ${recordCount} ${pluralize(recordCount, 'entry', 'entries')} as Markdown.`,
+      });
     } catch (error) {
       setStatus({ type: 'error', text: error?.message || 'The Markdown export could not be created.' });
     }
@@ -269,9 +340,10 @@ export default function GrimoireWorkbench({
     try {
       const result = await onImportBackup?.(await file.text());
       if (!result) throw new Error('The backup could not be imported.');
-      let message = `Imported ${result.importedCount} new consultation${result.importedCount === 1 ? '' : 's'}.`;
-      if (result.duplicateCount) message += ` Kept ${result.duplicateCount} existing local entr${result.duplicateCount === 1 ? 'y' : 'ies'}.`;
-      if (result.omittedByCap) message += ' Retained the newest 50 consultations.';
+      const importedEntries = result.importedEntryCount ?? result.importedCount;
+      let message = `Imported ${result.importedCount} new ${pluralize(result.importedCount, 'consultation')} and ${importedEntries} ${pluralize(importedEntries, 'entry', 'entries')}.`;
+      if (result.duplicateCount) message += ` Kept ${result.duplicateCount} existing local ${pluralize(result.duplicateCount, 'entry', 'entries')}.`;
+      if (result.omittedByCap) message += ' Retained the newest complete consultations within the 50-entry local limit.';
       if (result.backupSourceVersion === 1) message += ' Migrated a version 1 backup to the current schema.';
       setStatus({ type: 'success', text: message });
     } catch (error) {
@@ -288,7 +360,49 @@ export default function GrimoireWorkbench({
     }
   };
 
+  const confirmDelete = async (entry, event) => {
+    const group = consultationByEntryId.get(entry.id) || { key: `entry:${entry.id}`, entries: [entry] };
+    const entryCount = group.entries.length;
+    const isTriad = entryCount > 1 || normalizeSpreadType(entry.spreadType) === 'triad';
+    const armed = pendingDeleteRef.current;
+
+    if (armed?.key !== group.key) {
+      const next = { key: group.key, entryId: entry.id, entryCount, isTriad };
+      pendingDeleteRef.current = next;
+      pendingDeleteTriggerRef.current = event.currentTarget;
+      setPendingDelete(next);
+      setClearArmed(false);
+      setStatus({
+        type: 'info',
+        deleteKey: group.key,
+        text: isTriad
+          ? `Press Confirm Triad delete within five seconds. This removes all ${entryCount} entries and their private notes. Lifetime total remains.`
+          : 'Press Confirm delete within five seconds. This removes the saved entry and its private note. Lifetime total remains.',
+      });
+      return;
+    }
+
+    try {
+      await onDelete?.(entry.id);
+      pendingDeleteRef.current = null;
+      pendingDeleteTriggerRef.current = null;
+      setPendingDelete(null);
+      setStatus({
+        type: 'success',
+        text: isTriad
+          ? `Deleted one Triad consultation and ${entryCount} saved entries. Lifetime reading total preserved.`
+          : 'Deleted one consultation and one saved entry. Lifetime reading total preserved.',
+      });
+    } catch {
+      pendingDeleteRef.current = null;
+      pendingDeleteTriggerRef.current = null;
+      setPendingDelete(null);
+      setStatus({ type: 'error', text: 'The saved consultation could not be deleted.' });
+    }
+  };
+
   const confirmClear = async () => {
+    cancelPendingDelete({ announce: false, restoreFocus: false });
     if (!clearArmed) {
       setClearArmed(true);
       setStatus({ type: 'info', text: 'Press Confirm clear within five seconds to remove saved consultations. Lifetime total remains.' });
@@ -314,7 +428,15 @@ export default function GrimoireWorkbench({
           <div>
             <p className="grimoire-eyebrow">PRIVATE · LOCAL · OFFLINE</p>
             <h2 id="grimoire-workbench-title">☥ Grimoire Workbench</h2>
-            <p>{totalReadings} lifetime readings · {safeEntries.length} saved · {filteredEntries.length} shown</p>
+            <p
+              className="grimoire-workbench-counts"
+              aria-label={`${safeTotalReadings} lifetime readings, ${savedConsultationCount} saved consultations, ${filteredEntries.length} entries shown`}
+              style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem 0.65rem' }}
+            >
+              <span>{safeTotalReadings} lifetime {pluralize(safeTotalReadings, 'reading')}</span>
+              <span>{savedConsultationCount} saved {pluralize(savedConsultationCount, 'consultation')}</span>
+              <span>{filteredEntries.length} {pluralize(filteredEntries.length, 'entry', 'entries')} shown</span>
+            </p>
           </div>
           <button type="button" className="grimoire-close" aria-label="Close Grimoire" onClick={onClose}>×</button>
         </header>
@@ -426,8 +548,8 @@ export default function GrimoireWorkbench({
           <main className="grimoire-results" aria-label="Saved consultations">
             <div className="grimoire-results-heading">
               <div>
-                <strong>{filteredEntries.length}</strong> result{filteredEntries.length === 1 ? '' : 's'}
-                <span>{activeFilters}</span>
+                <strong>{filteredConsultationCount}</strong> {pluralize(filteredConsultationCount, 'consultation')}
+                <span>{filteredEntries.length} {pluralize(filteredEntries.length, 'entry', 'entries')} shown · {activeFilters}</span>
               </div>
             </div>
 
@@ -440,6 +562,16 @@ export default function GrimoireWorkbench({
                 {filteredEntries.map((entry) => {
                   const recurrenceItem = recurrence.find((item) => item.chapter === entry.chapter);
                   const editing = editingId === entry.id;
+                  const group = consultationByEntryId.get(entry.id) || { key: `entry:${entry.id}`, entries: [entry] };
+                  const triadDelete = group.entries.length > 1 || normalizeSpreadType(entry.spreadType) === 'triad';
+                  const deleteArmed = pendingDelete?.key === group.key;
+                  const deleteText = deleteArmed
+                    ? (triadDelete ? 'Confirm Triad delete' : 'Confirm delete')
+                    : 'Delete';
+                  const deleteLabel = deleteArmed
+                    ? `Confirm deletion of ${triadDelete ? `the complete Triad consultation containing ${group.entries.length} entries` : 'this saved consultation'}`
+                    : `Delete ${triadDelete ? `the complete saved Triad consultation containing ${group.entries.length} entries` : 'saved consultation'} for ${entry.title || `chapter ${entry.chapter}`}`;
+
                   return (
                     <article key={entry.id} className="grimoire-entry" data-favorite={entry.favorite ? 'true' : 'false'}>
                       <div className="grimoire-entry-topline">
@@ -480,7 +612,15 @@ export default function GrimoireWorkbench({
                           >
                             {editing ? 'Close note' : entry.note ? 'Edit note' : 'Add note'}
                           </button>
-                          <button type="button" className="danger-text" aria-label={`Delete saved consultation for ${entry.title || `chapter ${entry.chapter}`}`} onClick={() => onDelete?.(entry.id)}>Delete</button>
+                          <button
+                            type="button"
+                            className={`danger-text${deleteArmed ? ' danger' : ''}`}
+                            aria-label={deleteLabel}
+                            data-delete-armed={deleteArmed ? 'true' : 'false'}
+                            onClick={(event) => confirmDelete(entry, event)}
+                          >
+                            {deleteText}
+                          </button>
                         </div>
                       </div>
 
