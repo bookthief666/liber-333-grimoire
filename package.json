@@ -11,7 +11,7 @@
     "test:gematria": "node --test tests/gematriaEngine.test.mjs",
     "test:journal": "node --test tests/journalStorage.test.mjs",
     "test:journal-backup": "node --test tests/journalBackup.test.mjs",
-    "test:grimoire-workbench": "node --test tests/journalSchema.test.mjs tests/consultationSemantics.test.mjs tests/grimoireWorkbench.test.mjs tests/journalMarkdown.test.mjs tests/grimoireWorkbenchUi.test.mjs tests/codexReviewRegression.test.mjs",
+    "test:grimoire-workbench": "node --test tests/journalSchema.test.mjs tests/consultationSemantics.test.mjs tests/consultationImportSemantics.test.mjs tests/grimoireWorkbench.test.mjs tests/journalMarkdown.test.mjs tests/grimoireWorkbenchUi.test.mjs tests/codexReviewRegression.test.mjs",
     "test:rites": "node --test tests/ritualData.test.mjs",
     "test:correspondences": "node --test tests/correspondences.test.mjs",
     "test:oracle": "node --test tests/oraclePrompts.test.mjs",
