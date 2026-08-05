@@ -1,4 +1,5 @@
 import { LIBER_333 } from '../../data/liber333.js';
+import { normalizeJournalSpreadType } from './consultationIdentity.js';
 import {
   countJournalConsultations,
   countNewJournalConsultations,
@@ -31,6 +32,7 @@ export const JOURNAL_BACKUP_LIMITS = Object.freeze({
 
 const CHAPTER_BY_NUMBER = new Map(LIBER_333.map((chapter) => [chapter.chapter, chapter]));
 const SPREAD_POSITIONS = new Set(['single', 'thesis', 'antithesis', 'synthesis']);
+const TRIAD_POSITIONS = new Set(['thesis', 'antithesis', 'synthesis']);
 
 export class JournalBackupError extends Error {
   constructor(message, code = 'invalid_journal_backup') {
@@ -134,6 +136,87 @@ export function normalizeJournalEntry(entry, { sourceVersion = JOURNAL_BACKUP_VE
   return normalized;
 }
 
+function assertSharedGroupField(group, field, consultationId) {
+  const expected = group[0]?.[field] ?? null;
+  if (group.some((entry) => (entry?.[field] ?? null) !== expected)) {
+    throw new JournalBackupError(
+      `Consultation ${consultationId} contains inconsistent ${field} values.`,
+      'invalid_consultation_group',
+    );
+  }
+}
+
+function validateExplicitConsultationGroups(entries, sourceVersion) {
+  if (sourceVersion === 1) return;
+  const groups = new Map();
+
+  entries.forEach((entry) => {
+    const position = entry.spreadPosition || null;
+    if (TRIAD_POSITIONS.has(position) && !entry.consultationId) {
+      throw new JournalBackupError(
+        `Entry ${entry.id} has a Triad position without a consultation ID.`,
+        'invalid_consultation_group',
+      );
+    }
+    if (!entry.consultationId) return;
+    const group = groups.get(entry.consultationId) || [];
+    group.push(entry);
+    groups.set(entry.consultationId, group);
+  });
+
+  groups.forEach((group, consultationId) => {
+    const isTriad = group.some((entry) => (
+      normalizeJournalSpreadType(entry.spreadType) === 'triad'
+      || TRIAD_POSITIONS.has(entry.spreadPosition)
+    ));
+
+    if (!isTriad) {
+      if (group.length !== 1) {
+        throw new JournalBackupError(
+          `Single consultation ${consultationId} must contain exactly one entry.`,
+          'invalid_consultation_group',
+        );
+      }
+      const [entry] = group;
+      if (entry.spreadPosition && entry.spreadPosition !== 'single') {
+        throw new JournalBackupError(
+          `Single consultation ${consultationId} has an invalid spread position.`,
+          'invalid_consultation_group',
+        );
+      }
+      return;
+    }
+
+    if (group.length !== 3) {
+      throw new JournalBackupError(
+        `Triad consultation ${consultationId} must contain exactly three entries.`,
+        'invalid_consultation_group',
+      );
+    }
+    if (group.some((entry) => normalizeJournalSpreadType(entry.spreadType) !== 'triad')) {
+      throw new JournalBackupError(
+        `Triad consultation ${consultationId} contains a non-Triad spread label.`,
+        'invalid_consultation_group',
+      );
+    }
+
+    const positions = group.map((entry) => entry.spreadPosition);
+    if (
+      positions.some((position) => !TRIAD_POSITIONS.has(position))
+      || new Set(positions).size !== TRIAD_POSITIONS.size
+    ) {
+      throw new JournalBackupError(
+        `Triad consultation ${consultationId} must contain thesis, antithesis, and synthesis exactly once.`,
+        'invalid_consultation_group',
+      );
+    }
+
+    for (const field of ['question', 'date', 'gematria']) {
+      assertSharedGroupField(group, field, consultationId);
+    }
+  });
+}
+
 function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = {}) {
   if (!Array.isArray(entries)) throw new JournalBackupError('Backup entries must be an array.');
   if (entries.length > JOURNAL_BACKUP_LIMITS.entries) {
@@ -141,12 +224,14 @@ function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = 
   }
 
   const ids = new Set();
-  return entries.map((entry) => {
+  const normalizedEntries = entries.map((entry) => {
     const normalized = normalizeJournalEntry(entry, { sourceVersion });
     if (ids.has(normalized.id)) throw new JournalBackupError(`Backup contains duplicate entry ID ${normalized.id}.`);
     ids.add(normalized.id);
     return normalized;
   });
+  validateExplicitConsultationGroups(normalizedEntries, sourceVersion);
+  return normalizedEntries;
 }
 
 function normalizeTotalReadings(value, entries) {
