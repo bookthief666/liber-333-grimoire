@@ -267,6 +267,8 @@ test('rejects a Triad position without an explicit consultation ID in v2', () =>
   const [{ consultationId, ...malformed }] = triad;
   assert.throws(
     () => createJournalBackup({ entries: [malformed], totalReadings: 1 }),
-    /Triad position without a consultation ID/,
+    (error) => error instanceof JournalBackupError
+      && error.code === 'invalid_consultation_group'
+      && /Triad spread label without a consultation ID/.test(error.message),
   );
 });
