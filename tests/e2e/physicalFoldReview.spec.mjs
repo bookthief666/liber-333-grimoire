@@ -18,6 +18,7 @@ test.describe('Physical Fold 6 refinements', () => {
     const { dialog } = await openWorkbench(page);
     const toolbar = dialog.locator('.grimoire-workbench-toolbar');
     await expect(toolbar).toBeVisible();
+    await expect(page.locator('.liber-context-tools')).toBeHidden();
 
     const toolbarMetrics = await toolbar.evaluate((element) => {
       const container = element.getBoundingClientRect();
