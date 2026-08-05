@@ -73,6 +73,124 @@ test('adding missing rows to an existing consultation is not reported as a new c
   assert.equal(result.totalReadings, 1);
 });
 
+test('local consultation positions win even when backup row IDs differ', () => {
+  const backup = createJournalBackup({
+    entries: triad,
+    totalReadings: 1,
+    exportedAt: new Date('2026-08-05T05:30:00.000Z'),
+  });
+  const localThesis = {
+    ...triad[0],
+    id: 'local-triad-thesis',
+    favorite: true,
+    note: 'Preserve this local thesis note.',
+  };
+  const result = mergeJournalBackup({
+    currentEntries: [localThesis],
+    currentTotalReadings: 1,
+    backup,
+  });
+
+  assert.equal(result.importedConsultationCount, 0);
+  assert.equal(result.importedEntryCount, 2);
+  assert.equal(result.duplicateCount, 1);
+  assert.equal(result.entries.length, 3);
+  assert.deepEqual(
+    result.entries.map((entry) => entry.spreadPosition).sort(),
+    ['antithesis', 'synthesis', 'thesis'],
+  );
+  const retainedThesis = result.entries.find((entry) => entry.spreadPosition === 'thesis');
+  assert.equal(retainedThesis.id, 'local-triad-thesis');
+  assert.equal(retainedThesis.favorite, true);
+  assert.equal(retainedThesis.note, 'Preserve this local thesis note.');
+  assert.doesNotThrow(() => createJournalBackup({
+    entries: result.entries,
+    totalReadings: result.totalReadings,
+  }));
+});
+
+test('a complete local explicit consultation wins over different backup row IDs', () => {
+  const backup = createJournalBackup({
+    entries: triad,
+    totalReadings: 1,
+    exportedAt: new Date('2026-08-05T05:30:00.000Z'),
+  });
+  const localTriad = triad.map((entry) => ({
+    ...entry,
+    id: `local-${entry.spreadPosition}`,
+    favorite: entry.spreadPosition === 'synthesis',
+    note: entry.spreadPosition === 'synthesis' ? 'Keep the local synthesis note.' : '',
+  }));
+  const result = mergeJournalBackup({
+    currentEntries: localTriad,
+    currentTotalReadings: 9,
+    backup,
+  });
+
+  assert.equal(result.importedConsultationCount, 0);
+  assert.equal(result.importedEntryCount, 0);
+  assert.equal(result.duplicateCount, 3);
+  assert.deepEqual(
+    new Set(result.entries.map((entry) => entry.id)),
+    new Set(['local-thesis', 'local-antithesis', 'local-synthesis']),
+  );
+  assert.equal(result.totalReadings, 9);
+  assert.doesNotThrow(() => createJournalBackup({
+    entries: result.entries,
+    totalReadings: result.totalReadings,
+  }));
+});
+
+test('rejects incompatible Single and Triad reuse of one explicit consultation ID', () => {
+  const backup = createJournalBackup({
+    entries: triad,
+    totalReadings: 1,
+    exportedAt: new Date('2026-08-05T05:30:00.000Z'),
+  });
+  const localSingle = {
+    ...triad[0],
+    id: 'local-single',
+    spreadPosition: 'single',
+    spreadType: 'single',
+  };
+
+  assert.throws(
+    () => mergeJournalBackup({
+      currentEntries: [localSingle],
+      currentTotalReadings: 1,
+      backup,
+    }),
+    (error) => error instanceof JournalBackupError
+      && error.code === 'consultation_collision'
+      && /conflicts with existing local consultation data/.test(error.message),
+  );
+});
+
+test('rejects an unrelated row-ID collision that would leave an imported partial Triad', () => {
+  const backup = createJournalBackup({
+    entries: triad,
+    totalReadings: 1,
+    exportedAt: new Date('2026-08-05T05:30:00.000Z'),
+  });
+  const unrelatedLocalSingle = {
+    ...triad[0],
+    consultationId: 'different-local-consultation',
+    spreadPosition: 'single',
+    spreadType: 'single',
+  };
+
+  assert.throws(
+    () => mergeJournalBackup({
+      currentEntries: [unrelatedLocalSingle],
+      currentTotalReadings: 1,
+      backup,
+    }),
+    (error) => error instanceof JournalBackupError
+      && error.code === 'consultation_collision'
+      && /import-triad/.test(error.message),
+  );
+});
+
 test('rejects explicit v2 Triads with missing rows', () => {
   assert.throws(
     () => parseJournalBackup(backupEnvelope(triad.slice(0, 2))),
