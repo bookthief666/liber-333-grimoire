@@ -1,6 +1,7 @@
 import { LIBER_333 } from '../../data/liber333.js';
 import {
   countJournalConsultations,
+  countNewJournalConsultations,
   retainCompleteJournalConsultations,
 } from './consultationSemantics.js';
 import { MAX_JOURNAL_ENTRIES } from './journalStorage.js';
@@ -240,6 +241,10 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   const mergedEntries = retention.entries;
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
   const retainedImportedEntries = importedEntries.filter((entry) => retainedIds.has(entry.id));
+  const importedConsultationCount = countNewJournalConsultations(
+    migratedCurrent,
+    retainedImportedEntries,
+  );
 
   const totalReadings = Math.max(
     Number.isInteger(currentTotalReadings) ? currentTotalReadings : 0,
@@ -250,8 +255,9 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   return {
     entries: mergedEntries,
     totalReadings,
-    importedCount: retainedImportedEntries.length,
-    importedConsultationCount: countJournalConsultations(retainedImportedEntries),
+    importedCount: importedConsultationCount,
+    importedConsultationCount,
+    importedEntryCount: retainedImportedEntries.length,
     duplicateCount: backup.entries.length - importedEntries.length,
     omittedByCap: retention.omittedEntries,
     omittedConsultationCount: retention.omittedConsultations,
