@@ -6,6 +6,30 @@ import {
   serializeGrimoireMarkdown,
 } from '../src/features/journal/journalMarkdown.js';
 
+const groupedEntries = () => {
+  const triadBase = {
+    consultationId: 'triad-1',
+    date: '2026-07-20T18:00:00.000Z',
+    question: 'How do these three positions resolve?',
+    spreadType: 'triad',
+  };
+  return [
+    { ...triadBase, id: 'triad-thesis', chapter: 1, title: 'THE SABBATH OF THE GOAT', spreadPosition: 'thesis' },
+    { ...triadBase, id: 'triad-antithesis', chapter: 2, title: 'THE CRY OF THE HAWK', spreadPosition: 'antithesis' },
+    { ...triadBase, id: 'triad-synthesis', chapter: 3, title: 'THE OYSTER', spreadPosition: 'synthesis' },
+    {
+      id: 'single-1',
+      consultationId: 'single-1',
+      date: '2026-07-21T18:00:00.000Z',
+      question: 'What is the next act?',
+      chapter: 7,
+      title: 'THE DINOSAURS',
+      spreadType: 'single',
+      spreadPosition: 'single',
+    },
+  ];
+};
+
 test('date-only Workbench filters use local calendar-day boundaries', () => {
   const moduleUrl = new URL('../src/features/journal/grimoireWorkbench.js', import.meta.url).href;
   const script = `
@@ -45,31 +69,14 @@ test('date-only Workbench filters use local calendar-day boundaries', () => {
 });
 
 test('Markdown metadata counts grouped Triads as consultations, not entries', () => {
-  const triadBase = {
-    consultationId: 'triad-1',
-    date: '2026-07-20T18:00:00.000Z',
-    question: 'How do these three positions resolve?',
-    spreadType: 'triad',
-  };
-  const entries = [
-    { ...triadBase, id: 'triad-thesis', chapter: 1, title: 'THE SABBATH OF THE GOAT', spreadPosition: 'thesis' },
-    { ...triadBase, id: 'triad-antithesis', chapter: 2, title: 'THE CRY OF THE HAWK', spreadPosition: 'antithesis' },
-    { ...triadBase, id: 'triad-synthesis', chapter: 3, title: 'THE OYSTER', spreadPosition: 'synthesis' },
-    {
-      id: 'single-1',
-      date: '2026-07-21T18:00:00.000Z',
-      question: 'What is the next act?',
-      chapter: 7,
-      title: 'THE DINOSAURS',
-      spreadType: 'single',
-    },
-  ];
-
+  const entries = groupedEntries();
   assert.equal(countGrimoireConsultations(entries), 2);
   const markdown = serializeGrimoireMarkdown({
     entries,
+    totalReadings: 1,
     exportedAt: new Date('2026-07-22T00:00:00.000Z'),
   });
   assert.match(markdown, /\*\*Exported consultations:\*\* 2/);
   assert.match(markdown, /\*\*Exported entries:\*\* 4/);
+  assert.match(markdown, /\*\*Lifetime reading total:\*\* 2/);
 });
