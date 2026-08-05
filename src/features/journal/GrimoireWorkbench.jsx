@@ -115,6 +115,10 @@ function NoteEditor({ entry, onSave, onCancel }) {
         maxLength={JOURNAL_NOTE_LIMIT}
         autoFocus
         onChange={(event) => {
+          if (closeTimerRef.current !== null) {
+            clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+          }
           setDraft(event.target.value);
           if (state !== 'idle') setState('idle');
         }}
