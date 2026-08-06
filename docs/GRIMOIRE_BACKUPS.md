@@ -145,7 +145,7 @@ The regression suite protects:
 - three-row chunking of repeated legacy Triads;
 - strict rejection of missing/extra rows, duplicate/missing positions, missing IDs, mixed labels, and inconsistent shared fields;
 - local precedence by entry ID and by explicit consultation position;
-- safe completion of partial local Triads when row IDs differ or a cumulative legacy backup overlaps matching fragments, including equal timestamps, unknown local fields, and capacity fallback;
+- safe completion of partial local Triads when row IDs differ or a cumulative legacy backup overlaps matching fragments, including equal timestamps, unknown local fields, capacity fallback, and no regrouping after cap compaction;
 - rejection of incompatible Single/Triad consultation-ID reuse;
 - rejection of row-ID collisions that would leave a partial imported Triad;
 - post-merge exportability of retained explicit consultations;

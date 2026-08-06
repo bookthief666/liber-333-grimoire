@@ -540,9 +540,10 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   });
   const sortedEntries = [...reconciledCurrent, ...importedEntries]
     .sort(compareNewestFirst);
-  validateTouchedExplicitConsultations(sortedEntries, touchedExplicitConsultationIds);
+  const mergedCandidates = migrateJournalEntries(sortedEntries);
+  validateTouchedExplicitConsultations(mergedCandidates, touchedExplicitConsultationIds);
 
-  const retention = retainCompleteJournalConsultations(sortedEntries, MAX_JOURNAL_ENTRIES);
+  const retention = retainCompleteJournalConsultations(mergedCandidates, MAX_JOURNAL_ENTRIES);
   const retainedConsultationIds = new Set(
     retention.entries.map((entry) => entry.consultationId).filter(Boolean),
   );
@@ -557,7 +558,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
       'journal_capacity_collision',
     );
   }
-  const mergedEntries = migrateJournalEntries(retainedEntries);
+  const mergedEntries = retainedEntries;
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
   const retainedImportedEntries = importedEntries.filter((entry) => retainedIds.has(entry.id));
   const importedConsultationCount = countNewJournalConsultations(

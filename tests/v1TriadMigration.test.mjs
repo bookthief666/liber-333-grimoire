@@ -307,3 +307,61 @@ test('capacity-limited cumulative recovery retains the original local fragment',
   assert.equal(retainedFragment.note, 'Do not lose this local fragment.');
   assert.deepEqual(retainedFragment.futureReadingLayer, { seal: 'cap-local' });
 });
+
+test('cap retention does not regroup fragments after separating Triads are omitted', () => {
+  const sameQuestion = 'Keep these historical fragments distinct.';
+  const fragment = (id, chapter, date) => ({
+    ...legacyTriadEntry(id, chapter, date),
+    question: sameQuestion,
+    legacyTriadFragment: true,
+  });
+  const explicitTriad = (consultationId, date, chapterOffset) => (
+    ['thesis', 'antithesis', 'synthesis'].map((spreadPosition, index) => ({
+      ...legacyTriadEntry(`${consultationId}-${spreadPosition}`, chapterOffset + index, date),
+      question: `Separator ${consultationId}`,
+      consultationId,
+      spreadType: 'triad',
+      spreadPosition,
+    }))
+  );
+  const newerCurrentSingles = Array.from({ length: 41 }, (_, index) => ({
+    ...legacyTriadEntry(
+      `regroup-current-single-${index}`,
+      (index % 41) - 2,
+      new Date(Date.UTC(2026, 6, 24, 3, 0, index)).toISOString(),
+    ),
+    spreadType: 'single',
+  }));
+  const historicalTail = [
+    fragment('regroup-fragment-1', 1, '2026-07-24T01:02:00.000Z'),
+    ...explicitTriad('regroup-separator-1', '2026-07-24T01:01:40.000Z', 10),
+    fragment('regroup-fragment-2', 2, '2026-07-24T01:01:20.000Z'),
+    ...explicitTriad('regroup-separator-2', '2026-07-24T01:01:00.000Z', 20),
+    fragment('regroup-fragment-3', 3, '2026-07-24T01:00:40.000Z'),
+  ];
+  const importedSingles = Array.from({ length: 6 }, (_, index) => ({
+    ...legacyTriadEntry(
+      `regroup-import-single-${index}`,
+      40 + index,
+      new Date(Date.UTC(2026, 6, 24, 4, 0, index)).toISOString(),
+    ),
+    spreadType: 'single',
+  }));
+  const backup = createJournalBackup({
+    entries: importedSingles,
+    totalReadings: 6,
+    exportedAt: new Date('2026-07-24T05:00:00.000Z'),
+  });
+
+  const merged = mergeJournalBackup({
+    currentEntries: [...newerCurrentSingles, ...historicalTail],
+    currentTotalReadings: 50,
+    backup,
+  });
+
+  assert.equal(merged.entries.length, 50);
+  const retainedFragments = merged.entries.filter((entry) => entry.id.startsWith('regroup-fragment-'));
+  assert.equal(retainedFragments.length, 3);
+  assert.ok(retainedFragments.every((entry) => entry.legacyTriadFragment === true));
+  assert.ok(retainedFragments.every((entry) => !entry.consultationId && !entry.spreadPosition));
+});
