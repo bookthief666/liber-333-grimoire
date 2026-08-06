@@ -175,63 +175,88 @@ export function upgradeLegacyJournalTriads(
   const groupsToUpgrade = [];
   const crossBoundaryIndexes = new Set();
   if (reconsiderLegacyFragments && reconsiderEntryIds instanceof Set) {
-    const reconsideredGroups = [];
-    let activeReconsideredGroup = null;
-    upgraded.forEach((entry, index) => {
+    const isCoherentGroup = (indexes, { requireContiguous = false } = {}) => {
+      const orderedIndexes = [...indexes].sort((left, right) => left - right);
       if (
-        !isPlainObject(entry)
-        || entry.consultationId
-        || entry.spreadPosition
-        || entry.legacyTriadFragment !== true
-        || normalizeJournalSpreadType(entry.spreadType) !== 'triad'
-      ) {
-        activeReconsideredGroup = null;
-        return;
-      }
-
-      const signature = getLegacyTriadSignature(entry);
-      const entryTimestamp = Date.parse(entry.date);
-      const canJoin = Boolean(
-        activeReconsideredGroup
-        && activeReconsideredGroup.signature === signature
-        && !Number.isNaN(entryTimestamp)
-        && !Number.isNaN(activeReconsideredGroup.lastTimestamp)
-        && Math.abs(entryTimestamp - activeReconsideredGroup.lastTimestamp) <= LEGACY_TRIAD_TOLERANCE_MS
+        requireContiguous
+        && orderedIndexes.some((entryIndex, position) => (
+          position > 0 && entryIndex !== orderedIndexes[position - 1] + 1
+        ))
+      ) return false;
+      const signatures = new Set(
+        orderedIndexes.map((entryIndex) => getLegacyTriadSignature(upgraded[entryIndex])),
       );
-      if (!canJoin) {
-        activeReconsideredGroup = {
-          signature,
-          lastTimestamp: entryTimestamp,
-          indexes: [],
+      if (signatures.size !== 1) return false;
+      const timestamps = orderedIndexes.map((entryIndex) => Date.parse(upgraded[entryIndex]?.date));
+      return timestamps.every((value, position) => (
+        !Number.isNaN(value)
+        && (
+          position === 0
+          || Math.abs(value - timestamps[position - 1]) <= LEGACY_TRIAD_TOLERANCE_MS
+        )
+      ));
+    };
+
+    const persistedBoundaries = [...preservedGroups.entries()]
+      .filter(([, indexes]) => indexes.every((entryIndex) => (
+        upgraded[entryIndex]?.legacyTriadFragment === true
+      )))
+      .map(([key, indexes]) => {
+        const importedMembership = indexes.map((entryIndex) => (
+          reconsiderEntryIds.has(upgraded[entryIndex]?.id)
+        ));
+        return {
+          key,
+          indexes,
+          source: importedMembership.every(Boolean)
+            ? 'imported'
+            : importedMembership.some(Boolean) ? 'mixed' : 'local',
         };
-        reconsideredGroups.push(activeReconsideredGroup);
-      }
-      activeReconsideredGroup.indexes.push(index);
-      activeReconsideredGroup.lastTimestamp = entryTimestamp;
+      });
+
+    const candidatePairs = [];
+    const localBoundaries = persistedBoundaries.filter((group) => group.source === 'local');
+    const importedBoundaries = persistedBoundaries.filter((group) => group.source === 'imported');
+    localBoundaries.forEach((localBoundary) => {
+      importedBoundaries.forEach((importedBoundary) => {
+        const sizes = [localBoundary.indexes.length, importedBoundary.indexes.length]
+          .sort((left, right) => left - right);
+        const indexes = [...localBoundary.indexes, ...importedBoundary.indexes]
+          .sort((left, right) => left - right);
+        if (
+          sizes[0] !== 1
+          || sizes[1] !== 2
+          || !isCoherentGroup(indexes, { requireContiguous: true })
+        ) return;
+        candidatePairs.push({ localBoundary, importedBoundary, indexes });
+      });
     });
 
-    reconsideredGroups.forEach(({ indexes }) => {
-      if (indexes.length !== TRIAD_POSITION_LIST.length) return;
-      const importedMembership = indexes.map((entryIndex) => (
-        reconsiderEntryIds.has(upgraded[entryIndex]?.id)
-      ));
-      if (!importedMembership.some(Boolean) || importedMembership.every(Boolean)) return;
-
-      const boundarySizes = new Map();
-      indexes.forEach((entryIndex) => {
-        const boundaryId = upgraded[entryIndex]?.legacyTriadFragmentId;
-        boundarySizes.set(boundaryId, (boundarySizes.get(boundaryId) || 0) + 1);
-      });
-      const complementarySizes = [...boundarySizes.values()].sort((left, right) => left - right);
+    const candidateUseCount = new Map();
+    candidatePairs.forEach(({ localBoundary, importedBoundary }) => {
+      for (const key of [localBoundary.key, importedBoundary.key]) {
+        candidateUseCount.set(key, (candidateUseCount.get(key) || 0) + 1);
+      }
+    });
+    candidatePairs.forEach(({ localBoundary, importedBoundary, indexes }) => {
       if (
-        complementarySizes.length !== 2
-        || complementarySizes[0] !== 1
-        || complementarySizes[1] !== 2
+        candidateUseCount.get(localBoundary.key) !== 1
+        || candidateUseCount.get(importedBoundary.key) !== 1
       ) return;
-
       groupsToUpgrade.push({ indexes, reconsiderPersistedBoundaries: true });
       indexes.forEach((entryIndex) => crossBoundaryIndexes.add(entryIndex));
     });
+
+    persistedBoundaries
+      .filter((group) => (
+        group.source === 'mixed'
+        && group.indexes.length === TRIAD_POSITION_LIST.length
+        && isCoherentGroup(group.indexes)
+      ))
+      .forEach(({ indexes }) => {
+        groupsToUpgrade.push({ indexes, reconsiderPersistedBoundaries: true });
+        indexes.forEach((entryIndex) => crossBoundaryIndexes.add(entryIndex));
+      });
   }
 
   preservedGroups.forEach((indexes) => {

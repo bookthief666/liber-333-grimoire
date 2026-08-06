@@ -2,6 +2,7 @@ import { LIBER_333 } from '../../data/liber333.js';
 import {
   assignJournalConsultationKeys,
   getJournalConsultationKey,
+  getLegacyTriadSignature,
   LEGACY_TRIAD_TOLERANCE_MS,
   normalizeJournalSpreadType,
 } from './consultationIdentity.js';
@@ -238,19 +239,37 @@ function validateExplicitConsultationGroups(entries, sourceVersion) {
     groups.set(entry.consultationId, group);
   });
 
-  const fragmentKeys = assignJournalConsultationKeys(entries);
-  const fragmentCounts = new Map();
-  entries.forEach((entry, index) => {
+  const fragmentGroups = new Map();
+  entries.forEach((entry) => {
     if (entry.legacyTriadFragment !== true) return;
-    const key = fragmentKeys[index];
-    fragmentCounts.set(key, (fragmentCounts.get(key) || 0) + 1);
+    const key = entry.legacyTriadFragmentId;
+    const group = fragmentGroups.get(key) || [];
+    group.push(entry);
+    fragmentGroups.set(key, group);
   });
-  if ([...fragmentCounts.values()].some((count) => count >= TRIAD_POSITION_LIST.length)) {
-    throw new JournalBackupError(
-      'A complete historical Triad must use explicit consultation positions.',
-      'invalid_consultation_group',
-    );
-  }
+  fragmentGroups.forEach((group) => {
+    if (group.length >= TRIAD_POSITION_LIST.length) {
+      throw new JournalBackupError(
+        'A complete historical Triad must use explicit consultation positions.',
+        'invalid_consultation_group',
+      );
+    }
+    if (new Set(group.map(getLegacyTriadSignature)).size !== 1) {
+      throw new JournalBackupError(
+        'A historical Triad fragment contains inconsistent reading context.',
+        'invalid_consultation_group',
+      );
+    }
+    const timestamps = group.map(timestamp).sort((left, right) => left - right);
+    if (timestamps.some((value, index) => (
+      index > 0 && value - timestamps[index - 1] > LEGACY_TRIAD_TOLERANCE_MS
+    ))) {
+      throw new JournalBackupError(
+        'A historical Triad fragment contains rows outside the legacy time tolerance.',
+        'invalid_consultation_group',
+      );
+    }
+  });
 
   groups.forEach((group, consultationId) => {
     const isTriad = group.some((entry) => (
@@ -678,6 +697,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     reconsiderEntryIds: new Set(importedEntries.map((entry) => entry.id)),
   });
   validateTouchedExplicitConsultations(mergedCandidates, touchedExplicitConsultationIds);
+  validateExplicitConsultationGroups(mergedCandidates, JOURNAL_BACKUP_VERSION);
   const mixedConsultationGroups = collectMixedConsultationLocalRows(
     mergedCandidates,
     migratedCurrent,

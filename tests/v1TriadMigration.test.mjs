@@ -24,6 +24,23 @@ const legacyTriadEntry = (id, chapter, date) => ({
   lunar: 'Full Moon',
 });
 
+const v2FragmentEntry = (id, chapter, date, legacyTriadFragmentId) => ({
+  ...legacyTriadEntry(id, chapter, date),
+  schemaVersion: 2,
+  favorite: false,
+  note: '',
+  legacyTriadFragment: true,
+  legacyTriadFragmentId,
+});
+
+const v2Envelope = (entries, totalReadings = entries.length) => ({
+  format: JOURNAL_BACKUP_FORMAT,
+  version: 2,
+  exportedAt: '2026-07-24T02:00:00.000Z',
+  totalReadings,
+  entries,
+});
+
 test('version 1 Triads are upgraded before merge and remain strict-v2 exportable', () => {
   const legacyBackup = {
     format: JOURNAL_BACKUP_FORMAT,
@@ -280,6 +297,119 @@ test('import reconsideration validates complete boundaries before inferring a 2+
   assert.deepEqual(
     new Set(removeJournalEntry(merged.entries, backup.entries[0].id).map((entry) => entry.id)),
     new Set(current.entries.map((entry) => entry.id)),
+  );
+});
+
+test('cross-boundary completion requires each boundary to belong to one source', () => {
+  const boundaryA = 'source-exclusive-boundary-a';
+  const boundaryB = 'source-exclusive-boundary-b';
+  const currentEntries = [
+    v2FragmentEntry('source-exclusive-a-local', 1, '2026-07-24T01:00:00.000Z', boundaryA),
+    v2FragmentEntry('source-exclusive-b-local', 2, '2026-07-24T01:00:20.000Z', boundaryB),
+  ];
+  const backup = parseJournalBackup(JSON.stringify(v2Envelope([
+    v2FragmentEntry('source-exclusive-a-import', 3, '2026-07-24T01:00:40.000Z', boundaryA),
+  ])));
+
+  const merged = mergeJournalBackup({
+    currentEntries,
+    currentTotalReadings: 2,
+    backup,
+  });
+
+  assert.equal(countJournalConsultations(merged.entries), 2);
+  assert.equal(new Set(merged.entries.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.ok(merged.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
+  assert.deepEqual(
+    removeJournalEntry(merged.entries, 'source-exclusive-a-import').map((entry) => entry.id),
+    ['source-exclusive-b-local'],
+  );
+});
+
+test('cross-boundary completion counts rows outside the contiguous candidate window', () => {
+  const boundaryA = 'noncontiguous-full-boundary-a';
+  const boundaryB = 'noncontiguous-full-boundary-b';
+  const separator = {
+    ...legacyTriadEntry('noncontiguous-separator', 5, '2026-07-24T01:00:40.000Z'),
+    spreadType: 'single',
+    schemaVersion: 2,
+    favorite: false,
+    note: '',
+  };
+  const currentEntries = [
+    v2FragmentEntry('noncontiguous-a-newer', 1, '2026-07-24T01:01:00.000Z', boundaryA),
+    separator,
+    v2FragmentEntry('noncontiguous-a-older', 2, '2026-07-24T01:00:20.000Z', boundaryA),
+  ];
+  const backup = parseJournalBackup(JSON.stringify(v2Envelope([
+    v2FragmentEntry('noncontiguous-b-newer', 3, '2026-07-24T01:00:00.000Z', boundaryB),
+    v2FragmentEntry('noncontiguous-b-older', 4, '2026-07-24T00:59:40.000Z', boundaryB),
+  ])));
+
+  const merged = mergeJournalBackup({
+    currentEntries,
+    currentTotalReadings: 3,
+    backup,
+  });
+
+  assert.equal(countJournalConsultations(merged.entries), 3);
+  assert.ok(merged.entries.filter((entry) => entry.legacyTriadFragment).every((entry) => (
+    !entry.consultationId && !entry.spreadPosition
+  )));
+  assert.deepEqual(
+    new Set(removeJournalEntry(merged.entries, 'noncontiguous-b-newer').map((entry) => entry.id)),
+    new Set(currentEntries.map((entry) => entry.id)),
+  );
+});
+
+test('a coherent same-ID fragment completed across local and import becomes explicit', () => {
+  const boundaryId = 'same-id-completion';
+  const currentEntries = [
+    v2FragmentEntry('same-id-thesis', 1, '2026-07-24T01:00:00.000Z', boundaryId),
+  ];
+  const backup = parseJournalBackup(JSON.stringify(v2Envelope([
+    v2FragmentEntry('same-id-synthesis', 3, '2026-07-24T01:00:40.000Z', boundaryId),
+    v2FragmentEntry('same-id-antithesis', 2, '2026-07-24T01:00:20.000Z', boundaryId),
+  ], 1)));
+
+  const merged = mergeJournalBackup({
+    currentEntries,
+    currentTotalReadings: 1,
+    backup,
+  });
+
+  assert.equal(countJournalConsultations(merged.entries), 1);
+  assert.equal(new Set(merged.entries.map((entry) => entry.consultationId)).size, 1);
+  assert.deepEqual(
+    new Set(merged.entries.map((entry) => entry.spreadPosition)),
+    new Set(['thesis', 'antithesis', 'synthesis']),
+  );
+  assert.doesNotThrow(() => createJournalBackup({
+    entries: merged.entries,
+    totalReadings: merged.totalReadings,
+    exportedAt: new Date('2026-07-24T03:00:00.000Z'),
+  }));
+});
+
+test('version 2 parsing rejects incompatible rows that reuse one fragment ID', () => {
+  const boundaryId = 'invalid-shared-fragment';
+  const baseRows = [
+    v2FragmentEntry('invalid-fragment-a', 1, '2026-07-24T01:00:00.000Z', boundaryId),
+    v2FragmentEntry('invalid-fragment-b', 2, '2026-07-24T01:00:20.000Z', boundaryId),
+  ];
+  assert.throws(
+    () => parseJournalBackup(JSON.stringify(v2Envelope([
+      baseRows[0],
+      { ...baseRows[1], question: 'An unrelated historical question.' },
+    ]))),
+    /inconsistent reading context/i,
+  );
+  assert.throws(
+    () => parseJournalBackup(JSON.stringify(v2Envelope([
+      baseRows[0],
+      { ...baseRows[1], date: '2026-07-24T01:10:00.000Z' },
+    ]))),
+    /legacy time tolerance/i,
   );
 });
 
