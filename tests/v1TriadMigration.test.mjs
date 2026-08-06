@@ -30,9 +30,9 @@ test('version 1 Triads are upgraded before merge and remain strict-v2 exportable
     exportedAt: '2026-07-24T02:00:00.000Z',
     totalReadings: 1,
     entries: [
-      legacyTriadEntry('legacy-thesis', 1, '2026-07-24T01:00:00.000Z'),
-      legacyTriadEntry('legacy-antithesis', 2, '2026-07-24T01:00:20.000Z'),
       legacyTriadEntry('legacy-synthesis', 3, '2026-07-24T01:00:40.000Z'),
+      legacyTriadEntry('legacy-antithesis', 2, '2026-07-24T01:00:20.000Z'),
+      legacyTriadEntry('legacy-thesis', 1, '2026-07-24T01:00:00.000Z'),
     ],
   };
 
@@ -44,9 +44,17 @@ test('version 1 Triads are upgraded before merge and remain strict-v2 exportable
   assert.ok(parsed.entries.every((entry) => entry.spreadType === 'triad'));
   assert.deepEqual(
     parsed.entries.map((entry) => entry.spreadPosition),
-    ['thesis', 'antithesis', 'synthesis'],
+    ['synthesis', 'antithesis', 'thesis'],
   );
-  assert.ok(parsed.entries.every((entry) => entry.date === '2026-07-24T01:00:00.000Z'));
+  assert.deepEqual(
+    parsed.entries.map((entry) => entry.date),
+    [
+      '2026-07-24T01:00:40.000Z',
+      '2026-07-24T01:00:20.000Z',
+      '2026-07-24T01:00:00.000Z',
+    ],
+  );
+  assert.ok(parsed.entries.every((entry) => entry.legacyTriadRecovered === true));
 
   const merged = mergeJournalBackup({
     currentEntries: [],
@@ -66,6 +74,30 @@ test('version 1 Triads are upgraded before merge and remain strict-v2 exportable
   assert.deepEqual(
     new Set(exported.entries.map((entry) => entry.spreadPosition)),
     new Set(['thesis', 'antithesis', 'synthesis']),
+  );
+});
+
+test('equal legacy timestamps use newest-first storage order as the chronological tie-breaker', () => {
+  const date = '2026-07-24T01:00:00.000Z';
+  const parsed = parseJournalBackup(JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries: [
+      legacyTriadEntry('equal-synthesis', 3, date),
+      legacyTriadEntry('equal-antithesis', 2, date),
+      legacyTriadEntry('equal-thesis', 1, date),
+    ],
+  }));
+
+  assert.deepEqual(
+    Object.fromEntries(parsed.entries.map((entry) => [entry.id, entry.spreadPosition])),
+    {
+      'equal-synthesis': 'synthesis',
+      'equal-antithesis': 'antithesis',
+      'equal-thesis': 'thesis',
+    },
   );
 });
 
@@ -133,10 +165,69 @@ test('import completion upgrades historical fragments in the returned in-memory 
   assert.equal(countJournalConsultations(merged.entries), 1);
   assert.equal(new Set(merged.entries.map((entry) => entry.consultationId)).size, 1);
   assert.deepEqual(
-    merged.entries.map((entry) => entry.spreadPosition),
-    ['thesis', 'antithesis', 'synthesis'],
+    Object.fromEntries(merged.entries.map((entry) => [entry.id, entry.spreadPosition])),
+    {
+      'fragment-import-2': 'synthesis',
+      'fragment-import-1': 'antithesis',
+      'fragment-current': 'thesis',
+    },
   );
   assert.ok(merged.entries.every((entry) => entry.legacyTriadFragment !== true));
+  assert.ok(merged.entries.every((entry) => entry.legacyTriadRecovered === true));
   assert.equal(merged.importedConsultationCount, 0);
   assert.equal(merged.importedEntryCount, 2);
 });
+
+for (const fragmentSize of [1, 2]) {
+  test(`a cumulative legacy backup safely completes and replaces ${fragmentSize} overlapping local row(s)`, () => {
+    const envelope = (entries) => ({
+      format: JOURNAL_BACKUP_FORMAT,
+      version: 1,
+      exportedAt: '2026-07-24T02:00:00.000Z',
+      totalReadings: 1,
+      entries,
+    });
+    const historicalRows = [
+      legacyTriadEntry('cumulative-synthesis', 3, '2026-07-24T01:00:40.000Z'),
+      legacyTriadEntry('cumulative-antithesis', 2, '2026-07-24T01:00:20.000Z'),
+      legacyTriadEntry('cumulative-thesis', 1, '2026-07-24T01:00:00.000Z'),
+    ];
+    const currentRows = historicalRows.slice(3 - fragmentSize);
+    const current = parseJournalBackup(JSON.stringify(envelope(currentRows)));
+    current.entries.forEach((entry, index) => {
+      entry.favorite = index === 0;
+      entry.note = `Keep local note ${index + 1}.`;
+    });
+    const backup = parseJournalBackup(JSON.stringify(envelope(historicalRows)));
+
+    const merged = mergeJournalBackup({
+      currentEntries: current.entries,
+      currentTotalReadings: current.totalReadings,
+      backup,
+    });
+
+    assert.equal(countJournalConsultations(merged.entries), 1);
+    assert.equal(merged.entries.length, 3);
+    assert.equal(merged.importedConsultationCount, 0);
+    assert.equal(merged.importedEntryCount, 3 - fragmentSize);
+    assert.equal(merged.duplicateCount, fragmentSize);
+    assert.deepEqual(
+      merged.entries.map((entry) => entry.spreadPosition),
+      ['synthesis', 'antithesis', 'thesis'],
+    );
+    assert.deepEqual(
+      merged.entries.map((entry) => entry.date),
+      historicalRows.map((entry) => entry.date),
+    );
+    assert.ok(merged.entries.every((entry) => entry.legacyTriadRecovered === true));
+    current.entries.forEach((localEntry, index) => {
+      const retained = merged.entries.find((entry) => entry.id === localEntry.id);
+      assert.equal(retained.favorite, index === 0);
+      assert.equal(retained.note, `Keep local note ${index + 1}.`);
+    });
+    assert.doesNotThrow(() => createJournalBackup({
+      entries: merged.entries,
+      totalReadings: merged.totalReadings,
+    }));
+  });
+}

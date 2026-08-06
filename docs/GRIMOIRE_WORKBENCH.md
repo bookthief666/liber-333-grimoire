@@ -11,7 +11,7 @@ The versioned JSON backup is the canonical machine-restorable format. Markdown i
 A **consultation** is one completed Oracle reading:
 
 - a Single consultation stores one journal entry;
-- a Triad consultation stores three entries—Thesis, Antithesis, and Synthesis—with one shared `consultationId` and timestamp.
+- a Triad consultation stores three entries—Thesis, Antithesis, and Synthesis—with one shared `consultationId`; native v2 rows share a timestamp, while recovered historical rows keep their original timestamps.
 
 An **entry** is one persisted chapter position. An **appearance** is one chapter occurrence. These terms are deliberately distinct:
 
@@ -56,7 +56,7 @@ Pure functions provide:
 
 ### `journalSchema.js` and `journalStorage.js`
 
-The journal schema migrates legacy rows to schema version 2 with safe favorite and note defaults. Complete historical three-row Triads receive explicit consultation identity and positions. One-row or two-row remnants are preserved as visibly labeled historical fragments, remain backup-safe, and never receive invented chapters or positions. Storage remains newest-first, local, best-effort, and capped at 50 entries while retaining only complete consultation groups.
+The journal schema migrates legacy rows to schema version 2 with safe favorite and note defaults. Complete historical three-row Triads receive explicit consultation identity and positions inferred in chronological order while retaining their original row timestamps and newest-first presentation order. One-row or two-row remnants are preserved as visibly labeled historical fragments, remain backup-safe, and never receive invented chapters or positions. A later cumulative legacy import can replace matching fragment structure without replacing local favorite or note metadata. Storage remains newest-first, local, best-effort, and capped at 50 entries while retaining only complete consultation groups.
 
 The visible Delete control is consultation-safe: deleting any stored Triad position removes the complete explicit or legacy consultation group, preventing the app from creating a partial Triad that cannot be backed up safely.
 

@@ -226,6 +226,21 @@ test('rejects forged historical-fragment markers on positioned v2 Triads', () =>
   );
 });
 
+test('rejects recovered legacy markers with non-chronological positions', () => {
+  const malformed = triad.map((entry, index) => ({
+    ...entry,
+    date: new Date(Date.UTC(2026, 7, 5, 5, 0, 40 - index * 20)).toISOString(),
+    legacyTriadRecovered: true,
+  }));
+
+  assert.throws(
+    () => parseJournalBackup(backupEnvelope(malformed)),
+    (error) => error instanceof JournalBackupError
+      && error.code === 'invalid_consultation_group'
+      && /invalid position chronology/.test(error.message),
+  );
+});
+
 test('rejects v2 Triad labels without explicit spread positions', () => {
   const malformed = triad.map(({ spreadPosition, ...entry }) => entry);
 

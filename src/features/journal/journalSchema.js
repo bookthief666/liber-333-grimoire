@@ -10,6 +10,11 @@ export const JOURNAL_CONSULTATION_ID_LIMIT = 128;
 const SPREAD_POSITIONS = new Set(['single', 'thesis', 'antithesis', 'synthesis']);
 const TRIAD_POSITION_LIST = Object.freeze(['thesis', 'antithesis', 'synthesis']);
 
+function timestamp(entry) {
+  const value = Date.parse(entry?.date);
+  return Number.isNaN(value) ? 0 : value;
+}
+
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -59,6 +64,8 @@ export function migrateJournalEntry(entry) {
   else delete next.spreadPosition;
   if (entry.legacyTriadFragment === true) next.legacyTriadFragment = true;
   else delete next.legacyTriadFragment;
+  if (entry.legacyTriadRecovered === true) next.legacyTriadRecovered = true;
+  else delete next.legacyTriadRecovered;
 
   return next;
 }
@@ -92,12 +99,15 @@ export function upgradeLegacyJournalTriads(entries) {
     if (indexes.length !== TRIAD_POSITION_LIST.length) {
       indexes.forEach((entryIndex) => {
         upgraded[entryIndex].legacyTriadFragment = true;
+        delete upgraded[entryIndex].legacyTriadRecovered;
       });
       return;
     }
 
     consultationOrdinal += 1;
-    const first = upgraded[indexes[0]];
+    const chronologicalIndexes = [...indexes]
+      .sort((left, right) => timestamp(upgraded[left]) - timestamp(upgraded[right]) || right - left);
+    const first = upgraded[chronologicalIndexes[0]];
     const firstId = typeof first.id === 'string' && first.id.trim()
       ? first.id.trim()
       : 'entry';
@@ -110,15 +120,13 @@ export function upgradeLegacyJournalTriads(entries) {
     } while (usedConsultationIds.has(consultationId));
     usedConsultationIds.add(consultationId);
 
-    indexes.forEach((entryIndex, positionIndex) => {
+    chronologicalIndexes.forEach((entryIndex, positionIndex) => {
       upgraded[entryIndex] = {
         ...upgraded[entryIndex],
         consultationId,
         spreadType: 'triad',
         spreadPosition: TRIAD_POSITION_LIST[positionIndex],
-        date: first.date,
-        question: first.question,
-        gematria: first.gematria,
+        legacyTriadRecovered: true,
       };
       delete upgraded[entryIndex].legacyTriadFragment;
     });

@@ -53,7 +53,7 @@ No provider key, browser identifier, rate-limit record, hidden prompt, applicati
 
 ## Consultation and entry semantics
 
-A Single consultation stores one entry. A Triad consultation stores exactly three entries with the same `consultationId`, question, timestamp, and Gematria value, and exactly one each of `thesis`, `antithesis`, and `synthesis`.
+A Single consultation stores one entry. A Triad consultation stores exactly three entries with the same `consultationId`, question, and Gematria value, and exactly one each of `thesis`, `antithesis`, and `synthesis`. Native v2 Triads share one timestamp. Recovered v1 Triads retain each historical row timestamp under a validated migration marker.
 
 `totalReadings` counts consultations, not stored rows. New exports and imports therefore use the number of distinct consultation identities as the minimum valid lifetime total. Historical totals are preserved and are never reduced.
 
@@ -74,7 +74,7 @@ A valid version 1 entry is migrated during parsing to entry schema version 2 wit
 
 Version 1 Triad rows do not contain explicit consultation IDs. They are grouped as ordered adjacent sequences, using normalized question, Gematria, planetary/lunar context, a bounded timestamp tolerance, and three-row chunking. This keeps one historical Triad together when its rows cross a minute boundary while preventing repeated identical Triads from collapsing into one consultation.
 
-When all three historical rows exist, migration assigns one stable consultation ID and the Thesis, Antithesis, and Synthesis positions. Older closure-based saves can contain only one surviving row, and interrupted or separately produced backups can contain two. Those incomplete groups are retained as `legacyTriadFragment: true`: their recoverable reading content remains portable, they remain JSON/Markdown exportable, and no missing chapter or spread position is invented. The Workbench identifies them as “Historical Triad fragment.” If a later import supplies the other recoverable rows, the returned in-memory state is upgraded immediately rather than waiting for an application reload.
+When all three historical rows exist, migration orders them by timestamp for role inference, assigns one stable consultation ID and the Thesis, Antithesis, and Synthesis positions, then leaves the journal in its original newest-first presentation order. Each row keeps its original timestamp under `legacyTriadRecovered: true`; migration does not rewrite historical timestamps. Older closure-based saves can contain only one surviving row, and interrupted or separately produced backups can contain two. Those incomplete groups are retained as `legacyTriadFragment: true`: their recoverable reading content remains portable, they remain JSON/Markdown exportable, and no missing chapter or spread position is invented. The Workbench identifies them as “Historical Triad fragment.” If a later cumulative import overlaps an existing fragment and supplies the other recoverable rows, matching local rows are structurally upgraded while their local favorite and note metadata win, and the returned in-memory state becomes one complete consultation immediately.
 
 Version 2 is always produced by new exports. Future unsupported versions are rejected rather than guessed.
 
@@ -87,7 +87,8 @@ Before export or import, explicit schema-v2 groups are validated as a whole. The
 - Thesis, Antithesis, and Synthesis must each appear exactly once;
 - every Triad row must carry a Triad spread label;
 - Triad positions cannot appear without an explicit consultation ID;
-- shared question, timestamp, and Gematria fields must be internally consistent.
+- shared question and Gematria fields must be internally consistent;
+- native v2 Triads must share one timestamp, while marked recovered v1 Triads must retain chronological Thesis → Antithesis → Synthesis timestamps within the legacy grouping tolerance.
 
 Malformed two-row or four-row Triads, duplicate/missing positions, mixed Single/Triad labels, and inconsistent shared fields are rejected before local storage changes.
 
@@ -99,9 +100,9 @@ Imports remain deliberately non-destructive:
 2. validate every entry and explicit consultation group before any local mutation;
 3. restore the canonical chapter title from the bundled corpus;
 4. normalize entry schema, consultation metadata, favorite state, and integration note;
-5. keep the existing local row—including its local favorite/note—when an imported entry ID already exists;
+5. keep the existing local row—including its local favorite/note—when an imported entry ID already exists, except that a matching marked legacy fragment may receive the recovered consultation structure while retaining its local favorite/note;
 6. for explicit v2 consultations, also keep the local row for an existing `consultationId + spreadPosition` even when the backup uses a different row ID;
-7. allow a valid backup to complete a partial local Triad only by supplying its genuinely missing positions;
+7. allow a valid backup to complete a partial local Triad only by supplying its genuinely missing positions, including cumulative legacy backups that repeat matching fragment rows;
 8. revalidate every explicit consultation touched by the merge and reject incompatible consultation-ID reuse before any local mutation;
 9. add only the remaining unique imported entries;
 10. sort the merged journal newest-first;
@@ -144,7 +145,7 @@ The regression suite protects:
 - three-row chunking of repeated legacy Triads;
 - strict rejection of missing/extra rows, duplicate/missing positions, missing IDs, mixed labels, and inconsistent shared fields;
 - local precedence by entry ID and by explicit consultation position;
-- safe completion of partial local Triads when row IDs differ;
+- safe completion of partial local Triads when row IDs differ or a cumulative legacy backup overlaps matching fragments;
 - rejection of incompatible Single/Triad consultation-ID reuse;
 - rejection of row-ID collisions that would leave a partial imported Triad;
 - post-merge exportability of retained explicit consultations;
