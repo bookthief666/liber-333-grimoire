@@ -220,6 +220,36 @@ test('independently migrated fragments with long common entry-ID prefixes remain
   );
 });
 
+test('import reconsideration preserves two distinct one-row fragment boundaries', () => {
+  const envelope = (entry) => ({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries: [entry],
+  });
+  const current = parseJournalBackup(JSON.stringify(envelope(
+    legacyTriadEntry('independent-nearby-current', 1, '2026-07-24T01:00:00.000Z'),
+  )));
+  const backup = parseJournalBackup(JSON.stringify(envelope(
+    legacyTriadEntry('independent-nearby-import', 2, '2026-07-24T01:00:20.000Z'),
+  )));
+
+  const merged = mergeJournalBackup({
+    currentEntries: current.entries,
+    currentTotalReadings: current.totalReadings,
+    backup,
+  });
+
+  assert.equal(merged.entries.length, 2);
+  assert.equal(countJournalConsultations(merged.entries), 2);
+  assert.equal(new Set(merged.entries.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.deepEqual(
+    removeJournalEntry(merged.entries, backup.entries[0].id).map((entry) => entry.id),
+    [current.entries[0].id],
+  );
+});
+
 test('import completion upgrades historical fragments in the returned in-memory state', () => {
   const envelope = (entries) => ({
     format: JOURNAL_BACKUP_FORMAT,

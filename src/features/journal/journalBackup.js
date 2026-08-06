@@ -1,6 +1,7 @@
 import { LIBER_333 } from '../../data/liber333.js';
 import {
   assignJournalConsultationKeys,
+  getJournalConsultationKey,
   LEGACY_TRIAD_TOLERANCE_MS,
   normalizeJournalSpreadType,
 } from './consultationIdentity.js';
@@ -513,6 +514,19 @@ function collectMixedConsultationLocalRows(
   const currentById = new Map(currentEntries.map((entry) => [entry.id, entry]));
   const importedIds = new Set(importedEntries.map((entry) => entry.id));
   const consultationKeys = assignJournalConsultationKeys(mergedCandidates);
+  const collectedLocalIds = new Set();
+  const mixedGroups = [];
+  const collectGroup = (group) => {
+    const localRows = group
+      .map((entry) => currentById.get(entry.id))
+      .filter((entry) => entry && !collectedLocalIds.has(entry.id));
+    if (localRows.length === 0) return;
+    localRows.forEach((entry) => collectedLocalIds.add(entry.id));
+    mixedGroups.push({
+      entryIds: new Set(group.map((entry) => entry.id)),
+      localRows,
+    });
+  };
   const groupedCandidates = new Map();
   mergedCandidates.forEach((entry, index) => {
     const key = consultationKeys[index];
@@ -521,7 +535,6 @@ function collectMixedConsultationLocalRows(
     groupedCandidates.set(key, group);
   });
 
-  const mixedGroups = [];
   groupedCandidates.forEach((group) => {
     const explicitConsultationIds = new Set(
       group.map((entry) => entry.consultationId).filter(Boolean),
@@ -532,15 +545,35 @@ function collectMixedConsultationLocalRows(
       ))
       && !group.some((entry) => importedIds.has(entry.id))
     ) return;
-    const localRows = group
-      .map((entry) => currentById.get(entry.id))
-      .filter(Boolean);
-    if (localRows.length > 0) {
-      mixedGroups.push({
-        entryIds: new Set(group.map((entry) => entry.id)),
-        localRows,
-      });
-    }
+    collectGroup(group);
+  });
+
+  // Distinct persisted fragment boundaries may still be close enough to have
+  // been reconsidered by the legacy heuristic. Preserve their separate count
+  // and deletion keys, but use that proximity to prevent an imported row from
+  // displacing related local data at the cap.
+  const proximityKeys = assignJournalConsultationKeys(mergedCandidates, {
+    respectLegacyFragmentIds: false,
+  });
+  const proximityGroups = new Map();
+  mergedCandidates.forEach((entry, index) => {
+    if (
+      entry?.legacyTriadFragment !== true
+      || entry.consultationId
+      || entry.spreadPosition
+    ) return;
+    const key = proximityKeys[index];
+    const group = proximityGroups.get(key) || [];
+    group.push(entry);
+    proximityGroups.set(key, group);
+  });
+  proximityGroups.forEach((group) => {
+    if (
+      !group.some((entry) => importedIds.has(entry.id))
+      || !group.some((entry) => currentById.has(entry.id))
+      || new Set(group.map((entry) => getJournalConsultationKey(entry))).size < 2
+    ) return;
+    collectGroup(group);
   });
   return mixedGroups;
 }
@@ -655,8 +688,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   const retention = retainCompleteJournalConsultations(mergedCandidates, MAX_JOURNAL_ENTRIES);
   const initiallyRetainedIds = new Set(retention.entries.map((entry) => entry.id));
   const restoredLocalRows = mixedConsultationGroups
-    .filter((group) => ![...group.entryIds].some((id) => initiallyRetainedIds.has(id)))
-    .flatMap((group) => group.localRows);
+    .flatMap((group) => group.localRows.filter((entry) => !initiallyRetainedIds.has(entry.id)));
   const capacity = makeRoomForRestoredLocalRows(
     retention.entries,
     restoredLocalRows,

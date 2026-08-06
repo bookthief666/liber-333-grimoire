@@ -124,10 +124,6 @@ export function upgradeLegacyJournalTriads(
   } = {},
 ) {
   const safeEntries = Array.isArray(entries) ? entries : [];
-  const consultationKeys = assignJournalConsultationKeys(safeEntries, {
-    respectLegacyFragmentIds: !reconsiderLegacyFragments,
-  });
-  const groupedIndexes = new Map();
   const usedConsultationIds = new Set(
     safeEntries
       .map((entry) => (isPlainObject(entry) ? normalizeOptionalIdentifier(entry.consultationId) : null))
@@ -157,34 +153,81 @@ export function upgradeLegacyJournalTriads(
     entry.legacyTriadFragmentId = allocateLegacyFragmentId([entry], usedLegacyFragmentIds);
   });
 
+  const preservedKeys = assignJournalConsultationKeys(upgraded, {
+    respectLegacyFragmentIds: true,
+  });
+  const preservedGroups = new Map();
   upgraded.forEach((entry, index) => {
     if (!isPlainObject(entry)) return;
-    const isUnpositionedLegacyTriad = migrateUnmarkedLegacyTriads
-      && !entry.consultationId
+    const isUnpositionedLegacyTriad = !entry.consultationId
       && !entry.spreadPosition
-      && (reconsiderLegacyFragments || entry.legacyTriadFragment !== true)
+      && (entry.legacyTriadFragment === true || migrateUnmarkedLegacyTriads)
       && normalizeJournalSpreadType(entry.spreadType) === 'triad';
     if (!isUnpositionedLegacyTriad) return;
-    const key = consultationKeys[index];
-    const indexes = groupedIndexes.get(key) || [];
+    const key = preservedKeys[index];
+    const indexes = preservedGroups.get(key) || [];
     indexes.push(index);
-    groupedIndexes.set(key, indexes);
+    preservedGroups.set(key, indexes);
   });
+
+  const groupsToUpgrade = [];
+  const crossBoundaryIndexes = new Set();
+  if (reconsiderLegacyFragments && reconsiderEntryIds instanceof Set) {
+    const reconsideredKeys = assignJournalConsultationKeys(upgraded, {
+      respectLegacyFragmentIds: false,
+    });
+    const reconsideredGroups = new Map();
+    upgraded.forEach((entry, index) => {
+      if (
+        !isPlainObject(entry)
+        || entry.consultationId
+        || entry.spreadPosition
+        || entry.legacyTriadFragment !== true
+        || normalizeJournalSpreadType(entry.spreadType) !== 'triad'
+      ) return;
+      const key = reconsideredKeys[index];
+      const indexes = reconsideredGroups.get(key) || [];
+      indexes.push(index);
+      reconsideredGroups.set(key, indexes);
+    });
+
+    reconsideredGroups.forEach((indexes) => {
+      if (indexes.length !== TRIAD_POSITION_LIST.length) return;
+      const importedMembership = indexes.map((entryIndex) => (
+        reconsiderEntryIds.has(upgraded[entryIndex]?.id)
+      ));
+      if (!importedMembership.some(Boolean) || importedMembership.every(Boolean)) return;
+
+      const boundarySizes = new Map();
+      indexes.forEach((entryIndex) => {
+        const boundaryId = upgraded[entryIndex]?.legacyTriadFragmentId;
+        boundarySizes.set(boundaryId, (boundarySizes.get(boundaryId) || 0) + 1);
+      });
+      const complementarySizes = [...boundarySizes.values()].sort((left, right) => left - right);
+      if (
+        complementarySizes.length !== 2
+        || complementarySizes[0] !== 1
+        || complementarySizes[1] !== 2
+      ) return;
+
+      groupsToUpgrade.push({ indexes, reconsiderPersistedBoundaries: true });
+      indexes.forEach((entryIndex) => crossBoundaryIndexes.add(entryIndex));
+    });
+  }
+
+  preservedGroups.forEach((indexes) => {
+    if (indexes.some((entryIndex) => crossBoundaryIndexes.has(entryIndex))) return;
+    groupsToUpgrade.push({ indexes, reconsiderPersistedBoundaries: false });
+  });
+  groupsToUpgrade.sort((left, right) => left.indexes[0] - right.indexes[0]);
 
   let consultationOrdinal = 0;
 
-  groupedIndexes.forEach((indexes) => {
+  groupsToUpgrade.forEach(({ indexes, reconsiderPersistedBoundaries }) => {
     const containsMarkedFragment = indexes.some((entryIndex) => (
       upgraded[entryIndex]?.legacyTriadFragment === true
     ));
-    const shouldReconsider = !containsMarkedFragment || (
-      reconsiderLegacyFragments
-      && (
-        !(reconsiderEntryIds instanceof Set)
-        || indexes.some((entryIndex) => reconsiderEntryIds.has(upgraded[entryIndex]?.id))
-      )
-    );
-    if (!shouldReconsider) return;
+    if (containsMarkedFragment && !reconsiderPersistedBoundaries) return;
     if (indexes.length !== TRIAD_POSITION_LIST.length) {
       const legacyTriadFragmentId = allocateLegacyFragmentId(
         indexes.map((entryIndex) => upgraded[entryIndex]),
