@@ -13,6 +13,7 @@ import { NOTABLE_NUMBERS } from './features/gematria/gematriaData.js';
 import { calculateGematria, findCorrespondences } from './features/gematria/gematriaEngine.js';
 import { selectReadingChapters } from './features/oracle/divinationSelection.js';
 import { useJournal } from './features/journal/useJournal.js';
+import GrimoireWorkbench from './features/journal/GrimoireWorkbench.jsx';
 import { RITUALS } from './features/rites/ritualData.js';
 import { ELEMENT_SYMBOLS, HEBREW_LETTERS, formatChapterNumber, getSephiraColor, getSephiraInfo } from './data/correspondences.js';
 import { LIBER_333 } from './data/liber333.js';
@@ -970,154 +971,6 @@ const MilestoneOverlay = ({ number, onDismiss }) => {
 };
 
 // ─────────────────────────────────────────────
-//  JOURNAL OVERLAY (Enhanced)
-// ─────────────────────────────────────────────
-const JournalOverlay = ({ entries, totalReadings, onClose, onDelete, onClear, onSelect, onExportBackup, onImportBackup, accentColor = "#dc2626" }) => {
-  const importInputRef = useRef(null);
-  const [backupStatus, setBackupStatus] = useState(null);
-
-  const handleExportBackup = () => {
-    try {
-      const backup = onExportBackup?.();
-      if (!backup?.content || !backup?.filename) throw new Error('The Grimoire backup could not be prepared.');
-
-      const blob = new Blob([backup.content], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = backup.filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-
-      const noun = backup.entryCount === 1 ? 'reading' : 'readings';
-      setBackupStatus({ type: 'success', text: 'Exported ' + backup.entryCount + ' saved ' + noun + '.' });
-    } catch (error) {
-      setBackupStatus({ type: 'error', text: error?.message || 'The Grimoire backup could not be exported.' });
-    }
-  };
-
-  const handleImportFile = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      setBackupStatus({ type: 'error', text: 'The selected backup is larger than the 2 MB import limit.' });
-      return;
-    }
-
-    setBackupStatus({ type: 'working', text: 'Reading the backup…' });
-    try {
-      const text = await file.text();
-      const result = await onImportBackup?.(text);
-      if (!result) throw new Error('The Grimoire backup could not be imported.');
-
-      let message = 'Imported ' + result.importedCount + ' new reading' + (result.importedCount === 1 ? '' : 's') + '.';
-      if (result.duplicateCount > 0) {
-        message += ' ' + result.duplicateCount + ' existing entr' + (result.duplicateCount === 1 ? 'y was' : 'ies were') + ' kept.';
-      }
-      if (result.omittedByCap > 0) {
-        message += ' The newest 50 readings were retained.';
-      }
-      setBackupStatus({ type: 'success', text: message });
-    } catch (error) {
-      setBackupStatus({ type: 'error', text: error?.message || 'The selected file is not a valid Grimoire backup.' });
-    }
-  };
-
-  // Count recurrences
-  const recurrenceMap = useMemo(() => {
-    const map = {};
-    entries.forEach(e => { map[e.chapter] = (map[e.chapter] || 0) + 1; });
-    return map;
-  }, [entries]);
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 60 }}>
-      <div className="absolute inset-0 backdrop-blur-md" style={{ background: 'rgba(5,3,15,0.88)' }} onClick={onClose} />
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
-        style={{ background: 'radial-gradient(120% 80% at 50% 0%, rgba(20,14,45,0.9), rgba(5,3,15,0.95))', borderRadius: '16px', boxShadow: '0 0 60px rgba(120,80,200,0.15)' }}>
-        <div className="flex items-center justify-between px-5 py-4">
-          <div>
-            <h2 className="text-2xl gilded" style={{ fontFamily: "'UnifrakturCook', 'Pirata One', serif", letterSpacing: '0.02em' }}>
-              ☥ Grimoire Journal
-            </h2>
-            <div className="text-[10px] lux-dim mt-0.5" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-              {totalReadings} total readings · {entries.length} saved
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-            <button onClick={handleExportBackup} className="text-[10px] lux-dim hover:lux-crimson transition-colors"
-              style={{ fontFamily: 'JetBrains Mono, monospace' }}>EXPORT</button>
-            <button onClick={() => importInputRef.current?.click()} className="text-[10px] lux-dim hover:lux-crimson transition-colors"
-              style={{ fontFamily: 'JetBrains Mono, monospace' }}>IMPORT</button>
-            <input ref={importInputRef} type="file" accept="application/json,.json" onChange={handleImportFile} className="hidden" />
-            {entries.length > 0 && (
-              <button onClick={onClear} className="text-[10px] lux-dim hover:lux-crimson transition-colors"
-                style={{ fontFamily: 'JetBrains Mono, monospace' }}>CLEAR ALL</button>
-            )}
-            <button onClick={onClose} aria-label="Close Grimoire" className="lux-dim hover:text-white transition-colors text-2xl leading-none">×</button>
-          </div>
-        </div>
-        <hr className="star-rule opacity-50" />
-        <div className="px-5 pt-2 text-[9px] lux-dim" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-          Backups are read and written on this device. Imported entries merge without erasing the current journal.
-        </div>
-        {backupStatus && (
-          <div role={backupStatus.type === 'error' ? 'alert' : 'status'} className="px-5 pt-2 text-[10px]"
-            style={{ fontFamily: 'JetBrains Mono, monospace', color: backupStatus.type === 'error' ? '#ff8fa0' : backupStatus.type === 'success' ? '#f0b75e' : '#9aa0c4' }}>
-            {backupStatus.text}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-4">
-          {entries.length === 0 ? (
-            <div className="text-center py-16 lux-dim text-sm" style={{ fontFamily: "'IM Fell English', serif" }}>
-              <div className="text-4xl mb-4 opacity-30">☉</div>
-              No readings recorded yet.
-            </div>
-          ) : entries.map((entry, idx) => (
-            <div key={entry.id}>
-              <div className="group py-3 px-1 hover:bg-white/[0.03] rounded transition-all cursor-pointer"
-                onClick={() => { onSelect?.(entry); onClose(); }}>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg lux-crimson" style={{ fontFamily: "'UnifrakturCook', serif" }}>
-                        {formatChapterNumber(entry.chapter)}
-                      </span>
-                      <span className="lux text-sm truncate" style={{ fontFamily: "'Pirata One', serif" }}>
-                        {entry.title}
-                      </span>
-                      {recurrenceMap[entry.chapter] > 1 && (
-                        <span className="text-[9px]" style={{ color: '#f0b75e', textShadow: '0 0 8px rgba(240,183,94,0.5)' }}>
-                          ×{recurrenceMap[entry.chapter]}
-                        </span>
-                      )}
-                    </div>
-                    <div className="lux text-[12px] truncate italic" style={{ fontFamily: "'IM Fell English', serif" }}>{entry.question}</div>
-                    <div className="lux-dim text-[10px] mt-1" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                      {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      {" · "}{entry.gematria}
-                      {entry.spreadType && ` · ${entry.spreadType}`}
-                    </div>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-                    className="opacity-0 group-hover:opacity-100 lux-dim hover:lux-crimson transition-all text-sm ml-3">✕</button>
-                </div>
-              </div>
-              {idx < entries.length - 1 && <hr className="star-rule opacity-20" />}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────
 //  TREE OF LIFE — interactive map of the complete corpus
 //  Every chapter is seated on its Sephira or Path. Click a node or path
 //  to read the chapters that live there; click a chapter to consult it.
@@ -1767,25 +1620,36 @@ const App = () => {
   }, [question, spreadType, audioEnabled, playBell, playImpact, oracle, journal, planetary, lunar]);
 
   // ── Save reading ──
-  const saveReading = useCallback(async () => {
-    if (!drawnChapter || saved) return;
-    for (const ch of drawnChapters) {
-      await journal.addEntry({
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        date: new Date().toISOString(),
-        question,
-        chapter: ch.chapter,
-        title: ch.title,
-        gematria: gematriaResult?.simple || 0,
-        interpretation: oracle.text || null,
-        spreadType: isSpread ? "Thesis/Antithesis/Synthesis" : "single",
-        planetary: planetary?.planet,
-        lunar: lunar?.name,
-      });
-    }
-    setSaved(true);
-    haptic(30);
-  }, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);
+const saveReading = useCallback(async () => {
+  if (!drawnChapter || saved) return;
+
+  const date = new Date().toISOString();
+  const consultationId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const spreadPositions = isSpread
+    ? ["thesis", "antithesis", "synthesis"]
+    : ["single"];
+  const entriesToSave = drawnChapters.map((ch, index) => {
+    const spreadPosition = spreadPositions[index] || "single";
+    return {
+      id: `${consultationId}-${spreadPosition}`,
+      date,
+      consultationId,
+      spreadPosition,
+      question,
+      chapter: ch.chapter,
+      title: ch.title,
+      gematria: gematriaResult?.simple || 0,
+      interpretation: oracle.text || null,
+      spreadType: isSpread ? "triad" : "single",
+      planetary: planetary?.planet,
+      lunar: lunar?.name,
+    };
+  });
+
+  await journal.addEntries(entriesToSave);
+  setSaved(true);
+  haptic(30);
+}, [drawnChapter, drawnChapters, question, gematriaResult, oracle.text, saved, journal, isSpread, planetary, lunar]);
 
   // ── Reset ──
   const resetToInput = useCallback(() => {
@@ -1945,13 +1809,22 @@ const App = () => {
       </nav>
 
       {/* Journal Overlay */}
-      {journalOpen && (
-        <JournalOverlay entries={journal.entries} totalReadings={journal.totalReadings}
-          onClose={closeJournal} onDelete={journal.removeEntry}
-          onClear={journal.clearAll} onSelect={viewJournalEntry}
-          onExportBackup={journal.exportBackup} onImportBackup={journal.importBackup}
-          accentColor={accentColor} />
-      )}
+{journalOpen && (
+  <GrimoireWorkbench
+    entries={journal.entries}
+    totalReadings={journal.totalReadings}
+    onClose={closeJournal}
+    onDelete={journal.removeEntry}
+    onClear={journal.clearAll}
+    onSelect={viewJournalEntry}
+    onExportBackup={journal.exportBackup}
+    onExportMarkdown={journal.exportMarkdown}
+    onImportBackup={journal.importBackup}
+    onSetFavorite={journal.setFavorite}
+    onSaveNote={journal.saveNote}
+    accentColor={accentColor}
+  />
+)}
 
       {/* Milestone Overlay */}
       {journal.milestone && (

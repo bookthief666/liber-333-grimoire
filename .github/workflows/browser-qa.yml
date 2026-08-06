@@ -29,7 +29,7 @@ concurrency:
 jobs:
   browser-qa:
     name: Playwright browser and Fold matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_url || '' }}
@@ -56,7 +56,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright test runner
-        run: npm install --no-save --package-lock=false @playwright/test@1.54.1
+        run: npm install --no-save --package-lock=false @playwright/test@1.62.1
 
       - name: Install browser engines
         run: npx playwright install --with-deps chromium firefox webkit
