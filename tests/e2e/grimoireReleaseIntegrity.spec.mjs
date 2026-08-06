@@ -55,14 +55,17 @@ test.describe('Grimoire release integrity', () => {
 
     await activate(siblingDelete);
 
-    expect(await readJournal(page)).toHaveLength(5);
-    await expect(firstDelete).toHaveAttribute('data-delete-armed', 'false');
-    await expect(firstDelete).toHaveText('Delete');
-    await expect(siblingDelete).toHaveAttribute('data-delete-armed', 'true');
-    await expect(siblingDelete).toHaveText('Confirm Triad delete');
+    const transferredState = await siblingDelete.evaluate((element) => ({
+      armed: element.dataset.deleteArmed,
+      text: element.textContent,
+    }));
+    expect(transferredState).toEqual({ armed: 'true', text: 'Confirm Triad delete' });
     await expect(dialog.getByRole('button', { name: /Confirm deletion of the complete Triad consultation/i })).toHaveCount(1);
 
     await page.keyboard.press('Escape');
+    expect(await readJournal(page)).toHaveLength(5);
+    await expect(firstDelete).toHaveAttribute('data-delete-armed', 'false');
+    await expect(firstDelete).toHaveText('Delete');
     await expect(siblingDelete).toHaveAttribute('data-delete-armed', 'false');
     await expect(siblingDelete).toHaveText('Delete');
     await expect(siblingDelete).toBeFocused();
