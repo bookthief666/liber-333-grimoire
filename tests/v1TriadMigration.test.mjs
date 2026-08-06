@@ -355,6 +355,45 @@ test('capacity fallback restores a local fragment completed by differently ident
   assert.equal(retained.note, 'Retain the mixed-group local row.');
 });
 
+test('capacity fallback restores a local row from an id-less two-fragment mixed group', () => {
+  const envelope = (entries) => JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T03:00:00.000Z',
+    totalReadings: 50,
+    entries,
+  });
+  const localRow = legacyTriadEntry('idless-cap-local', 1, '2026-07-24T01:00:00.000Z');
+  const importedRow = legacyTriadEntry('idless-cap-import', 2, '2026-07-24T01:00:20.000Z');
+  const local = parseJournalBackup(envelope([localRow])).entries[0];
+  local.favorite = true;
+  local.note = 'Retain the id-less mixed fragment.';
+  const newerSingles = Array.from({ length: 49 }, (_, index) => ({
+    ...legacyTriadEntry(
+      `idless-cap-single-${index}`,
+      (index % 94) - 2,
+      new Date(Date.UTC(2026, 6, 24, 2, 0, index)).toISOString(),
+    ),
+    spreadType: 'single',
+  }));
+  const backup = parseJournalBackup(envelope([importedRow]));
+
+  const merged = mergeJournalBackup({
+    currentEntries: [...newerSingles, local],
+    currentTotalReadings: 50,
+    backup,
+  });
+
+  assert.equal(merged.entries.length, 50);
+  assert.equal(merged.importedEntryCount, 0);
+  assert.equal(merged.omittedByCap, 1);
+  const retained = merged.entries.find((entry) => entry.id === local.id);
+  assert.equal(retained.legacyTriadFragment, true);
+  assert.equal(retained.consultationId, undefined);
+  assert.equal(retained.favorite, true);
+  assert.equal(retained.note, 'Retain the id-less mixed fragment.');
+});
+
 test('cap retention does not regroup fragments after separating Triads are omitted', () => {
   const sameQuestion = 'Keep these historical fragments distinct.';
   const fragment = (id, chapter, date) => ({

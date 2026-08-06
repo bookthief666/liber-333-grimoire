@@ -503,26 +503,37 @@ function collectMixedConsultationLocalRows(
 ) {
   const currentById = new Map(currentEntries.map((entry) => [entry.id, entry]));
   const importedIds = new Set(importedEntries.map((entry) => entry.id));
+  const consultationKeys = assignJournalConsultationKeys(mergedCandidates);
   const groupedCandidates = new Map();
-  mergedCandidates.forEach((entry) => {
-    if (!entry.consultationId) return;
-    const group = groupedCandidates.get(entry.consultationId) || [];
+  mergedCandidates.forEach((entry, index) => {
+    const key = consultationKeys[index];
+    const group = groupedCandidates.get(key) || [];
     group.push(entry);
-    groupedCandidates.set(entry.consultationId, group);
+    groupedCandidates.set(key, group);
   });
 
-  const localRowsByConsultationId = new Map();
-  groupedCandidates.forEach((group, consultationId) => {
+  const mixedGroups = [];
+  groupedCandidates.forEach((group) => {
+    const explicitConsultationIds = new Set(
+      group.map((entry) => entry.consultationId).filter(Boolean),
+    );
     if (
-      !reconciledConsultationIds.has(consultationId)
+      ![...explicitConsultationIds].some((consultationId) => (
+        reconciledConsultationIds.has(consultationId)
+      ))
       && !group.some((entry) => importedIds.has(entry.id))
     ) return;
     const localRows = group
       .map((entry) => currentById.get(entry.id))
       .filter(Boolean);
-    if (localRows.length > 0) localRowsByConsultationId.set(consultationId, localRows);
+    if (localRows.length > 0) {
+      mixedGroups.push({
+        entryIds: new Set(group.map((entry) => entry.id)),
+        localRows,
+      });
+    }
   });
-  return localRowsByConsultationId;
+  return mixedGroups;
 }
 
 function makeRoomForRestoredLocalRows(retainedEntries, restoredLocalRows, importedEntries) {
@@ -610,7 +621,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     .sort(compareNewestFirst);
   const mergedCandidates = migrateJournalEntries(sortedEntries);
   validateTouchedExplicitConsultations(mergedCandidates, touchedExplicitConsultationIds);
-  const mixedConsultationLocalRows = collectMixedConsultationLocalRows(
+  const mixedConsultationGroups = collectMixedConsultationLocalRows(
     mergedCandidates,
     migratedCurrent,
     importedEntries,
@@ -618,12 +629,10 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   );
 
   const retention = retainCompleteJournalConsultations(mergedCandidates, MAX_JOURNAL_ENTRIES);
-  const retainedConsultationIds = new Set(
-    retention.entries.map((entry) => entry.consultationId).filter(Boolean),
-  );
-  const restoredLocalRows = [...mixedConsultationLocalRows.entries()]
-    .filter(([consultationId]) => !retainedConsultationIds.has(consultationId))
-    .flatMap(([, entries]) => entries);
+  const initiallyRetainedIds = new Set(retention.entries.map((entry) => entry.id));
+  const restoredLocalRows = mixedConsultationGroups
+    .filter((group) => ![...group.entryIds].some((id) => initiallyRetainedIds.has(id)))
+    .flatMap((group) => group.localRows);
   const capacity = makeRoomForRestoredLocalRows(
     retention.entries,
     restoredLocalRows,
