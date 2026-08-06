@@ -1,5 +1,7 @@
 import {
   assignJournalConsultationKeys,
+  getLegacyTriadSignature,
+  LEGACY_TRIAD_TOLERANCE_MS,
   normalizeJournalSpreadType,
 } from './consultationIdentity.js';
 
@@ -173,10 +175,8 @@ export function upgradeLegacyJournalTriads(
   const groupsToUpgrade = [];
   const crossBoundaryIndexes = new Set();
   if (reconsiderLegacyFragments && reconsiderEntryIds instanceof Set) {
-    const reconsideredKeys = assignJournalConsultationKeys(upgraded, {
-      respectLegacyFragmentIds: false,
-    });
-    const reconsideredGroups = new Map();
+    const reconsideredGroups = [];
+    let activeReconsideredGroup = null;
     upgraded.forEach((entry, index) => {
       if (
         !isPlainObject(entry)
@@ -184,14 +184,33 @@ export function upgradeLegacyJournalTriads(
         || entry.spreadPosition
         || entry.legacyTriadFragment !== true
         || normalizeJournalSpreadType(entry.spreadType) !== 'triad'
-      ) return;
-      const key = reconsideredKeys[index];
-      const indexes = reconsideredGroups.get(key) || [];
-      indexes.push(index);
-      reconsideredGroups.set(key, indexes);
+      ) {
+        activeReconsideredGroup = null;
+        return;
+      }
+
+      const signature = getLegacyTriadSignature(entry);
+      const entryTimestamp = Date.parse(entry.date);
+      const canJoin = Boolean(
+        activeReconsideredGroup
+        && activeReconsideredGroup.signature === signature
+        && !Number.isNaN(entryTimestamp)
+        && !Number.isNaN(activeReconsideredGroup.lastTimestamp)
+        && Math.abs(entryTimestamp - activeReconsideredGroup.lastTimestamp) <= LEGACY_TRIAD_TOLERANCE_MS
+      );
+      if (!canJoin) {
+        activeReconsideredGroup = {
+          signature,
+          lastTimestamp: entryTimestamp,
+          indexes: [],
+        };
+        reconsideredGroups.push(activeReconsideredGroup);
+      }
+      activeReconsideredGroup.indexes.push(index);
+      activeReconsideredGroup.lastTimestamp = entryTimestamp;
     });
 
-    reconsideredGroups.forEach((indexes) => {
+    reconsideredGroups.forEach(({ indexes }) => {
       if (indexes.length !== TRIAD_POSITION_LIST.length) return;
       const importedMembership = indexes.map((entryIndex) => (
         reconsiderEntryIds.has(upgraded[entryIndex]?.id)

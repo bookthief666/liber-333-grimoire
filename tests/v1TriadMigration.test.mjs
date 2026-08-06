@@ -250,6 +250,39 @@ test('import reconsideration preserves two distinct one-row fragment boundaries'
   );
 });
 
+test('import reconsideration validates complete boundaries before inferring a 2+1 completion', () => {
+  const envelope = (entries) => ({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries,
+  });
+  const current = parseJournalBackup(JSON.stringify(envelope([
+    legacyTriadEntry('independent-two-current-newer', 2, '2026-07-24T01:00:20.000Z'),
+    legacyTriadEntry('independent-two-current-older', 1, '2026-07-24T01:00:00.000Z'),
+  ])));
+  const backup = parseJournalBackup(JSON.stringify(envelope([
+    legacyTriadEntry('independent-two-import-newer', 4, '2026-07-24T01:01:00.000Z'),
+    legacyTriadEntry('independent-two-import-older', 3, '2026-07-24T01:00:40.000Z'),
+  ])));
+
+  const merged = mergeJournalBackup({
+    currentEntries: current.entries,
+    currentTotalReadings: current.totalReadings,
+    backup,
+  });
+
+  assert.equal(merged.entries.length, 4);
+  assert.equal(countJournalConsultations(merged.entries), 2);
+  assert.equal(new Set(merged.entries.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.ok(merged.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
+  assert.deepEqual(
+    new Set(removeJournalEntry(merged.entries, backup.entries[0].id).map((entry) => entry.id)),
+    new Set(current.entries.map((entry) => entry.id)),
+  );
+});
+
 test('import completion upgrades historical fragments in the returned in-memory state', () => {
   const envelope = (entries) => ({
     format: JOURNAL_BACKUP_FORMAT,
@@ -497,6 +530,7 @@ test('capacity fallback restores a local row from an id-less two-fragment mixed 
   assert.equal(merged.entries.length, 50);
   assert.equal(merged.importedEntryCount, 0);
   assert.equal(merged.omittedByCap, 1);
+  assert.equal(merged.omittedConsultationCount, 1);
   const retained = merged.entries.find((entry) => entry.id === local.id);
   assert.equal(retained.legacyTriadFragment, true);
   assert.equal(retained.consultationId, undefined);

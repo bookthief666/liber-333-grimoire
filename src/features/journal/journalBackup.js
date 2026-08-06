@@ -718,10 +718,10 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     importedConsultationCount,
     importedEntryCount: retainedImportedEntries.length,
     duplicateCount: backup.entries.length - importedEntries.length,
-    omittedByCap: Math.max(
+    omittedByCap: Math.max(0, mergedCandidates.length - mergedEntries.length),
+    omittedConsultationCount: Math.max(
       0,
-      retention.omittedEntries - restoredLocalRows.length + capacity.evictedEntries,
+      countJournalConsultations(mergedCandidates) - countJournalConsultations(mergedEntries),
     ),
-    omittedConsultationCount: retention.omittedConsultations + capacity.evictedConsultations,
   };
 }
