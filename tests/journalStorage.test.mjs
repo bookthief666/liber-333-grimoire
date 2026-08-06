@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 
 import { JOURNAL_ENTRY_SCHEMA_VERSION } from '../src/features/journal/journalSchema.js';
 import {
+  parseJournalBackup,
+  serializeJournalBackup,
+} from '../src/features/journal/journalBackup.js';
+import {
   JOURNAL_STORAGE_KEY,
   TOTAL_READINGS_STORAGE_KEY,
   MAX_JOURNAL_ENTRIES,
@@ -73,6 +77,33 @@ test('preserves and normalizes consultation metadata during storage migration', 
   assert.equal(entry.consultationId, 'consultation-1');
   assert.equal(entry.spreadPosition, 'thesis');
   assert.equal(entry.schemaVersion, JOURNAL_ENTRY_SCHEMA_VERSION);
+});
+
+test('old closure-based Triad survivor loads and exports without inventing a position', () => {
+  const historicalSurvivor = {
+    ...legacyEntry,
+    id: 'old-triad-survivor',
+    spreadType: 'Thesis/Antithesis/Synthesis',
+  };
+  const storage = new FakeStorage({
+    [JOURNAL_STORAGE_KEY]: JSON.stringify([historicalSurvivor]),
+    [TOTAL_READINGS_STORAGE_KEY]: '1',
+  });
+
+  const state = readJournalState(storage);
+  assert.equal(state.entries[0].legacyTriadFragment, true);
+  assert.equal('consultationId' in state.entries[0], false);
+  assert.equal('spreadPosition' in state.entries[0], false);
+
+  const backupText = serializeJournalBackup({
+    ...state,
+    exportedAt: new Date('2026-08-05T00:00:00.000Z'),
+  });
+  const roundTripped = parseJournalBackup(backupText);
+  assert.equal(roundTripped.entries[0].id, historicalSurvivor.id);
+  assert.equal(roundTripped.entries[0].chapter, historicalSurvivor.chapter);
+  assert.equal(roundTripped.entries[0].legacyTriadFragment, true);
+  assert.equal('spreadPosition' in roundTripped.entries[0], false);
 });
 
 test('malformed or non-array journal data falls back to an empty list', () => {

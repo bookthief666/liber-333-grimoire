@@ -73,6 +73,18 @@ test('hydrates canonical source text and fixed commentary for ordinary saved ent
   assert.match(markdown, /Chapter 1 = Kether/);
 });
 
+test('labels incomplete historical Triads without claiming missing positions', () => {
+  const markdown = serializeGrimoireMarkdown({
+    entries: [{
+      ...entries[0],
+      id: 'historical-fragment',
+      legacyTriadFragment: true,
+    }],
+    exportedAt,
+  });
+  assert.match(markdown, /\*\*Spread:\*\* Historical Triad fragment/);
+});
+
 test('exports an explicit empty-state document', () => {
   const markdown = serializeGrimoireMarkdown({ entries: [], exportedAt });
   assert.match(markdown, /\*\*Exported consultations:\*\* 0/);

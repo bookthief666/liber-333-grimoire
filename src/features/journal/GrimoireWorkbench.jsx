@@ -21,6 +21,7 @@ const STATUS_COLORS = {
   working: '#9aa0c4',
   info: '#9aa0c4',
 };
+const NOTE_SAVED_CLOSE_DELAY_MS = 1500;
 
 function pluralize(count, singular, plural = `${singular}s`) {
   return count === 1 ? singular : plural;
@@ -87,6 +88,12 @@ function NoteEditor({ entry, onSave, onCancel }) {
   const original = entry.note || '';
   const dirty = draft !== original;
 
+  const cancelScheduledClose = () => {
+    if (closeTimerRef.current === null) return;
+    clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  };
+
   useEffect(() => () => {
     if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
   }, []);
@@ -100,25 +107,27 @@ function NoteEditor({ entry, onSave, onCancel }) {
       closeTimerRef.current = setTimeout(() => {
         closeTimerRef.current = null;
         onCancel();
-      }, 450);
+      }, NOTE_SAVED_CLOSE_DELAY_MS);
     } catch {
       setState('error');
     }
   };
 
   return (
-    <div className="grimoire-note-editor" onClick={(event) => event.stopPropagation()}>
+    <div
+      className="grimoire-note-editor"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={cancelScheduledClose}
+    >
       <label htmlFor={`grimoire-note-${entry.id}`}>Private integration note</label>
       <textarea
         id={`grimoire-note-${entry.id}`}
         value={draft}
         maxLength={JOURNAL_NOTE_LIMIT}
         autoFocus
+        onFocus={cancelScheduledClose}
         onChange={(event) => {
-          if (closeTimerRef.current !== null) {
-            clearTimeout(closeTimerRef.current);
-            closeTimerRef.current = null;
-          }
+          cancelScheduledClose();
           setDraft(event.target.value);
           if (state !== 'idle') setState('idle');
         }}
@@ -380,6 +389,7 @@ export default function GrimoireWorkbench({
   const confirmDelete = async (entry, event) => {
     const group = consultationByEntryId.get(entry.id) || { key: `entry:${entry.id}`, entries: [entry] };
     const entryCount = group.entries.length;
+    const isLegacyTriadFragment = group.entries.some((item) => item.legacyTriadFragment === true);
     const isTriad = entryCount > 1 || normalizeSpreadType(entry.spreadType) === 'triad';
     const armed = pendingDeleteRef.current;
 
@@ -393,9 +403,11 @@ export default function GrimoireWorkbench({
         type: 'info',
         deleteKey: group.key,
         deleteEntryId: entry.id,
-        text: isTriad
-          ? `Press Confirm Triad delete within five seconds. This removes all ${entryCount} entries and their private notes. Lifetime total remains.`
-          : 'Press Confirm delete within five seconds. This removes the saved entry and its private note. Lifetime total remains.',
+        text: isLegacyTriadFragment
+          ? `Press Confirm fragment delete within five seconds. This removes the ${entryCount} recoverable historical ${pluralize(entryCount, 'entry', 'entries')} and their private notes. Lifetime total remains.`
+          : isTriad
+            ? `Press Confirm Triad delete within five seconds. This removes all ${entryCount} entries and their private notes. Lifetime total remains.`
+            : 'Press Confirm delete within five seconds. This removes the saved entry and its private note. Lifetime total remains.',
       });
       return;
     }
@@ -407,9 +419,11 @@ export default function GrimoireWorkbench({
       setPendingDelete(null);
       setStatus({
         type: 'success',
-        text: isTriad
-          ? `Deleted one Triad consultation and ${entryCount} saved entries. Lifetime reading total preserved.`
-          : 'Deleted one consultation and one saved entry. Lifetime reading total preserved.',
+        text: isLegacyTriadFragment
+          ? `Deleted one historical Triad fragment and ${entryCount} saved ${pluralize(entryCount, 'entry', 'entries')}. Lifetime reading total preserved.`
+          : isTriad
+            ? `Deleted one Triad consultation and ${entryCount} saved entries. Lifetime reading total preserved.`
+            : 'Deleted one consultation and one saved entry. Lifetime reading total preserved.',
       });
     } catch {
       pendingDeleteRef.current = null;
@@ -581,14 +595,20 @@ export default function GrimoireWorkbench({
                   const recurrenceItem = recurrence.find((item) => item.chapter === entry.chapter);
                   const editing = editingId === entry.id;
                   const group = consultationByEntryId.get(entry.id) || { key: `entry:${entry.id}`, entries: [entry] };
+                  const legacyTriadFragment = group.entries.some((item) => item.legacyTriadFragment === true);
                   const triadDelete = group.entries.length > 1 || normalizeSpreadType(entry.spreadType) === 'triad';
                   const deleteArmed = pendingDelete?.key === group.key && pendingDelete?.entryId === entry.id;
                   const deleteText = deleteArmed
-                    ? (triadDelete ? 'Confirm Triad delete' : 'Confirm delete')
+                    ? (legacyTriadFragment ? 'Confirm fragment delete' : triadDelete ? 'Confirm Triad delete' : 'Confirm delete')
                     : 'Delete';
+                  const deletionTarget = legacyTriadFragment
+                    ? `the historical Triad fragment containing ${group.entries.length} saved ${pluralize(group.entries.length, 'entry', 'entries')}`
+                    : triadDelete
+                      ? `the complete Triad consultation containing ${group.entries.length} entries`
+                      : 'this saved consultation';
                   const deleteLabel = deleteArmed
-                    ? `Confirm deletion of ${triadDelete ? `the complete Triad consultation containing ${group.entries.length} entries` : 'this saved consultation'}`
-                    : `Delete ${triadDelete ? `the complete saved Triad consultation containing ${group.entries.length} entries` : 'saved consultation'} for ${entry.title || `chapter ${entry.chapter}`}`;
+                    ? `Confirm deletion of ${deletionTarget}`
+                    : `Delete ${deletionTarget} for ${entry.title || `chapter ${entry.chapter}`}`;
 
                   return (
                     <article key={entry.id} className="grimoire-entry" data-favorite={entry.favorite ? 'true' : 'false'}>
@@ -603,7 +623,9 @@ export default function GrimoireWorkbench({
                           <span className="grimoire-entry-meta">
                             {new Date(entry.date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                             {' · '}{entry.gematria ?? 0}
-                            {' · '}{normalizeSpreadType(entry.spreadType) === 'triad' ? 'Triad' : 'Single'}
+                            {' · '}{entry.legacyTriadFragment === true
+                              ? 'Historical Triad fragment'
+                              : normalizeSpreadType(entry.spreadType) === 'triad' ? 'Triad' : 'Single'}
                             {recurrenceItem?.consultations > 1 ? ` · repeated ${recurrenceItem.consultations}×` : ''}
                           </span>
                         </button>

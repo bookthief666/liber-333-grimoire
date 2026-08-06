@@ -214,6 +214,18 @@ test('rejects v2 Triad labels without explicit consultation IDs', () => {
   );
 });
 
+test('rejects forged historical-fragment markers on positioned v2 Triads', () => {
+  assert.throws(
+    () => parseJournalBackup(backupEnvelope([{
+      ...triad[0],
+      legacyTriadFragment: true,
+    }])),
+    (error) => error instanceof JournalBackupError
+      && error.code === 'invalid_consultation_group'
+      && /invalid historical Triad fragment metadata/.test(error.message),
+  );
+});
+
 test('rejects v2 Triad labels without explicit spread positions', () => {
   const malformed = triad.map(({ spreadPosition, ...entry }) => entry);
 

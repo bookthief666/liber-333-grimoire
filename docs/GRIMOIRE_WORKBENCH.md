@@ -56,7 +56,7 @@ Pure functions provide:
 
 ### `journalSchema.js` and `journalStorage.js`
 
-The journal schema migrates legacy rows to schema version 2 with safe favorite and note defaults. Storage remains newest-first, local, best-effort, and capped at 50 entries while retaining only complete consultation groups.
+The journal schema migrates legacy rows to schema version 2 with safe favorite and note defaults. Complete historical three-row Triads receive explicit consultation identity and positions. One-row or two-row remnants are preserved as visibly labeled historical fragments, remain backup-safe, and never receive invented chapters or positions. Storage remains newest-first, local, best-effort, and capped at 50 entries while retaining only complete consultation groups.
 
 The visible Delete control is consultation-safe: deleting any stored Triad position removes the complete explicit or legacy consultation group, preventing the app from creating a partial Triad that cannot be backed up safely.
 
@@ -67,7 +67,8 @@ JSON backup version 2:
 - accepts and migrates version 1 backups;
 - validates every row before local mutation;
 - strictly validates explicit consultation groups;
-- requires a v2 Triad to contain exactly three entries and exactly one Thesis, Antithesis, and Synthesis;
+- requires a new or complete v2 Triad to contain exactly three entries and exactly one Thesis, Antithesis, and Synthesis;
+- permits only explicitly marked, id-less historical fragments when legacy data contains fewer than three recoverable rows;
 - rejects mixed spread labels, missing consultation IDs, duplicate/missing positions, extra/missing rows, and inconsistent shared question/date/Gematria values;
 - restores canonical chapter titles;
 - preserves local entries on ID collisions;
@@ -93,7 +94,7 @@ The extracted modal UI provides local search, filters, recurrence navigation, fa
 
 ## Validation
 
-The permanent release gate covers schema migration, new and legacy consultation counting, minute-boundary legacy grouping, three-row legacy chunking, strict v2 Triad validation, consultation-safe deletion, complete-group retention, search/filter behavior, recurrence, JSON round trips, Markdown serialization, local-calendar date boundaries, grouped-Triad metadata, production build validation, and built-output smoke testing.
+The permanent release gate covers schema migration, one-row and two-row historical-fragment round trips, existing local Triad-survivor export, new and legacy consultation counting, minute-boundary legacy grouping, three-row legacy chunking, strict v2 Triad validation, consultation-safe deletion, complete-group retention, search/filter behavior, recurrence, JSON round trips, Markdown serialization, local-calendar date boundaries, grouped-Triad metadata, production build validation, and built-output smoke testing.
 
 Playwright covers Chromium, Firefox, WebKit, Fold closed, Fold unfolded, local persistence, offline restart, downloads, favorites, notes, focus restoration, modal isolation, and horizontal-overflow protection.
 

@@ -15,6 +15,7 @@ import {
   JOURNAL_NOTE_LIMIT,
   migrateJournalEntries,
   normalizeJournalNote,
+  upgradeLegacyJournalTriads,
 } from './journalSchema.js';
 
 export const JOURNAL_BACKUP_FORMAT = 'liber-333-grimoire-backup';
@@ -80,6 +81,14 @@ function normalizeFavorite(value) {
   return value;
 }
 
+function normalizeLegacyTriadFragment(value) {
+  if (value === undefined || value === null || value === false) return false;
+  if (value !== true) {
+    throw new JournalBackupError('Legacy Triad fragment state must be true or false.');
+  }
+  return true;
+}
+
 function normalizeNote(value) {
   try {
     return normalizeJournalNote(value, { strict: true });
@@ -135,6 +144,9 @@ export function normalizeJournalEntry(entry, { sourceVersion = JOURNAL_BACKUP_VE
     const spreadPosition = normalizeSpreadPosition(entry.spreadPosition);
     if (consultationId) normalized.consultationId = consultationId;
     if (spreadPosition) normalized.spreadPosition = spreadPosition;
+    if (normalizeLegacyTriadFragment(entry.legacyTriadFragment)) {
+      normalized.legacyTriadFragment = true;
+    }
   }
 
   return normalized;
@@ -157,6 +169,16 @@ function validateExplicitConsultationGroups(entries, sourceVersion) {
   entries.forEach((entry) => {
     const position = entry.spreadPosition || null;
     const spreadType = normalizeJournalSpreadType(entry.spreadType);
+    const isLegacyTriadFragment = entry.legacyTriadFragment === true;
+    if (isLegacyTriadFragment) {
+      if (spreadType !== 'triad' || entry.consultationId || position) {
+        throw new JournalBackupError(
+          `Entry ${entry.id} has invalid historical Triad fragment metadata.`,
+          'invalid_consultation_group',
+        );
+      }
+      return;
+    }
     if (spreadType === 'triad' && !entry.consultationId) {
       throw new JournalBackupError(
         `Entry ${entry.id} has a Triad spread label without a consultation ID.`,
@@ -180,6 +202,20 @@ function validateExplicitConsultationGroups(entries, sourceVersion) {
     group.push(entry);
     groups.set(entry.consultationId, group);
   });
+
+  const fragmentKeys = assignJournalConsultationKeys(entries);
+  const fragmentCounts = new Map();
+  entries.forEach((entry, index) => {
+    if (entry.legacyTriadFragment !== true) return;
+    const key = fragmentKeys[index];
+    fragmentCounts.set(key, (fragmentCounts.get(key) || 0) + 1);
+  });
+  if ([...fragmentCounts.values()].some((count) => count >= TRIAD_POSITION_LIST.length)) {
+    throw new JournalBackupError(
+      'A complete historical Triad must use explicit consultation positions.',
+      'invalid_consultation_group',
+    );
+  }
 
   groups.forEach((group, consultationId) => {
     const isTriad = group.some((entry) => (
@@ -234,44 +270,6 @@ function validateExplicitConsultationGroups(entries, sourceVersion) {
   });
 }
 
-function upgradeVersion1Triads(entries) {
-  const consultationKeys = assignJournalConsultationKeys(entries);
-  const groupedIndexes = new Map();
-
-  entries.forEach((entry, index) => {
-    if (normalizeJournalSpreadType(entry.spreadType) !== 'triad') return;
-    const key = consultationKeys[index];
-    const indexes = groupedIndexes.get(key) || [];
-    indexes.push(index);
-    groupedIndexes.set(key, indexes);
-  });
-
-  const upgraded = entries.map((entry) => ({ ...entry }));
-  let consultationOrdinal = 0;
-
-  groupedIndexes.forEach((indexes) => {
-    if (indexes.length !== TRIAD_POSITION_LIST.length) return;
-    consultationOrdinal += 1;
-    const first = upgraded[indexes[0]];
-    const consultationId = `v1-${consultationOrdinal}-${first.id}`
-      .slice(0, JOURNAL_BACKUP_LIMITS.consultationIdChars);
-
-    indexes.forEach((entryIndex, positionIndex) => {
-      upgraded[entryIndex] = {
-        ...upgraded[entryIndex],
-        consultationId,
-        spreadType: 'triad',
-        spreadPosition: TRIAD_POSITION_LIST[positionIndex],
-        date: first.date,
-        question: first.question,
-        gematria: first.gematria,
-      };
-    });
-  });
-
-  return upgraded;
-}
-
 function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = {}) {
   if (!Array.isArray(entries)) throw new JournalBackupError('Backup entries must be an array.');
   if (entries.length > JOURNAL_BACKUP_LIMITS.entries) {
@@ -286,7 +284,7 @@ function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = 
     return normalized;
   });
   const upgradedEntries = sourceVersion === 1
-    ? upgradeVersion1Triads(normalizedEntries)
+    ? upgradeLegacyJournalTriads(normalizedEntries)
     : normalizedEntries;
   validateExplicitConsultationGroups(upgradedEntries, JOURNAL_BACKUP_VERSION);
   return upgradedEntries;
@@ -307,7 +305,10 @@ function normalizeExportedAt(value) {
 }
 
 export function createJournalBackup({ entries, totalReadings, exportedAt = new Date() }) {
-  const normalizedEntries = normalizeEntries(entries, { sourceVersion: JOURNAL_BACKUP_VERSION });
+  const normalizedEntries = normalizeEntries(
+    upgradeLegacyJournalTriads(entries),
+    { sourceVersion: JOURNAL_BACKUP_VERSION },
+  );
   const exportedAtIso = exportedAt instanceof Date
     ? exportedAt.toISOString()
     : normalizeExportedAt(exportedAt);
@@ -419,7 +420,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   validateTouchedExplicitConsultations(sortedEntries, touchedExplicitConsultationIds);
 
   const retention = retainCompleteJournalConsultations(sortedEntries, MAX_JOURNAL_ENTRIES);
-  const mergedEntries = retention.entries;
+  const mergedEntries = migrateJournalEntries(retention.entries);
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
   const retainedImportedEntries = importedEntries.filter((entry) => retainedIds.has(entry.id));
   const importedConsultationCount = countNewJournalConsultations(

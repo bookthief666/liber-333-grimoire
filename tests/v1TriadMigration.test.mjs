@@ -6,7 +6,9 @@ import {
   createJournalBackup,
   mergeJournalBackup,
   parseJournalBackup,
+  serializeJournalBackup,
 } from '../src/features/journal/journalBackup.js';
+import { countJournalConsultations } from '../src/features/journal/consultationSemantics.js';
 
 const legacyTriadEntry = (id, chapter, date) => ({
   id,
@@ -65,4 +67,76 @@ test('version 1 Triads are upgraded before merge and remain strict-v2 exportable
     new Set(exported.entries.map((entry) => entry.spreadPosition)),
     new Set(['thesis', 'antithesis', 'synthesis']),
   );
+});
+
+for (const fragmentSize of [1, 2]) {
+  test(`version 1 ${fragmentSize}-row Triad remnants remain losslessly round-trippable`, () => {
+    const entries = Array.from({ length: fragmentSize }, (_, index) => (
+      legacyTriadEntry(
+        `legacy-fragment-${fragmentSize}-${index}`,
+        index + 1,
+        new Date(Date.UTC(2026, 6, 24, 1, 0, index * 20)).toISOString(),
+      )
+    ));
+    const legacyBackup = {
+      format: JOURNAL_BACKUP_FORMAT,
+      version: 1,
+      exportedAt: '2026-07-24T02:00:00.000Z',
+      totalReadings: 1,
+      entries,
+    };
+
+    const parsed = parseJournalBackup(JSON.stringify(legacyBackup));
+    assert.equal(parsed.entries.length, fragmentSize);
+    assert.equal(countJournalConsultations(parsed.entries), 1);
+    assert.ok(parsed.entries.every((entry) => entry.legacyTriadFragment === true));
+    assert.ok(parsed.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
+    assert.deepEqual(
+      parsed.entries.map(({ id, date, chapter, question, gematria }) => ({ id, date, chapter, question, gematria })),
+      entries.map(({ id, date, chapter, question, gematria }) => ({ id, date, chapter, question, gematria })),
+    );
+
+    const roundTripped = parseJournalBackup(serializeJournalBackup({
+      entries: parsed.entries,
+      totalReadings: parsed.totalReadings,
+      exportedAt: new Date('2026-07-24T03:00:00.000Z'),
+    }));
+    assert.equal(roundTripped.sourceVersion, 2);
+    assert.equal(roundTripped.entries.length, fragmentSize);
+    assert.equal(countJournalConsultations(roundTripped.entries), 1);
+    assert.ok(roundTripped.entries.every((entry) => entry.legacyTriadFragment === true));
+  });
+}
+
+test('import completion upgrades historical fragments in the returned in-memory state', () => {
+  const envelope = (entries) => ({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries,
+  });
+  const historicalRows = [
+    legacyTriadEntry('fragment-current', 1, '2026-07-24T01:00:00.000Z'),
+    legacyTriadEntry('fragment-import-1', 2, '2026-07-24T01:00:20.000Z'),
+    legacyTriadEntry('fragment-import-2', 3, '2026-07-24T01:00:40.000Z'),
+  ];
+  const current = parseJournalBackup(JSON.stringify(envelope(historicalRows.slice(0, 1))));
+  const backup = parseJournalBackup(JSON.stringify(envelope(historicalRows.slice(1))));
+
+  const merged = mergeJournalBackup({
+    currentEntries: current.entries,
+    currentTotalReadings: current.totalReadings,
+    backup,
+  });
+
+  assert.equal(countJournalConsultations(merged.entries), 1);
+  assert.equal(new Set(merged.entries.map((entry) => entry.consultationId)).size, 1);
+  assert.deepEqual(
+    merged.entries.map((entry) => entry.spreadPosition),
+    ['thesis', 'antithesis', 'synthesis'],
+  );
+  assert.ok(merged.entries.every((entry) => entry.legacyTriadFragment !== true));
+  assert.equal(merged.importedConsultationCount, 0);
+  assert.equal(merged.importedEntryCount, 2);
 });

@@ -74,11 +74,13 @@ A valid version 1 entry is migrated during parsing to entry schema version 2 wit
 
 Version 1 Triad rows do not contain explicit consultation IDs. They are grouped as ordered adjacent sequences, using normalized question, Gematria, planetary/lunar context, a bounded timestamp tolerance, and three-row chunking. This keeps one historical Triad together when its rows cross a minute boundary while preventing repeated identical Triads from collapsing into one consultation.
 
+When all three historical rows exist, migration assigns one stable consultation ID and the Thesis, Antithesis, and Synthesis positions. Older closure-based saves can contain only one surviving row, and interrupted or separately produced backups can contain two. Those incomplete groups are retained as `legacyTriadFragment: true`: their recoverable reading content remains portable, they remain JSON/Markdown exportable, and no missing chapter or spread position is invented. The Workbench identifies them as “Historical Triad fragment.” If a later import supplies the other recoverable rows, the returned in-memory state is upgraded immediately rather than waiting for an application reload.
+
 Version 2 is always produced by new exports. Future unsupported versions are rejected rather than guessed.
 
 ## Strict v2 consultation validation
 
-Before export or import, explicit schema-v2 groups are validated as a whole:
+Before export or import, explicit schema-v2 groups are validated as a whole. The only id-less v2 Triad form accepted by import is a marked historical fragment produced by migration; an unmarked id-less Triad remains invalid.
 
 - a Single consultation with an explicit ID must contain exactly one entry;
 - a Triad must contain exactly three entries;
@@ -134,7 +136,8 @@ A backup may contain private questions, saved interpretations, and private integ
 The regression suite protects:
 
 - version 2 round-trip serialization;
-- version 1 migration;
+- version 1 migration, including one-row and two-row historical Triad fragments;
+- existing local-storage Triad-survivor export and v2 re-import;
 - entry-schema defaults;
 - consultation-based lifetime totals;
 - sequence-aware legacy Triad grouping across minute boundaries;

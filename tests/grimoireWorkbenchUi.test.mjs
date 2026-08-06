@@ -15,6 +15,7 @@ test('Workbench UI exposes local tools and accessible dialog behavior', async ()
     'Markdown: shown',
     'Import JSON',
     'Private integration note',
+    'Historical Triad fragment',
     'Save note',
     'Recurrence',
     'appearances / consultations',
@@ -29,6 +30,9 @@ test('Workbench UI exposes local tools and accessible dialog behavior', async ()
   assert.match(source, /onExportMarkdown/);
   assert.match(source, /onSetFavorite/);
   assert.match(source, /onSaveNote/);
+  assert.match(source, /NOTE_SAVED_CLOSE_DELAY_MS = 1500/);
+  assert.match(source, /onFocus=\{cancelScheduledClose\}/);
+  assert.match(source, /onPointerDown=\{cancelScheduledClose\}/);
 });
 
 test('Workbench CSS includes desktop, mobile, closed-Fold, focus, and reduced-motion contracts', async () => {

@@ -119,9 +119,10 @@ test.describe('Grimoire release integrity', () => {
     await activate(discipline.getByRole('button', { name: 'Save note' }));
     await expect(discipline.getByText('Saved.', { exact: true })).toBeVisible();
 
+    await editor.evaluate((element) => element.focus());
     await editor.fill('Save this note first. Continue with an unsaved revision.');
     await expect(discipline.getByText('Unsaved changes', { exact: true })).toBeVisible();
-    await page.waitForTimeout(550);
+    await page.waitForTimeout(1_650);
 
     await expect(editor).toBeVisible();
     await expect(editor).toHaveValue('Save this note first. Continue with an unsaved revision.');
@@ -144,7 +145,7 @@ test.describe('Grimoire release integrity', () => {
     const nextEditor = opening.getByLabel('Private integration note');
     await nextEditor.fill('This second draft must remain open.');
 
-    await page.waitForTimeout(550);
+    await page.waitForTimeout(1_650);
 
     await expect(nextEditor).toBeVisible();
     await expect(nextEditor).toHaveValue('This second draft must remain open.');

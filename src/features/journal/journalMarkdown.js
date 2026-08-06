@@ -25,8 +25,9 @@ function formatDate(value) {
   return date.toISOString();
 }
 
-function humanSpread(value) {
-  return normalizeSpreadType(value) === 'triad' ? 'Triad' : 'Single';
+function humanSpread(entry) {
+  if (entry?.legacyTriadFragment === true) return 'Historical Triad fragment';
+  return normalizeSpreadType(entry?.spreadType) === 'triad' ? 'Triad' : 'Single';
 }
 
 function formatChapter(record) {
@@ -45,7 +46,7 @@ function entryMarkdown(entry, index) {
   const lines = [
     `## ${index + 1}. ${formatDate(entry?.date)}`,
     '',
-    `- **Spread:** ${humanSpread(entry?.spreadType)}`,
+    `- **Spread:** ${humanSpread(entry)}`,
     `- **Favorite:** ${entry?.favorite === true ? 'Yes' : 'No'}`,
   ];
 
