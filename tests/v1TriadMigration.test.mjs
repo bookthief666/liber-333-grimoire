@@ -197,6 +197,7 @@ for (const fragmentSize of [1, 2]) {
     current.entries.forEach((entry, index) => {
       entry.favorite = index === 0;
       entry.note = `Keep local note ${index + 1}.`;
+      entry.futureReadingLayer = { seal: `local-${index + 1}` };
     });
     const backup = parseJournalBackup(JSON.stringify(envelope(historicalRows)));
 
@@ -224,6 +225,7 @@ for (const fragmentSize of [1, 2]) {
       const retained = merged.entries.find((entry) => entry.id === localEntry.id);
       assert.equal(retained.favorite, index === 0);
       assert.equal(retained.note, `Keep local note ${index + 1}.`);
+      assert.deepEqual(retained.futureReadingLayer, { seal: `local-${index + 1}` });
     });
     assert.doesNotThrow(() => createJournalBackup({
       entries: merged.entries,
@@ -231,3 +233,77 @@ for (const fragmentSize of [1, 2]) {
     }));
   });
 }
+
+test('cumulative recovery preserves newest-first position order when every timestamp is equal', () => {
+  const date = '2026-07-24T01:00:00.000Z';
+  const envelope = (entries) => JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries,
+  });
+  const historicalRows = [
+    legacyTriadEntry('tie-synthesis', 3, date),
+    legacyTriadEntry('tie-antithesis', 2, date),
+    legacyTriadEntry('tie-thesis', 1, date),
+  ];
+  const current = parseJournalBackup(envelope(historicalRows.slice(2)));
+  const backup = parseJournalBackup(envelope(historicalRows));
+
+  const merged = mergeJournalBackup({
+    currentEntries: current.entries,
+    currentTotalReadings: current.totalReadings,
+    backup,
+  });
+
+  assert.deepEqual(
+    merged.entries.map((entry) => entry.spreadPosition),
+    ['synthesis', 'antithesis', 'thesis'],
+  );
+});
+
+test('capacity-limited cumulative recovery retains the original local fragment', () => {
+  const fragmentDate = '2026-07-24T01:00:00.000Z';
+  const envelope = (entries) => JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T03:00:00.000Z',
+    totalReadings: 50,
+    entries,
+  });
+  const historicalRows = [
+    legacyTriadEntry('cap-synthesis', 3, '2026-07-24T01:00:40.000Z'),
+    legacyTriadEntry('cap-antithesis', 2, '2026-07-24T01:00:20.000Z'),
+    legacyTriadEntry('cap-thesis', 1, fragmentDate),
+  ];
+  const fragment = parseJournalBackup(envelope(historicalRows.slice(2))).entries[0];
+  fragment.favorite = true;
+  fragment.note = 'Do not lose this local fragment.';
+  fragment.futureReadingLayer = { seal: 'cap-local' };
+  const newerSingles = Array.from({ length: 49 }, (_, index) => ({
+    ...legacyTriadEntry(
+      `cap-single-${index}`,
+      (index % 94) - 2,
+      new Date(Date.UTC(2026, 6, 24, 2, 0, index)).toISOString(),
+    ),
+    spreadType: 'single',
+  }));
+  const backup = parseJournalBackup(envelope(historicalRows));
+
+  const merged = mergeJournalBackup({
+    currentEntries: [...newerSingles, fragment],
+    currentTotalReadings: 50,
+    backup,
+  });
+
+  assert.equal(merged.entries.length, 50);
+  assert.equal(merged.importedEntryCount, 0);
+  assert.equal(merged.omittedByCap, 2);
+  const retainedFragment = merged.entries.find((entry) => entry.id === 'cap-thesis');
+  assert.equal(retainedFragment.legacyTriadFragment, true);
+  assert.equal(retainedFragment.consultationId, undefined);
+  assert.equal(retainedFragment.favorite, true);
+  assert.equal(retainedFragment.note, 'Do not lose this local fragment.');
+  assert.deepEqual(retainedFragment.futureReadingLayer, { seal: 'cap-local' });
+});

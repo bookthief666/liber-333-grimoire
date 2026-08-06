@@ -39,6 +39,11 @@ const CHAPTER_BY_NUMBER = new Map(LIBER_333.map((chapter) => [chapter.chapter, c
 const SPREAD_POSITIONS = new Set(['single', 'thesis', 'antithesis', 'synthesis']);
 const TRIAD_POSITION_LIST = Object.freeze(['thesis', 'antithesis', 'synthesis']);
 const TRIAD_POSITIONS = new Set(TRIAD_POSITION_LIST);
+const RECOVERED_TRIAD_NEWEST_FIRST = new Map([
+  ['synthesis', 0],
+  ['antithesis', 1],
+  ['thesis', 2],
+]);
 
 export class JournalBackupError extends Error {
   constructor(message, code = 'invalid_journal_backup') {
@@ -422,6 +427,21 @@ function timestamp(entry) {
   return Number.isNaN(value) ? 0 : value;
 }
 
+function compareNewestFirst(left, right) {
+  const timestampDifference = timestamp(right) - timestamp(left);
+  if (timestampDifference !== 0) return timestampDifference;
+  if (
+    left?.legacyTriadRecovered === true
+    && right?.legacyTriadRecovered === true
+    && left.consultationId
+    && left.consultationId === right.consultationId
+  ) {
+    return (RECOVERED_TRIAD_NEWEST_FIRST.get(left.spreadPosition) ?? 0)
+      - (RECOVERED_TRIAD_NEWEST_FIRST.get(right.spreadPosition) ?? 0);
+  }
+  return 0;
+}
+
 function explicitConsultationPosition(entry) {
   if (!entry?.consultationId) return null;
   if (entry.spreadPosition) return entry.spreadPosition;
@@ -456,18 +476,27 @@ function isMatchingRecoveredLegacyFragment(localEntry, importedEntry) {
 function reconcileRecoveredLegacyFragments(currentEntries, importedEntries) {
   const importedById = new Map(importedEntries.map((entry) => [entry.id, entry]));
   const touchedConsultationIds = new Set();
+  const originalFragmentsByConsultationId = new Map();
   const entries = currentEntries.map((localEntry) => {
     const importedEntry = importedById.get(localEntry.id);
     if (!isMatchingRecoveredLegacyFragment(localEntry, importedEntry)) return localEntry;
 
     touchedConsultationIds.add(importedEntry.consultationId);
-    return {
+    const originals = originalFragmentsByConsultationId.get(importedEntry.consultationId) || [];
+    originals.push(localEntry);
+    originalFragmentsByConsultationId.set(importedEntry.consultationId, originals);
+    const reconciled = {
       ...importedEntry,
-      favorite: localEntry.favorite === true,
-      note: localEntry.note || '',
+      ...localEntry,
+      consultationId: importedEntry.consultationId,
+      spreadType: importedEntry.spreadType,
+      spreadPosition: importedEntry.spreadPosition,
+      legacyTriadRecovered: true,
     };
+    delete reconciled.legacyTriadFragment;
+    return reconciled;
   });
-  return { entries, touchedConsultationIds };
+  return { entries, originalFragmentsByConsultationId, touchedConsultationIds };
 }
 
 function validateTouchedExplicitConsultations(entries, consultationIds) {
@@ -510,11 +539,25 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     touchedExplicitConsultationIds.add(consultationId);
   });
   const sortedEntries = [...reconciledCurrent, ...importedEntries]
-    .sort((left, right) => timestamp(right) - timestamp(left));
+    .sort(compareNewestFirst);
   validateTouchedExplicitConsultations(sortedEntries, touchedExplicitConsultationIds);
 
   const retention = retainCompleteJournalConsultations(sortedEntries, MAX_JOURNAL_ENTRIES);
-  const mergedEntries = migrateJournalEntries(retention.entries);
+  const retainedConsultationIds = new Set(
+    retention.entries.map((entry) => entry.consultationId).filter(Boolean),
+  );
+  const restoredFragments = [...reconciliation.originalFragmentsByConsultationId.entries()]
+    .filter(([consultationId]) => !retainedConsultationIds.has(consultationId))
+    .flatMap(([, entries]) => entries);
+  const retainedEntries = [...retention.entries, ...restoredFragments]
+    .sort(compareNewestFirst);
+  if (retainedEntries.length > MAX_JOURNAL_ENTRIES) {
+    throw new JournalBackupError(
+      'Import cannot recover historical Triad fragments within the journal capacity without displacing local data.',
+      'journal_capacity_collision',
+    );
+  }
+  const mergedEntries = migrateJournalEntries(retainedEntries);
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
   const retainedImportedEntries = importedEntries.filter((entry) => retainedIds.has(entry.id));
   const importedConsultationCount = countNewJournalConsultations(
@@ -535,7 +578,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     importedConsultationCount,
     importedEntryCount: retainedImportedEntries.length,
     duplicateCount: backup.entries.length - importedEntries.length,
-    omittedByCap: retention.omittedEntries,
+    omittedByCap: Math.max(0, retention.omittedEntries - restoredFragments.length),
     omittedConsultationCount: retention.omittedConsultations,
   };
 }
