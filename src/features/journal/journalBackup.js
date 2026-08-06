@@ -499,6 +499,48 @@ function reconcileRecoveredLegacyFragments(currentEntries, importedEntries) {
   return { entries, originalFragmentsByConsultationId, touchedConsultationIds };
 }
 
+function makeRoomForRestoredFragments(retainedEntries, restoredFragments, importedEntries) {
+  const requiredSlots = retainedEntries.length + restoredFragments.length - MAX_JOURNAL_ENTRIES;
+  if (requiredSlots <= 0) {
+    return { entries: retainedEntries, evictedEntries: 0, evictedConsultations: 0 };
+  }
+
+  const importedIds = new Set(importedEntries.map((entry) => entry.id));
+  const consultationKeys = assignJournalConsultationKeys(retainedEntries);
+  const groups = new Map();
+  retainedEntries.forEach((entry, index) => {
+    const key = consultationKeys[index];
+    const group = groups.get(key) || [];
+    group.push(entry);
+    groups.set(key, group);
+  });
+  const eligibleGroups = [...groups.values()]
+    .filter((group) => group.every((entry) => importedIds.has(entry.id)))
+    .sort((left, right) => (
+      Math.max(...left.map(timestamp)) - Math.max(...right.map(timestamp))
+    ));
+
+  const evictedIds = new Set();
+  let evictedConsultations = 0;
+  for (const group of eligibleGroups) {
+    if (evictedIds.size >= requiredSlots) break;
+    group.forEach((entry) => evictedIds.add(entry.id));
+    evictedConsultations += 1;
+  }
+  if (evictedIds.size < requiredSlots) {
+    throw new JournalBackupError(
+      'Import cannot recover historical Triad fragments within the journal capacity without displacing local data.',
+      'journal_capacity_collision',
+    );
+  }
+
+  return {
+    entries: retainedEntries.filter((entry) => !evictedIds.has(entry.id)),
+    evictedEntries: evictedIds.size,
+    evictedConsultations,
+  };
+}
+
 function validateTouchedExplicitConsultations(entries, consultationIds) {
   consultationIds.forEach((consultationId) => {
     const group = entries.filter((entry) => entry.consultationId === consultationId);
@@ -550,14 +592,13 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
   const restoredFragments = [...reconciliation.originalFragmentsByConsultationId.entries()]
     .filter(([consultationId]) => !retainedConsultationIds.has(consultationId))
     .flatMap(([, entries]) => entries);
-  const retainedEntries = [...retention.entries, ...restoredFragments]
+  const capacity = makeRoomForRestoredFragments(
+    retention.entries,
+    restoredFragments,
+    importedEntries,
+  );
+  const retainedEntries = [...capacity.entries, ...restoredFragments]
     .sort(compareNewestFirst);
-  if (retainedEntries.length > MAX_JOURNAL_ENTRIES) {
-    throw new JournalBackupError(
-      'Import cannot recover historical Triad fragments within the journal capacity without displacing local data.',
-      'journal_capacity_collision',
-    );
-  }
   const mergedEntries = retainedEntries;
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
   const retainedImportedEntries = importedEntries.filter((entry) => retainedIds.has(entry.id));
@@ -579,7 +620,10 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     importedConsultationCount,
     importedEntryCount: retainedImportedEntries.length,
     duplicateCount: backup.entries.length - importedEntries.length,
-    omittedByCap: Math.max(0, retention.omittedEntries - restoredFragments.length),
-    omittedConsultationCount: retention.omittedConsultations,
+    omittedByCap: Math.max(
+      0,
+      retention.omittedEntries - restoredFragments.length + capacity.evictedEntries,
+    ),
+    omittedConsultationCount: retention.omittedConsultations + capacity.evictedConsultations,
   };
 }

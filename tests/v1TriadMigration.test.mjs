@@ -277,6 +277,10 @@ test('capacity-limited cumulative recovery retains the original local fragment',
     legacyTriadEntry('cap-antithesis', 2, '2026-07-24T01:00:20.000Z'),
     legacyTriadEntry('cap-thesis', 1, fragmentDate),
   ];
+  const olderImportedSingle = {
+    ...legacyTriadEntry('cap-older-import', 4, '2026-07-24T00:59:00.000Z'),
+    spreadType: 'single',
+  };
   const fragment = parseJournalBackup(envelope(historicalRows.slice(2))).entries[0];
   fragment.favorite = true;
   fragment.note = 'Do not lose this local fragment.';
@@ -289,7 +293,7 @@ test('capacity-limited cumulative recovery retains the original local fragment',
     ),
     spreadType: 'single',
   }));
-  const backup = parseJournalBackup(envelope(historicalRows));
+  const backup = parseJournalBackup(envelope([...historicalRows, olderImportedSingle]));
 
   const merged = mergeJournalBackup({
     currentEntries: [...newerSingles, fragment],
@@ -299,7 +303,8 @@ test('capacity-limited cumulative recovery retains the original local fragment',
 
   assert.equal(merged.entries.length, 50);
   assert.equal(merged.importedEntryCount, 0);
-  assert.equal(merged.omittedByCap, 2);
+  assert.equal(merged.omittedByCap, 3);
+  assert.equal(merged.entries.some((entry) => entry.id === 'cap-older-import'), false);
   const retainedFragment = merged.entries.find((entry) => entry.id === 'cap-thesis');
   assert.equal(retainedFragment.legacyTriadFragment, true);
   assert.equal(retainedFragment.consultationId, undefined);
