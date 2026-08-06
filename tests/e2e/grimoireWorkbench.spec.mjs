@@ -98,6 +98,7 @@ test.describe('Grimoire Workbench', () => {
     const markdownDownload = await markdownPromise;
     expect(markdownDownload.suggestedFilename()).toMatch(/liber-333-grimoire-filtered-.*\.md$/);
     const markdown = await readFile(await markdownDownload.path(), 'utf8');
+    await markdownDownload.delete();
     expect(markdown).toContain('What does discipline require now?');
     expect(markdown).not.toContain('Where is the hidden opening?');
     expect(markdown).toContain('Oracle interpretation');
@@ -106,6 +107,7 @@ test.describe('Grimoire Workbench', () => {
     await activate(dialog.getByRole('button', { name: 'JSON backup' }));
     const jsonDownload = await jsonPromise;
     const backup = JSON.parse(await readFile(await jsonDownload.path(), 'utf8'));
+    await jsonDownload.delete();
     expect(backup.format).toBe('liber-333-grimoire-backup');
     expect(backup.version).toBe(2);
     expect(backup.entries).toHaveLength(5);

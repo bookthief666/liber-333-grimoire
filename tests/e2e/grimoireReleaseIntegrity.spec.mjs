@@ -85,6 +85,7 @@ test.describe('Grimoire release integrity', () => {
     await activate(dialog.getByRole('button', { name: 'JSON backup' }));
     const download = await downloadPromise;
     const backup = JSON.parse(await readFile(await download.path(), 'utf8'));
+    await download.delete();
     expect(backup.totalReadings).toBe(44);
     expect(backup.entries).toHaveLength(2);
     expect(backup.entries.some((entry) => entry.consultationId === 'consultation-triad-contradiction')).toBe(false);
