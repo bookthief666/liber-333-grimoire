@@ -9,6 +9,7 @@ import {
   serializeJournalBackup,
 } from '../src/features/journal/journalBackup.js';
 import { countJournalConsultations } from '../src/features/journal/consultationSemantics.js';
+import { removeJournalEntry } from '../src/features/journal/journalStorage.js';
 
 const legacyTriadEntry = (id, chapter, date) => ({
   id,
@@ -145,6 +146,79 @@ for (const fragmentSize of [1, 2]) {
     );
   });
 }
+
+test('marked version 2 fragments without boundary IDs receive conservative persisted identities', () => {
+  const entries = [
+    legacyTriadEntry('marked-idless-newer', 2, '2026-07-24T01:00:20.000Z'),
+    legacyTriadEntry('marked-idless-older', 1, '2026-07-24T01:00:00.000Z'),
+  ].map((entry) => ({
+    ...entry,
+    schemaVersion: 2,
+    favorite: false,
+    note: '',
+    legacyTriadFragment: true,
+  }));
+  const parsed = parseJournalBackup(JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 2,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 2,
+    entries,
+  }));
+
+  assert.equal(new Set(parsed.entries.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.equal(countJournalConsultations(parsed.entries), 2);
+
+  const roundTripped = parseJournalBackup(serializeJournalBackup({
+    entries: parsed.entries,
+    totalReadings: parsed.totalReadings,
+    exportedAt: new Date('2026-07-24T03:00:00.000Z'),
+  }));
+  assert.deepEqual(
+    roundTripped.entries.map((entry) => entry.legacyTriadFragmentId),
+    parsed.entries.map((entry) => entry.legacyTriadFragmentId),
+  );
+  assert.deepEqual(
+    removeJournalEntry(roundTripped.entries, entries[0].id).map((entry) => entry.id),
+    [entries[1].id],
+  );
+});
+
+test('independently migrated fragments with long common entry-ID prefixes remain distinct', () => {
+  const sharedIdPrefix = 'x'.repeat(127);
+  const envelope = (entry) => ({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries: [entry],
+  });
+  const current = parseJournalBackup(JSON.stringify(envelope({
+    ...legacyTriadEntry(`${sharedIdPrefix}a`, 1, '2026-07-24T01:00:00.000Z'),
+    question: 'Which independent fragment came first?',
+  })));
+  const backup = parseJournalBackup(JSON.stringify(envelope({
+    ...legacyTriadEntry(`${sharedIdPrefix}b`, 2, '2026-07-25T01:00:00.000Z'),
+    question: 'Which independent fragment came second?',
+  })));
+
+  assert.notEqual(
+    current.entries[0].legacyTriadFragmentId,
+    backup.entries[0].legacyTriadFragmentId,
+  );
+
+  const merged = mergeJournalBackup({
+    currentEntries: current.entries,
+    currentTotalReadings: current.totalReadings,
+    backup,
+  });
+  assert.equal(countJournalConsultations(merged.entries), 2);
+  assert.equal(new Set(merged.entries.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.deepEqual(
+    removeJournalEntry(merged.entries, backup.entries[0].id).map((entry) => entry.id),
+    [current.entries[0].id],
+  );
+});
 
 test('import completion upgrades historical fragments in the returned in-memory state', () => {
   const envelope = (entries) => ({

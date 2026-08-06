@@ -31,6 +31,45 @@ function normalizeSpreadPosition(value) {
   return SPREAD_POSITIONS.has(normalized) ? normalized : null;
 }
 
+function hashLegacyFragmentIdentity(value, offset) {
+  let hash = offset;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= BigInt(value.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * 1099511628211n);
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
+function getLegacyFragmentFingerprint(entries) {
+  return JSON.stringify(entries.map((entry) => ({
+    id: typeof entry?.id === 'string' ? entry.id.trim() : null,
+    date: entry?.date ?? null,
+    question: entry?.question ?? null,
+    chapter: entry?.chapter ?? null,
+    gematria: entry?.gematria ?? null,
+    spreadType: entry?.spreadType ?? null,
+    planetary: entry?.planetary ?? null,
+    lunar: entry?.lunar ?? null,
+  })));
+}
+
+function allocateLegacyFragmentId(entries, usedIds) {
+  const fingerprint = getLegacyFragmentFingerprint(entries);
+  const digest = [
+    hashLegacyFragmentIdentity(fingerprint, 14695981039346656037n),
+    hashLegacyFragmentIdentity(fingerprint, 7809847782465536322n),
+  ].join('');
+  const base = `legacy-fragment-${digest}`;
+  let candidate = base;
+  let collisionOrdinal = 1;
+  while (usedIds.has(candidate)) {
+    candidate = `${base}-${collisionOrdinal}`;
+    collisionOrdinal += 1;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
 export function normalizeJournalNote(value, { strict = false } = {}) {
   if (value === undefined || value === null) return '';
   if (typeof value !== 'string') {
@@ -81,6 +120,7 @@ export function upgradeLegacyJournalTriads(
   {
     reconsiderLegacyFragments = true,
     reconsiderEntryIds = null,
+    migrateUnmarkedLegacyTriads = true,
   } = {},
 ) {
   const safeEntries = Array.isArray(entries) ? entries : [];
@@ -94,9 +134,33 @@ export function upgradeLegacyJournalTriads(
       .filter(Boolean),
   );
 
-  safeEntries.forEach((entry, index) => {
+  const upgraded = safeEntries.map((entry) => (isPlainObject(entry) ? { ...entry } : entry));
+  const usedLegacyFragmentIds = new Set(
+    upgraded
+      .map((entry) => (
+        entry?.legacyTriadFragment === true
+          ? normalizeOptionalIdentifier(entry.legacyTriadFragmentId)
+          : null
+      ))
+      .filter(Boolean),
+  );
+
+  // Older schema-v2 data could carry the fragment marker without a boundary ID.
+  // Its original grouping is unknowable once separators are gone, so preserve
+  // each surviving row independently rather than risking cross-fragment deletion.
+  upgraded.forEach((entry) => {
+    if (
+      !isPlainObject(entry)
+      || entry.legacyTriadFragment !== true
+      || normalizeOptionalIdentifier(entry.legacyTriadFragmentId)
+    ) return;
+    entry.legacyTriadFragmentId = allocateLegacyFragmentId([entry], usedLegacyFragmentIds);
+  });
+
+  upgraded.forEach((entry, index) => {
     if (!isPlainObject(entry)) return;
-    const isUnpositionedLegacyTriad = !entry.consultationId
+    const isUnpositionedLegacyTriad = migrateUnmarkedLegacyTriads
+      && !entry.consultationId
       && !entry.spreadPosition
       && (reconsiderLegacyFragments || entry.legacyTriadFragment !== true)
       && normalizeJournalSpreadType(entry.spreadType) === 'triad';
@@ -107,9 +171,7 @@ export function upgradeLegacyJournalTriads(
     groupedIndexes.set(key, indexes);
   });
 
-  const upgraded = safeEntries.map((entry) => (isPlainObject(entry) ? { ...entry } : entry));
   let consultationOrdinal = 0;
-  let fragmentOrdinal = 0;
 
   groupedIndexes.forEach((indexes) => {
     const containsMarkedFragment = indexes.some((entryIndex) => (
@@ -124,15 +186,10 @@ export function upgradeLegacyJournalTriads(
     );
     if (!shouldReconsider) return;
     if (indexes.length !== TRIAD_POSITION_LIST.length) {
-      fragmentOrdinal += 1;
-      const chronologicalIndexes = [...indexes]
-        .sort((left, right) => timestamp(upgraded[left]) - timestamp(upgraded[right]) || right - left);
-      const first = upgraded[chronologicalIndexes[0]];
-      const firstId = typeof first?.id === 'string' && first.id.trim()
-        ? first.id.trim()
-        : 'entry';
-      const legacyTriadFragmentId = `legacy-fragment-${fragmentOrdinal}-${firstId}`
-        .slice(0, JOURNAL_CONSULTATION_ID_LIMIT);
+      const legacyTriadFragmentId = allocateLegacyFragmentId(
+        indexes.map((entryIndex) => upgraded[entryIndex]),
+        usedLegacyFragmentIds,
+      );
       indexes.forEach((entryIndex) => {
         upgraded[entryIndex].legacyTriadFragment = true;
         upgraded[entryIndex].legacyTriadFragmentId = legacyTriadFragmentId;

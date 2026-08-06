@@ -348,7 +348,10 @@ function normalizeEntries(entries, { sourceVersion = JOURNAL_BACKUP_VERSION } = 
   });
   const upgradedEntries = sourceVersion === 1
     ? upgradeLegacyJournalTriads(normalizedEntries)
-    : normalizedEntries;
+    : upgradeLegacyJournalTriads(normalizedEntries, {
+      reconsiderLegacyFragments: false,
+      migrateUnmarkedLegacyTriads: false,
+    });
   validateExplicitConsultationGroups(upgradedEntries, JOURNAL_BACKUP_VERSION);
   return upgradedEntries;
 }

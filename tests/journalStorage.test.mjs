@@ -186,6 +186,33 @@ test('storage write and reload preserve distinct marked fragment identities', ()
   assert.ok(roundTripped.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
 });
 
+test('storage upgrades adjacent marked fragments that predate boundary IDs without regrouping them', () => {
+  const storage = new FakeStorage();
+  const fragments = ['2026-07-01T00:00:20.000Z', '2026-07-01T00:00:00.000Z']
+    .map((date, index) => ({
+      ...legacyEntry,
+      id: `old-marked-fragment-${index}`,
+      date,
+      spreadType: 'Thesis/Antithesis/Synthesis',
+      legacyTriadFragment: true,
+    }));
+  storage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(fragments));
+
+  const migrated = readJournalState(storage).entries;
+  assert.equal(new Set(migrated.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.deepEqual(
+    removeJournalEntry(migrated, fragments[0].id).map((entry) => entry.id),
+    [fragments[1].id],
+  );
+
+  writeJournalEntries(storage, migrated);
+  const reloaded = readJournalState(storage).entries;
+  assert.deepEqual(
+    reloaded.map((entry) => entry.legacyTriadFragmentId),
+    migrated.map((entry) => entry.legacyTriadFragmentId),
+  );
+});
+
 test('single removal, recurrence, and recent-reading helpers preserve current semantics', () => {
   const entries = [
     { id: 'a', chapter: 8 },

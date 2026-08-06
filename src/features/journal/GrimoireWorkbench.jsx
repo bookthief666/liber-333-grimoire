@@ -237,7 +237,12 @@ export default function GrimoireWorkbench({
     setPendingDelete(null);
     if (announce) setStatus({ type: 'info', text: 'Deletion cancelled.' });
     if (restoreFocus && trigger && document.contains(trigger)) {
-      requestAnimationFrame(() => trigger.focus());
+      trigger.focus({ preventScroll: true });
+      requestAnimationFrame(() => {
+        if (document.contains(trigger) && document.activeElement !== trigger) {
+          trigger.focus({ preventScroll: true });
+        }
+      });
     }
     return true;
   }, []);
