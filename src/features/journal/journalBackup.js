@@ -476,15 +476,11 @@ function isMatchingRecoveredLegacyFragment(localEntry, importedEntry) {
 function reconcileRecoveredLegacyFragments(currentEntries, importedEntries) {
   const importedById = new Map(importedEntries.map((entry) => [entry.id, entry]));
   const touchedConsultationIds = new Set();
-  const originalFragmentsByConsultationId = new Map();
   const entries = currentEntries.map((localEntry) => {
     const importedEntry = importedById.get(localEntry.id);
     if (!isMatchingRecoveredLegacyFragment(localEntry, importedEntry)) return localEntry;
 
     touchedConsultationIds.add(importedEntry.consultationId);
-    const originals = originalFragmentsByConsultationId.get(importedEntry.consultationId) || [];
-    originals.push(localEntry);
-    originalFragmentsByConsultationId.set(importedEntry.consultationId, originals);
     const reconciled = {
       ...importedEntry,
       ...localEntry,
@@ -496,11 +492,41 @@ function reconcileRecoveredLegacyFragments(currentEntries, importedEntries) {
     delete reconciled.legacyTriadFragment;
     return reconciled;
   });
-  return { entries, originalFragmentsByConsultationId, touchedConsultationIds };
+  return { entries, touchedConsultationIds };
 }
 
-function makeRoomForRestoredFragments(retainedEntries, restoredFragments, importedEntries) {
-  const requiredSlots = retainedEntries.length + restoredFragments.length - MAX_JOURNAL_ENTRIES;
+function collectMixedConsultationLocalRows(
+  mergedCandidates,
+  currentEntries,
+  importedEntries,
+  reconciledConsultationIds,
+) {
+  const currentById = new Map(currentEntries.map((entry) => [entry.id, entry]));
+  const importedIds = new Set(importedEntries.map((entry) => entry.id));
+  const groupedCandidates = new Map();
+  mergedCandidates.forEach((entry) => {
+    if (!entry.consultationId) return;
+    const group = groupedCandidates.get(entry.consultationId) || [];
+    group.push(entry);
+    groupedCandidates.set(entry.consultationId, group);
+  });
+
+  const localRowsByConsultationId = new Map();
+  groupedCandidates.forEach((group, consultationId) => {
+    if (
+      !reconciledConsultationIds.has(consultationId)
+      && !group.some((entry) => importedIds.has(entry.id))
+    ) return;
+    const localRows = group
+      .map((entry) => currentById.get(entry.id))
+      .filter(Boolean);
+    if (localRows.length > 0) localRowsByConsultationId.set(consultationId, localRows);
+  });
+  return localRowsByConsultationId;
+}
+
+function makeRoomForRestoredLocalRows(retainedEntries, restoredLocalRows, importedEntries) {
+  const requiredSlots = retainedEntries.length + restoredLocalRows.length - MAX_JOURNAL_ENTRIES;
   if (requiredSlots <= 0) {
     return { entries: retainedEntries, evictedEntries: 0, evictedConsultations: 0 };
   }
@@ -584,20 +610,26 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     .sort(compareNewestFirst);
   const mergedCandidates = migrateJournalEntries(sortedEntries);
   validateTouchedExplicitConsultations(mergedCandidates, touchedExplicitConsultationIds);
+  const mixedConsultationLocalRows = collectMixedConsultationLocalRows(
+    mergedCandidates,
+    migratedCurrent,
+    importedEntries,
+    reconciliation.touchedConsultationIds,
+  );
 
   const retention = retainCompleteJournalConsultations(mergedCandidates, MAX_JOURNAL_ENTRIES);
   const retainedConsultationIds = new Set(
     retention.entries.map((entry) => entry.consultationId).filter(Boolean),
   );
-  const restoredFragments = [...reconciliation.originalFragmentsByConsultationId.entries()]
+  const restoredLocalRows = [...mixedConsultationLocalRows.entries()]
     .filter(([consultationId]) => !retainedConsultationIds.has(consultationId))
     .flatMap(([, entries]) => entries);
-  const capacity = makeRoomForRestoredFragments(
+  const capacity = makeRoomForRestoredLocalRows(
     retention.entries,
-    restoredFragments,
+    restoredLocalRows,
     importedEntries,
   );
-  const retainedEntries = [...capacity.entries, ...restoredFragments]
+  const retainedEntries = [...capacity.entries, ...restoredLocalRows]
     .sort(compareNewestFirst);
   const mergedEntries = retainedEntries;
   const retainedIds = new Set(mergedEntries.map((entry) => entry.id));
@@ -622,7 +654,7 @@ export function mergeJournalBackup({ currentEntries, currentTotalReadings, backu
     duplicateCount: backup.entries.length - importedEntries.length,
     omittedByCap: Math.max(
       0,
-      retention.omittedEntries - restoredFragments.length + capacity.evictedEntries,
+      retention.omittedEntries - restoredLocalRows.length + capacity.evictedEntries,
     ),
     omittedConsultationCount: retention.omittedConsultations + capacity.evictedConsultations,
   };
