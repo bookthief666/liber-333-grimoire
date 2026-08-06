@@ -64,6 +64,12 @@ export function migrateJournalEntry(entry) {
   else delete next.spreadPosition;
   if (entry.legacyTriadFragment === true) next.legacyTriadFragment = true;
   else delete next.legacyTriadFragment;
+  const legacyTriadFragmentId = normalizeOptionalIdentifier(entry.legacyTriadFragmentId);
+  if (entry.legacyTriadFragment === true && legacyTriadFragmentId) {
+    next.legacyTriadFragmentId = legacyTriadFragmentId;
+  } else {
+    delete next.legacyTriadFragmentId;
+  }
   if (entry.legacyTriadRecovered === true) next.legacyTriadRecovered = true;
   else delete next.legacyTriadRecovered;
 
@@ -72,10 +78,15 @@ export function migrateJournalEntry(entry) {
 
 export function upgradeLegacyJournalTriads(
   entries,
-  { reconsiderLegacyFragments = true } = {},
+  {
+    reconsiderLegacyFragments = true,
+    reconsiderEntryIds = null,
+  } = {},
 ) {
   const safeEntries = Array.isArray(entries) ? entries : [];
-  const consultationKeys = assignJournalConsultationKeys(safeEntries);
+  const consultationKeys = assignJournalConsultationKeys(safeEntries, {
+    respectLegacyFragmentIds: !reconsiderLegacyFragments,
+  });
   const groupedIndexes = new Map();
   const usedConsultationIds = new Set(
     safeEntries
@@ -98,11 +109,33 @@ export function upgradeLegacyJournalTriads(
 
   const upgraded = safeEntries.map((entry) => (isPlainObject(entry) ? { ...entry } : entry));
   let consultationOrdinal = 0;
+  let fragmentOrdinal = 0;
 
   groupedIndexes.forEach((indexes) => {
+    const containsMarkedFragment = indexes.some((entryIndex) => (
+      upgraded[entryIndex]?.legacyTriadFragment === true
+    ));
+    const shouldReconsider = !containsMarkedFragment || (
+      reconsiderLegacyFragments
+      && (
+        !(reconsiderEntryIds instanceof Set)
+        || indexes.some((entryIndex) => reconsiderEntryIds.has(upgraded[entryIndex]?.id))
+      )
+    );
+    if (!shouldReconsider) return;
     if (indexes.length !== TRIAD_POSITION_LIST.length) {
+      fragmentOrdinal += 1;
+      const chronologicalIndexes = [...indexes]
+        .sort((left, right) => timestamp(upgraded[left]) - timestamp(upgraded[right]) || right - left);
+      const first = upgraded[chronologicalIndexes[0]];
+      const firstId = typeof first?.id === 'string' && first.id.trim()
+        ? first.id.trim()
+        : 'entry';
+      const legacyTriadFragmentId = `legacy-fragment-${fragmentOrdinal}-${firstId}`
+        .slice(0, JOURNAL_CONSULTATION_ID_LIMIT);
       indexes.forEach((entryIndex) => {
         upgraded[entryIndex].legacyTriadFragment = true;
+        upgraded[entryIndex].legacyTriadFragmentId = legacyTriadFragmentId;
         delete upgraded[entryIndex].legacyTriadRecovered;
       });
       return;
@@ -133,6 +166,7 @@ export function upgradeLegacyJournalTriads(
         legacyTriadRecovered: true,
       };
       delete upgraded[entryIndex].legacyTriadFragment;
+      delete upgraded[entryIndex].legacyTriadFragmentId;
     });
   });
 

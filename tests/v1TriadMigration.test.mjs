@@ -122,6 +122,8 @@ for (const fragmentSize of [1, 2]) {
     assert.equal(parsed.entries.length, fragmentSize);
     assert.equal(countJournalConsultations(parsed.entries), 1);
     assert.ok(parsed.entries.every((entry) => entry.legacyTriadFragment === true));
+    assert.equal(new Set(parsed.entries.map((entry) => entry.legacyTriadFragmentId)).size, 1);
+    assert.ok(parsed.entries.every((entry) => entry.legacyTriadFragmentId));
     assert.ok(parsed.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
     assert.deepEqual(
       parsed.entries.map(({ id, date, chapter, question, gematria }) => ({ id, date, chapter, question, gematria })),
@@ -137,6 +139,10 @@ for (const fragmentSize of [1, 2]) {
     assert.equal(roundTripped.entries.length, fragmentSize);
     assert.equal(countJournalConsultations(roundTripped.entries), 1);
     assert.ok(roundTripped.entries.every((entry) => entry.legacyTriadFragment === true));
+    assert.deepEqual(
+      roundTripped.entries.map((entry) => entry.legacyTriadFragmentId),
+      parsed.entries.map((entry) => entry.legacyTriadFragmentId),
+    );
   });
 }
 
@@ -400,6 +406,7 @@ test('cap retention does not regroup fragments after separating Triads are omitt
     ...legacyTriadEntry(id, chapter, date),
     question: sameQuestion,
     legacyTriadFragment: true,
+    legacyTriadFragmentId: `retained-${id}`,
   });
   const explicitTriad = (consultationId, date, chapterOffset) => (
     ['thesis', 'antithesis', 'synthesis'].map((spreadPosition, index) => ({
@@ -450,4 +457,6 @@ test('cap retention does not regroup fragments after separating Triads are omitt
   assert.equal(retainedFragments.length, 3);
   assert.ok(retainedFragments.every((entry) => entry.legacyTriadFragment === true));
   assert.ok(retainedFragments.every((entry) => !entry.consultationId && !entry.spreadPosition));
+  assert.equal(new Set(retainedFragments.map((entry) => entry.legacyTriadFragmentId)).size, 3);
+  assert.equal(countJournalConsultations(merged.entries), 50);
 });

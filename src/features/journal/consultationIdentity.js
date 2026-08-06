@@ -51,6 +51,10 @@ export function getLegacyTriadSignature(entry) {
 export function getJournalConsultationKey(entry) {
   const consultationId = explicitText(entry?.consultationId);
   if (consultationId) return `consultation:${consultationId}`;
+  const legacyTriadFragmentId = entry?.legacyTriadFragment === true
+    ? explicitText(entry?.legacyTriadFragmentId)
+    : null;
+  if (legacyTriadFragmentId) return `legacy-triad-fragment:${legacyTriadFragmentId}`;
 
   const id = explicitText(entry?.id);
   if (normalizeJournalSpreadType(entry?.spreadType) !== 'triad') {
@@ -69,7 +73,10 @@ export function getJournalConsultationKey(entry) {
 
 export function assignJournalConsultationKeys(
   entries,
-  { legacyToleranceMs = LEGACY_TRIAD_TOLERANCE_MS } = {},
+  {
+    legacyToleranceMs = LEGACY_TRIAD_TOLERANCE_MS,
+    respectLegacyFragmentIds = true,
+  } = {},
 ) {
   const safeEntries = Array.isArray(entries) ? entries : [];
   const keys = [];
@@ -78,6 +85,15 @@ export function assignJournalConsultationKeys(
 
   safeEntries.forEach((entry, index) => {
     const consultationId = explicitText(entry?.consultationId);
+    const legacyTriadFragmentId = respectLegacyFragmentIds
+      && entry?.legacyTriadFragment === true
+      ? explicitText(entry?.legacyTriadFragmentId)
+      : null;
+    if (!consultationId && legacyTriadFragmentId) {
+      activeLegacyGroup = null;
+      keys[index] = `legacy-triad-fragment:${legacyTriadFragmentId}`;
+      return;
+    }
     const isLegacyTriad = !consultationId
       && normalizeJournalSpreadType(entry?.spreadType) === 'triad';
 

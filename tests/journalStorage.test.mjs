@@ -159,17 +159,31 @@ test('storage write and reload preserve distinct marked fragment identities', ()
       date,
       spreadType: 'Thesis/Antithesis/Synthesis',
       legacyTriadFragment: true,
+      legacyTriadFragmentId: `retained-fragment-group-${index}`,
     }));
 
   writeJournalEntries(storage, fragments);
   const written = JSON.parse(storage.getItem(JOURNAL_STORAGE_KEY));
   assert.ok(written.every((entry) => entry.legacyTriadFragment === true));
+  assert.equal(new Set(written.map((entry) => entry.legacyTriadFragmentId)).size, 3);
   assert.ok(written.every((entry) => !entry.consultationId && !entry.spreadPosition));
 
   const reloaded = readJournalState(storage).entries;
   assert.deepEqual(reloaded.map((entry) => entry.id), fragments.map((entry) => entry.id));
   assert.ok(reloaded.every((entry) => entry.legacyTriadFragment === true));
+  assert.equal(new Set(reloaded.map((entry) => entry.legacyTriadFragmentId)).size, 3);
   assert.ok(reloaded.every((entry) => !entry.consultationId && !entry.spreadPosition));
+
+  const afterDelete = removeJournalEntry(reloaded, reloaded[1].id);
+  assert.deepEqual(afterDelete.map((entry) => entry.id), [fragments[0].id, fragments[2].id]);
+
+  const roundTripped = parseJournalBackup(serializeJournalBackup({
+    entries: reloaded,
+    totalReadings: 3,
+    exportedAt: new Date('2026-08-06T05:00:00.000Z'),
+  }));
+  assert.equal(new Set(roundTripped.entries.map((entry) => entry.legacyTriadFragmentId)).size, 3);
+  assert.ok(roundTripped.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
 });
 
 test('single removal, recurrence, and recent-reading helpers preserve current semantics', () => {
