@@ -223,9 +223,20 @@ export function upgradeLegacyJournalTriads(
           .sort((left, right) => left - right);
         const indexes = [...localBoundary.indexes, ...importedBoundary.indexes]
           .sort((left, right) => left - right);
+        const localTimestamps = localBoundary.indexes.map((entryIndex) => (
+          Date.parse(upgraded[entryIndex]?.date)
+        ));
+        const importedTimestamps = importedBoundary.indexes.map((entryIndex) => (
+          Date.parse(upgraded[entryIndex]?.date)
+        ));
+        const boundariesHaveStrictTemporalOrder = (
+          Math.max(...localTimestamps) < Math.min(...importedTimestamps)
+          || Math.max(...importedTimestamps) < Math.min(...localTimestamps)
+        );
         if (
           sizes[0] !== 1
           || sizes[1] !== 2
+          || !boundariesHaveStrictTemporalOrder
           || !isCoherentGroup(indexes, { requireContiguous: true })
         ) return;
         candidatePairs.push({ localBoundary, importedBoundary, indexes });

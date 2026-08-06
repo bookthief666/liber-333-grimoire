@@ -326,6 +326,41 @@ test('cross-boundary completion requires each boundary to belong to one source',
   );
 });
 
+test('cross-boundary completion rejects equal-time role ambiguity', () => {
+  const date = '2026-07-24T01:00:00.000Z';
+  const current = parseJournalBackup(JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries: [legacyTriadEntry('equal-boundary-local', 1, date)],
+  }));
+  const backup = parseJournalBackup(JSON.stringify({
+    format: JOURNAL_BACKUP_FORMAT,
+    version: 1,
+    exportedAt: '2026-07-24T02:00:00.000Z',
+    totalReadings: 1,
+    entries: [
+      legacyTriadEntry('equal-boundary-import-newer', 3, date),
+      legacyTriadEntry('equal-boundary-import-older', 2, date),
+    ],
+  }));
+
+  const merged = mergeJournalBackup({
+    currentEntries: current.entries,
+    currentTotalReadings: current.totalReadings,
+    backup,
+  });
+
+  assert.equal(countJournalConsultations(merged.entries), 2);
+  assert.equal(new Set(merged.entries.map((entry) => entry.legacyTriadFragmentId)).size, 2);
+  assert.ok(merged.entries.every((entry) => !entry.consultationId && !entry.spreadPosition));
+  assert.deepEqual(
+    removeJournalEntry(merged.entries, 'equal-boundary-import-newer').map((entry) => entry.id),
+    ['equal-boundary-local'],
+  );
+});
+
 test('cross-boundary completion counts rows outside the contiguous candidate window', () => {
   const boundaryA = 'noncontiguous-full-boundary-a';
   const boundaryB = 'noncontiguous-full-boundary-b';
