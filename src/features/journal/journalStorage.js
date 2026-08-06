@@ -8,6 +8,9 @@ export const JOURNAL_STORAGE_KEY = 'liber333_journal';
 export const TOTAL_READINGS_STORAGE_KEY = 'liber333_total';
 export const MAX_JOURNAL_ENTRIES = 50;
 export const JOURNAL_MILESTONES = Object.freeze([33, 66, 93, 333]);
+const PRESERVE_MIGRATED_FRAGMENT_IDENTITIES = Object.freeze({
+  reconsiderLegacyFragments: false,
+});
 
 export function readJournalState(storage) {
   let entries = [];
@@ -17,7 +20,10 @@ export function readJournalState(storage) {
     const raw = storage?.getItem(JOURNAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      entries = migrateJournalEntries(Array.isArray(parsed) ? parsed : []);
+      entries = migrateJournalEntries(
+        Array.isArray(parsed) ? parsed : [],
+        PRESERVE_MIGRATED_FRAGMENT_IDENTITIES,
+      );
     }
   } catch {
     entries = [];
@@ -35,7 +41,7 @@ export function readJournalState(storage) {
 
 export function prependJournalEntries(entries, additions) {
   const migratedAdditions = migrateJournalEntries(additions);
-  const migratedEntries = migrateJournalEntries(entries);
+  const migratedEntries = migrateJournalEntries(entries, PRESERVE_MIGRATED_FRAGMENT_IDENTITIES);
   return retainCompleteJournalConsultations(
     [...migratedAdditions, ...migratedEntries],
     MAX_JOURNAL_ENTRIES,
@@ -44,7 +50,9 @@ export function prependJournalEntries(entries, additions) {
 
 export function prependJournalEntry(entries, entry) {
   const migrated = migrateJournalEntry(entry);
-  return migrated ? prependJournalEntries(entries, [migrated]) : migrateJournalEntries(entries);
+  return migrated
+    ? prependJournalEntries(entries, [migrated])
+    : migrateJournalEntries(entries, PRESERVE_MIGRATED_FRAGMENT_IDENTITIES);
 }
 
 export function removeJournalEntry(entries, id) {
@@ -81,7 +89,10 @@ export function getMilestoneCrossed(previousTotal, nextTotal) {
 
 export function writeJournalEntries(storage, entries) {
   try {
-    storage?.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(migrateJournalEntries(entries)));
+    storage?.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(migrateJournalEntries(
+      entries,
+      PRESERVE_MIGRATED_FRAGMENT_IDENTITIES,
+    )));
   } catch {
     // Browser storage is best-effort; preserve the current in-memory session.
   }

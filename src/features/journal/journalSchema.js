@@ -70,7 +70,10 @@ export function migrateJournalEntry(entry) {
   return next;
 }
 
-export function upgradeLegacyJournalTriads(entries) {
+export function upgradeLegacyJournalTriads(
+  entries,
+  { reconsiderLegacyFragments = true } = {},
+) {
   const safeEntries = Array.isArray(entries) ? entries : [];
   const consultationKeys = assignJournalConsultationKeys(safeEntries);
   const groupedIndexes = new Map();
@@ -84,6 +87,7 @@ export function upgradeLegacyJournalTriads(entries) {
     if (!isPlainObject(entry)) return;
     const isUnpositionedLegacyTriad = !entry.consultationId
       && !entry.spreadPosition
+      && (reconsiderLegacyFragments || entry.legacyTriadFragment !== true)
       && normalizeJournalSpreadType(entry.spreadType) === 'triad';
     if (!isUnpositionedLegacyTriad) return;
     const key = consultationKeys[index];
@@ -135,9 +139,12 @@ export function upgradeLegacyJournalTriads(entries) {
   return upgraded;
 }
 
-export function migrateJournalEntries(entries) {
+export function migrateJournalEntries(entries, options) {
   if (!Array.isArray(entries)) return [];
-  return upgradeLegacyJournalTriads(entries.map(migrateJournalEntry).filter(Boolean));
+  return upgradeLegacyJournalTriads(
+    entries.map(migrateJournalEntry).filter(Boolean),
+    options,
+  );
 }
 
 export function patchJournalEntryMetadata(entry, patch = {}) {

@@ -150,6 +150,28 @@ test('writes only migrated journal entries', () => {
   assert.equal(written.note, '');
 });
 
+test('storage write and reload preserve distinct marked fragment identities', () => {
+  const storage = new FakeStorage();
+  const fragments = ['2026-07-01T00:00:40.000Z', '2026-07-01T00:00:20.000Z', '2026-07-01T00:00:00.000Z']
+    .map((date, index) => ({
+      ...legacyEntry,
+      id: `retained-fragment-${index}`,
+      date,
+      spreadType: 'Thesis/Antithesis/Synthesis',
+      legacyTriadFragment: true,
+    }));
+
+  writeJournalEntries(storage, fragments);
+  const written = JSON.parse(storage.getItem(JOURNAL_STORAGE_KEY));
+  assert.ok(written.every((entry) => entry.legacyTriadFragment === true));
+  assert.ok(written.every((entry) => !entry.consultationId && !entry.spreadPosition));
+
+  const reloaded = readJournalState(storage).entries;
+  assert.deepEqual(reloaded.map((entry) => entry.id), fragments.map((entry) => entry.id));
+  assert.ok(reloaded.every((entry) => entry.legacyTriadFragment === true));
+  assert.ok(reloaded.every((entry) => !entry.consultationId && !entry.spreadPosition));
+});
+
 test('single removal, recurrence, and recent-reading helpers preserve current semantics', () => {
   const entries = [
     { id: 'a', chapter: 8 },
