@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { applyOracleAccessHeaders, checkOracleAccess } from './_lib/oracleRateLimit.js';
 import { buildOraclePromptFromRequest, validateOracleRequest } from '../src/features/oracle/oracleRequest.js';
 
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-1-20250805';
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const MAX_TOKENS = 3200;
 const THINKING_BUDGET = 1600;
