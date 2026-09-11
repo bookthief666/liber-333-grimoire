@@ -10,7 +10,6 @@ import { buildOraclePromptFromRequest, validateOracleRequest } from '../src/feat
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-4-8';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 const MAX_TOKENS = 3200;
-const THINKING_BUDGET = 1600;
 
 function normalizeOrigin(value) {
   if (!value) return null;
@@ -254,7 +253,8 @@ function buildBody({ prompt, systemPrompt, thinking, stream }) {
     messages: [{ role: 'user', content: prompt }],
   };
   if (thinking) {
-    body.thinking = { type: 'enabled', budget_tokens: THINKING_BUDGET };
+    body.thinking = { type: 'adaptive' };
+    body.output_config = { effort: 'high' };
   }
   if (stream) body.stream = true;
   return body;
