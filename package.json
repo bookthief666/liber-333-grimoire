@@ -10,7 +10,8 @@
     "test": "npm run test:unit",
     "test:gematria": "node --test tests/gematriaEngine.test.mjs",
     "test:journal": "node --test tests/journalStorage.test.mjs",
-    "test:journal-backup": "node --test tests/journalBackup.test.mjs",
+    "test:journal-backup": "node --test tests/journalBackup.test.mjs tests/v1TriadMigration.test.mjs",
+    "test:grimoire-workbench": "node --test tests/journalSchema.test.mjs tests/consultationSemantics.test.mjs tests/consultationImportSemantics.test.mjs tests/grimoireWorkbench.test.mjs tests/journalMarkdown.test.mjs tests/grimoireWorkbenchUi.test.mjs tests/codexReviewRegression.test.mjs",
     "test:rites": "node --test tests/ritualData.test.mjs",
     "test:correspondences": "node --test tests/correspondences.test.mjs",
     "test:oracle": "node --test tests/oraclePrompts.test.mjs",
@@ -22,7 +23,7 @@
     "test:selection": "node --test tests/divinationSelection.test.mjs",
     "test:provenance": "node --test tests/provenance.test.mjs",
     "test:settings": "node --test tests/experienceSettings.test.mjs",
-    "test:unit": "npm run test:gematria && npm run test:journal && npm run test:journal-backup && npm run test:rites && npm run test:correspondences && npm run test:oracle && npm run test:oracle-request && npm run test:oracle-rate-limit && npm run test:chapters && npm run test:cosmic && npm run test:tree && npm run test:selection && npm run test:provenance && npm run test:settings",
+    "test:unit": "npm run test:gematria && npm run test:journal && npm run test:journal-backup && npm run test:grimoire-workbench && npm run test:rites && npm run test:correspondences && npm run test:oracle && npm run test:oracle-request && npm run test:oracle-rate-limit && npm run test:chapters && npm run test:cosmic && npm run test:tree && npm run test:selection && npm run test:provenance && npm run test:settings",
     "validate:release": "node scripts/validate-release.mjs",
     "smoke:dist": "node scripts/smoke-dist.mjs",
     "check": "npm run test:unit && npm run build && npm run validate:release && npm run smoke:dist"

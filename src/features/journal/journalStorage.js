@@ -1,7 +1,16 @@
+import {
+  groupJournalEntriesByConsultation,
+  retainCompleteJournalConsultations,
+} from './consultationSemantics.js';
+import { migrateJournalEntries, migrateJournalEntry } from './journalSchema.js';
+
 export const JOURNAL_STORAGE_KEY = 'liber333_journal';
 export const TOTAL_READINGS_STORAGE_KEY = 'liber333_total';
 export const MAX_JOURNAL_ENTRIES = 50;
 export const JOURNAL_MILESTONES = Object.freeze([33, 66, 93, 333]);
+const PRESERVE_MIGRATED_FRAGMENT_IDENTITIES = Object.freeze({
+  reconsiderLegacyFragments: false,
+});
 
 export function readJournalState(storage) {
   let entries = [];
@@ -11,7 +20,10 @@ export function readJournalState(storage) {
     const raw = storage?.getItem(JOURNAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      entries = Array.isArray(parsed) ? parsed : [];
+      entries = migrateJournalEntries(
+        Array.isArray(parsed) ? parsed : [],
+        PRESERVE_MIGRATED_FRAGMENT_IDENTITIES,
+      );
     }
   } catch {
     entries = [];
@@ -27,12 +39,34 @@ export function readJournalState(storage) {
   return { entries, totalReadings };
 }
 
+export function prependJournalEntries(entries, additions) {
+  const migratedAdditions = migrateJournalEntries(additions);
+  const migratedEntries = migrateJournalEntries(entries, PRESERVE_MIGRATED_FRAGMENT_IDENTITIES);
+  return retainCompleteJournalConsultations(
+    [...migratedAdditions, ...migratedEntries],
+    MAX_JOURNAL_ENTRIES,
+  ).entries;
+}
+
 export function prependJournalEntry(entries, entry) {
-  return [entry, ...entries].slice(0, MAX_JOURNAL_ENTRIES);
+  const migrated = migrateJournalEntry(entry);
+  return migrated
+    ? prependJournalEntries(entries, [migrated])
+    : migrateJournalEntries(entries, PRESERVE_MIGRATED_FRAGMENT_IDENTITIES);
 }
 
 export function removeJournalEntry(entries, id) {
-  return entries.filter((entry) => entry.id !== id);
+  if (!Array.isArray(entries)) return [];
+  const group = groupJournalEntriesByConsultation(entries)
+    .find((consultation) => consultation.entries.some((entry) => entry?.id === id));
+  if (!group) return [...entries];
+
+  const ids = new Set(
+    group.entries
+      .map((entry) => entry?.id)
+      .filter((entryId) => typeof entryId === 'string'),
+  );
+  return entries.filter((entry) => !ids.has(entry?.id));
 }
 
 export function getJournalRecurrenceCount(entries, chapterNum) {
@@ -47,9 +81,18 @@ export function getMilestoneForTotal(totalReadings) {
   return JOURNAL_MILESTONES.includes(totalReadings) ? totalReadings : null;
 }
 
+export function getMilestoneCrossed(previousTotal, nextTotal) {
+  const previous = Number.isInteger(previousTotal) ? previousTotal : 0;
+  const next = Number.isInteger(nextTotal) ? nextTotal : previous;
+  return [...JOURNAL_MILESTONES].reverse().find((milestone) => milestone > previous && milestone <= next) || null;
+}
+
 export function writeJournalEntries(storage, entries) {
   try {
-    storage?.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(entries));
+    storage?.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(migrateJournalEntries(
+      entries,
+      PRESERVE_MIGRATED_FRAGMENT_IDENTITIES,
+    )));
   } catch {
     // Browser storage is best-effort; preserve the current in-memory session.
   }

@@ -10,6 +10,7 @@ export default defineConfig({
   expect: { timeout: 8_000 },
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
+  failOnFlakyTests: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 2 : undefined,
   reporter: [
@@ -36,7 +37,16 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'desktop-firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'desktop-webkit', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'desktop-webkit',
+      workers: 1,
+      timeout: 60_000,
+      use: {
+        ...devices['Desktop Safari'],
+        trace: 'on-first-retry',
+        video: 'off',
+      },
+    },
     {
       name: 'fold6-closed',
       use: {

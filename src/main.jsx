@@ -4,6 +4,7 @@ import './index.css';
 import './productShell.css';
 import './experienceSettings.css';
 import './ichorOrbResponsive.css';
+import './physicalFoldReview.css';
 import App from './liber333.jsx';
 import ProductShell from './ProductShell.jsx';
 import { GrimoireNavigationProvider } from './contexts/GrimoireNavigationContext.jsx';
