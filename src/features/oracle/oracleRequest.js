@@ -36,7 +36,9 @@ function serializeContext(context = {}) {
       .slice(0, ORACLE_REQUEST_LIMITS.recentReadings)
       .map((reading) => ({
         date: reading?.date,
-        question: reading?.question,
+        question: typeof reading?.question === 'string'
+          ? reading.question.trim().slice(0, ORACLE_REQUEST_LIMITS.recentQuestionChars)
+          : reading?.question,
         chapter: reading?.chapter,
       }));
   }

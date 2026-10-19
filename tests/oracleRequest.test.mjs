@@ -148,6 +148,27 @@ test('request version, operation, question, and chapter constraints are enforced
   assert.equal(duplicateTriad.ok, false);
 });
 
+test('client serialization bounds long historical questions without mutating the journal entry', () => {
+  const longQuestion = 'x'.repeat(ORACLE_REQUEST_LIMITS.recentQuestionChars + 250);
+  const context = {
+    recentReadings: [{
+      date: '2026-07-01T00:00:00.000Z',
+      question: longQuestion,
+      chapter: 21,
+    }],
+  };
+
+  const request = createSingleOracleRequest({
+    question: 'What is the pattern?',
+    chapter: chapter(21),
+    context,
+  });
+
+  assert.equal(context.recentReadings[0].question, longQuestion);
+  assert.equal(request.context.recentReadings[0].question.length, ORACLE_REQUEST_LIMITS.recentQuestionChars);
+  assert.equal(validateOracleRequest(request).ok, true);
+});
+
 test('local journal and timing context are bounded and canonicalized', () => {
   const date = '2026-07-01T00:00:00.000Z';
   const request = validate({
